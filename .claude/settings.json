@@ -4,5 +4,8 @@
     "allow": [
       "mcp__unreal-editor"
     ]
+  },
+  "attribution": {
+    "commit": ""
   }
 }
