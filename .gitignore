@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# Unreal Engine .gitignore
+# Commit: Config/, Content/, Source/, *.uproject, Plugins source.
+# Ignore: build artifacts, caches, IDE files, generated solution files.
+# ---------------------------------------------------------------------------
+
+# Engine-generated build & cache folders (regenerated on build / open)
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Per-plugin build artifacts (keep the plugin source, drop the outputs)
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# UE build marker files
+*.target
+*.modules
+
+# Visual Studio / Rider / IDE
+.vs/
+.vscode/
+.idea/
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.opendb
+*.sdf
+*.suo
+*.user
+*.userosscache
+*.userprefs
+
+# Generated solution / project files (recreate via "Generate VS project files")
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.xcodeproj/
+*.xcworkspace/
+
+# OS / misc cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.log
+
+# Claude Code — keep shared config & skills, drop machine-local settings
+.claude/settings.local.json
