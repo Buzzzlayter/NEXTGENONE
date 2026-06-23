@@ -19,6 +19,32 @@ UE **5.8** C++ проект.
 - `Clean.bat` — удалить `Binaries`/`Intermediate`/`DerivedDataCache` (+ в плагинах).
   Откажется работать при открытом редакторе, спрашивает подтверждение. `Saved/` не трогает.
 
+## Верификация для агента (компиляция C++ + логи)
+Цель: агент видит **реальный** вывод компилятора и логи редактора текстом, а не угадывает API.
+Оформлено двумя скиллами; скрипты лежат рядом с ними в `.claude/skills/ue-build/`.
+
+### Скилл `ue-build` — компиляция C++ → текст
+- `Verify-Build.ps1` — полная офлайн-сборка UBT (редактор **закрыт**). Печатает `RESULT` +
+  ошибки `файл(строка): error Cxxxx` + warnings; полный вывод в `Saved/Logs/AgentBuild.log`.
+  Запуск: `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/ue-build/Verify-Build.ps1`
+  (`-Game` — game-таргет; `-Config Debug|DebugGame|Shipping`).
+  **Exit:** `0`=PASS (код компилируется; сюда же link-lock при открытом редакторе),
+  `3`=BLOCKED (Live Coding активен, **ничего не собралось** — не ошибка кода), иное=реальная ошибка.
+- `Trigger-LiveCoding.ps1` — при **открытом** редакторе шлёт Ctrl+Alt+F11 (best-effort, SendKeys,
+  крадёт фокус). Результат компиляции читается из лога (см. ниже). UBT при активном Live Coding
+  собирать отказывается (`Unable to build while Live Coding is active`).
+- В MCP **нет** инструмента «выполнить консольную команду» → headless-запуск самой компиляции
+  невозможен; компиляцию инициирует UBT (редактор закрыт) либо Ctrl+Alt+F11 (редактор открыт).
+
+### Скилл `ue-logs` — логи редактора → текст (редактор открыт, через MCP)
+- Тулсет `EditorToolset.LogsToolset`, вызов `GetLogEntries`.
+  **ВАЖНО:** всегда передавай `category:""` для поиска по всем категориям — дефолт `"LogsToolset"`
+  это несуществующая категория и даёт ошибку.
+- Ошибки/warnings/ассерты: `{category:"", pattern:"(?i)error|warning|fatal|assert", maxEntries:50}`.
+- Результат Live Coding: `{category:"LogLiveCoding", pattern:"", maxEntries:30}`.
+- Список категорий: `GetLogCategories {filter:"..."}`; детальность: `SetVerbosity {category, verbosity}`.
+- Редактор закрыт (MCP недоступен) → лог прошлой сессии `Saved/Logs/NEXTGENONE.log` (Read/Grep).
+
 ## Интеграция Claude ↔ UE (главное)
 Связь идёт через плагин `ModelContextProtocol` — Epic-native **MCP по HTTP на
 `127.0.0.1:8000/mcp`**, авто-старт включён, сервер зарегистрирован как `unreal-editor`.
