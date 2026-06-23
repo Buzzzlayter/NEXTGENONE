@@ -16,8 +16,9 @@ UE **5.8** C++ проект.
 - `Build.bat` — собрать `NEXTGENONEEditor Win64 Development`.
 - `RunEditor.bat` — запустить редактор с проектом.
 - `GenerateProjectFiles.bat` — пересоздать .sln/проектные файлы.
-- `Clean.bat` — удалить `Binaries`/`Intermediate`/`DerivedDataCache` (+ в плагинах).
-  Откажется работать при открытом редакторе, спрашивает подтверждение. `Saved/` не трогает.
+- `DeepClean.bat` — удалить `Binaries`/`Intermediate`/`DerivedDataCache`/`Saved` (+ `Binaries`/`Intermediate`
+  в плагинах) и `*.sln`/`*.slnx` в корне. `Content`/`Config`/`Source` не трогает.
+  Откажется работать при открытом редакторе, спрашивает подтверждение. После — `GenerateProjectFiles.bat`.
 
 ## Верификация для агента (компиляция C++ + логи)
 Цель: агент видит **реальный** вывод компилятора и логи редактора текстом, а не угадывает API.
