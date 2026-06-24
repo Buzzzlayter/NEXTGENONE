@@ -3,6 +3,8 @@
 #include "VoxelStructure.h"
 #include "VoxelMesher.h"
 #include "VoxelTypes.h"
+#include "VoxelChunk.h"
+#include "StructuralSolver.h"
 #include "NgxVoxel.h"
 #include "ProceduralMeshComponent.h"
 #include "Async/Async.h"
@@ -254,15 +256,8 @@ int32 AVoxelStructure::ApplyDamageSphere(const FVector& WorldCenter, float Radiu
 		Ch->Set(LX, LY, LZ, NewMaterial);
 		++Changed;
 
-		// Этот чанк + соседи по осям, где воксель лежит на границе чанка (их граничные
-		// грани зависят от изменённого вокселя). Несуществующих соседей не трогаем.
-		DirtyChunks.Add(CC);
-		if (LX == 0     && Chunks.Contains(CC + FIntVector(-1, 0, 0))) DirtyChunks.Add(CC + FIntVector(-1, 0, 0));
-		if (LX == N - 1 && Chunks.Contains(CC + FIntVector( 1, 0, 0))) DirtyChunks.Add(CC + FIntVector( 1, 0, 0));
-		if (LY == 0     && Chunks.Contains(CC + FIntVector(0, -1, 0))) DirtyChunks.Add(CC + FIntVector(0, -1, 0));
-		if (LY == N - 1 && Chunks.Contains(CC + FIntVector(0,  1, 0))) DirtyChunks.Add(CC + FIntVector(0,  1, 0));
-		if (LZ == 0     && Chunks.Contains(CC + FIntVector(0, 0, -1))) DirtyChunks.Add(CC + FIntVector(0, 0, -1));
-		if (LZ == N - 1 && Chunks.Contains(CC + FIntVector(0, 0,  1))) DirtyChunks.Add(CC + FIntVector(0, 0,  1));
+		// Этот чанк + соседи по границам (их граничные грани зависят от изменённого вокселя).
+		MarkChunkDirtyAround(CC, LX, LY, LZ);
 	}
 
 	if (Changed > 0)
@@ -270,6 +265,12 @@ int32 AVoxelStructure::ApplyDamageSphere(const FVector& WorldCenter, float Radiu
 		if (!Pipeline.IsValid())
 		{
 			Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
+		}
+		// Удаление вокселей могло что-то оторвать → запланировать проверку связности
+		// (наращивание только добавляет связность, оторвать не может).
+		if (NewMaterial == 0)
+		{
+			bIntegrityDirty = true;
 		}
 		NotifyStructuralShock(WorldCenter, RadiusCm);
 		EnsureTicker();
@@ -360,6 +361,17 @@ bool AVoxelStructure::TickPipeline(float /*Dt*/)
 
 	if (!bBusy)
 	{
+		// Меш устаканился — момент для проверки связности (дебаунс после серии карвов).
+		if (bIntegrityDirty)
+		{
+			bIntegrityDirty = false;
+			RunIntegrityCheck();   // может удалить оторванное → новые dirty-чанки
+			if (DirtyChunks.Num() > 0 || InFlight.Num() > 0)
+			{
+				return true;       // продолжаем тикать, доремешим
+			}
+		}
+
 		UE_LOG(LogNgxVoxel, Log,
 			TEXT("VoxelStructure '%s': async %s build → %d sections, %d verts, %d tris (epoch %llu)"),
 			*GetName(),
@@ -614,6 +626,87 @@ void AVoxelStructure::UpdateActiveChunks(bool bForceAllDirty)
 	}
 
 	if (bAnyDirty)
+	{
+		if (!Pipeline.IsValid())
+		{
+			Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
+		}
+		EnsureTicker();
+	}
+}
+
+// ---- Структурная целостность (шаг 6) ----------------------------------------
+
+void AVoxelStructure::MarkChunkDirtyAround(const FIntVector& ChunkCoord, int32 LX, int32 LY, int32 LZ)
+{
+	const int32 N = NgxVoxel::ChunkSize;
+	DirtyChunks.Add(ChunkCoord);
+	if (LX == 0     && Chunks.Contains(ChunkCoord + FIntVector(-1, 0, 0))) DirtyChunks.Add(ChunkCoord + FIntVector(-1, 0, 0));
+	if (LX == N - 1 && Chunks.Contains(ChunkCoord + FIntVector( 1, 0, 0))) DirtyChunks.Add(ChunkCoord + FIntVector( 1, 0, 0));
+	if (LY == 0     && Chunks.Contains(ChunkCoord + FIntVector(0, -1, 0))) DirtyChunks.Add(ChunkCoord + FIntVector(0, -1, 0));
+	if (LY == N - 1 && Chunks.Contains(ChunkCoord + FIntVector(0,  1, 0))) DirtyChunks.Add(ChunkCoord + FIntVector(0,  1, 0));
+	if (LZ == 0     && Chunks.Contains(ChunkCoord + FIntVector(0, 0, -1))) DirtyChunks.Add(ChunkCoord + FIntVector(0, 0, -1));
+	if (LZ == N - 1 && Chunks.Contains(ChunkCoord + FIntVector(0, 0,  1))) DirtyChunks.Add(ChunkCoord + FIntVector(0, 0,  1));
+}
+
+void AVoxelStructure::RunIntegrityCheck()
+{
+	if (!bEnableStructuralIntegrity || Chunks.Num() == 0)
+	{
+		return;
+	}
+
+	const int32 N = NgxVoxel::ChunkSize;
+	const FIntVector CDims(
+		FMath::Max(ChunkDims.X, 1),
+		FMath::Max(ChunkDims.Y, 1),
+		FMath::Max(ChunkDims.Z, 1));
+	const FIntVector VDims(CDims.X * N, CDims.Y * N, CDims.Z * N);
+
+	auto IsSolid = [this, N](int32 X, int32 Y, int32 Z) -> bool
+	{
+		const FIntVector CC(X / N, Y / N, Z / N);
+		const FVoxelChunk* Ch = Chunks.Find(CC);
+		return Ch && Ch->Get(X - CC.X * N, Y - CC.Y * N, Z - CC.Z * N) != 0;
+	};
+	auto IsAnchor = [this](int32 /*X*/, int32 /*Y*/, int32 Z) -> bool
+	{
+		return Z <= AnchorMaxGlobalZ;   // солвер вызывает IsAnchor только для solid-вокселей
+	};
+
+	TArray<TArray<FIntVector>> Detached;
+	FStructuralSolver::FindDetachedComponents(VDims, IsSolid, IsAnchor, Detached);
+
+	if (Detached.Num() == 0)
+	{
+		return;
+	}
+
+	// 6a: оторванные воксели просто удаляем (6b — спавн AVoxelDebris перед удалением).
+	int32 RemovedVox = 0;
+	for (const TArray<FIntVector>& Comp : Detached)
+	{
+		for (const FIntVector& G : Comp)
+		{
+			const FIntVector CC(G.X / N, G.Y / N, G.Z / N);
+			FVoxelChunk* Ch = Chunks.Find(CC);
+			if (!Ch)
+			{
+				continue;
+			}
+			const int32 LX = G.X - CC.X * N;
+			const int32 LY = G.Y - CC.Y * N;
+			const int32 LZ = G.Z - CC.Z * N;
+			Ch->Set(LX, LY, LZ, 0);
+			++RemovedVox;
+			MarkChunkDirtyAround(CC, LX, LY, LZ);
+		}
+	}
+
+	UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': integrity → %d detached comp, %d voxels removed"),
+		*GetName(), Detached.Num(), RemovedVox);
+
+	if (DirtyChunks.Num() > 0)
 	{
 		if (!Pipeline.IsValid())
 		{

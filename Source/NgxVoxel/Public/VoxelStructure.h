@@ -78,6 +78,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Collision", meta = (ClampMin = "0"))
 	float CollisionActiveRadiusCm = 2000.f;
 
+	// --- Структурная целостность (шаг 6) ---
+
+	// Проверять связность после разрушения; оторванное (не достигает якорей) — удаляется/падает.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
+	bool bEnableStructuralIntegrity = true;
+
+	// Solid-воксели с глобальным Z <= этого — якоря («земля»). Дефолт — нижний слой чанков.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
+	int32 AnchorMaxGlobalZ = NgxVoxel::ChunkSize - 1;
+
 	// Полный ребилд: пересобрать тестовые чанки и весь меш.
 	UFUNCTION(CallInEditor, Category = "Voxel")
 	void Rebuild();
@@ -164,4 +174,9 @@ private:
 	TSet<FIntVector> ActiveChunks;   // чанки, для которых сейчас кукается коллизия
 	bool ShouldCookCollision(const FIntVector& Coord) const;
 	void UpdateActiveChunks(bool bForceAllDirty); // пересчёт активных чанков по CollisionFocus
+
+	// --- Структурная целостность (шаг 6) ---
+	bool bIntegrityDirty = false;   // после удаления вокселей нужна проверка связности
+	void RunIntegrityCheck();
+	void MarkChunkDirtyAround(const FIntVector& ChunkCoord, int32 LX, int32 LY, int32 LZ);
 };
