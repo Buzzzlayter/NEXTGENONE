@@ -101,8 +101,11 @@ void ANextgenonePawn::Tick(float DeltaSeconds)
 			++NumDebris;
 		}
 
+		const float Delta = W->GetDeltaSeconds();
+		const float FrameMs = 1000.f * Delta;
+		const float Fps = (Delta > 0.f) ? (1.f / Delta) : 0.f;
 		GEngine->AddOnScreenDebugMessage(101, 0.3f, FColor::Green,
-			FString::Printf(TEXT("frame %.1f ms  (%.0f fps)"), GAverageMS, GAverageFPS));
+			FString::Printf(TEXT("frame %.1f ms  (%.0f fps)"), FrameMs, Fps));
 		GEngine->AddOnScreenDebugMessage(102, 0.3f, FColor::White,
 			FString::Printf(TEXT("voxel: %d struct, %d chunks, %d sections | debris: %d | tool r=%.0f"),
 				NumStructures, NumChunks, NumSections, NumDebris, ToolRadiusCm));
