@@ -10,7 +10,7 @@ using FVoxel = uint8;
 namespace NgxVoxel
 {
 	// Размер вокселя в UE-юнитах (см). Стартовая точка — валидировать на перфе.
-	static constexpr float VoxelSizeCm = 25.0f;
+	static constexpr float VoxelSizeCm = 5.0f;
 
 	// Сторона чанка в вокселях.
 	static constexpr int32 ChunkSize = 16;
