@@ -48,11 +48,23 @@ AVoxelStructure::AVoxelStructure()
 	// Разрушаемый воксель-меш не должен гонять навмеш (дорого + транзиентные пустые баунды
 	// при async-ребилде → спам LogNavigation). Динамическую навигацию решим отдельно, если понадобится.
 	Mesh->SetCanEverAffectNavigation(false);
+	// Явно блокируем query-каналы → трейс инструмента игрока (Visibility, complex) попадает по структуре.
+	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Mesh->SetCollisionObjectType(ECC_WorldStatic);
+	Mesh->SetCollisionResponseToAllChannels(ECR_Block);
 }
 
 void AVoxelStructure::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	Rebuild();
+}
+
+void AVoxelStructure::BeginPlay()
+{
+	Super::BeginPlay();
+	// Chunks — не UPROPERTY и в рантайм-инстанс (PIE/дубликат) не переносятся, а OnConstruction
+	// в игре не перевызывается. Пересобираем данные+меш, иначе разрушению нечего менять.
 	Rebuild();
 }
 
