@@ -289,3 +289,50 @@ void FVoxelMesher::GenerateGreedy(const FVoxelChunk& Chunk, const FChunkNeighbor
 		}
 	}
 }
+
+void FVoxelMesher::GenerateFromVoxelSet(
+	const TSet<FIntVector>& Voxels,
+	TFunctionRef<uint8(const FIntVector&)> MaterialOf,
+	const FIntVector& OriginVoxel,
+	FVoxelMeshData& Out)
+{
+	Out.Reset();
+
+	const float S = NgxVoxel::VoxelSizeCm;
+
+	for (const FIntVector& V : Voxels)
+	{
+		const uint8 Material = MaterialOf(V);
+		if (Material == 0)
+		{
+			continue;
+		}
+
+		const FVector Base(
+			(float)(V.X - OriginVoxel.X) * S,
+			(float)(V.Y - OriginVoxel.Y) * S,
+			(float)(V.Z - OriginVoxel.Z) * S);
+		const FColor Col = MaterialColor(Material);
+
+		for (int32 F = 0; F < 6; ++F)
+		{
+			const FIntVector Nb(V.X + FaceDirs[F].X, V.Y + FaceDirs[F].Y, V.Z + FaceDirs[F].Z);
+			if (Voxels.Contains(Nb))
+			{
+				continue; // грань скрыта соседом из того же куска
+			}
+
+			const int32 V0 = Out.Vertices.Num();
+			for (int32 C = 0; C < 4; ++C)
+			{
+				Out.Vertices.Add(Base + FaceCorners[F][C] * S);
+				Out.Normals.Add(FaceNormals[F]);
+				Out.UV0.Add(FVector2D((C == 1 || C == 2) ? 1.f : 0.f, (C >= 2) ? 1.f : 0.f));
+				Out.VertexColors.Add(Col);
+			}
+
+			Out.Triangles.Add(V0 + 0); Out.Triangles.Add(V0 + 2); Out.Triangles.Add(V0 + 1);
+			Out.Triangles.Add(V0 + 0); Out.Triangles.Add(V0 + 3); Out.Triangles.Add(V0 + 2);
+		}
+	}
+}

@@ -5,9 +5,11 @@
 #include "VoxelTypes.h"
 #include "VoxelChunk.h"
 #include "StructuralSolver.h"
+#include "VoxelDebris.h"
 #include "NgxVoxel.h"
 #include "ProceduralMeshComponent.h"
 #include "Async/Async.h"
+#include "Engine/World.h"
 
 namespace
 {
@@ -682,10 +684,54 @@ void AVoxelStructure::RunIntegrityCheck()
 		return;
 	}
 
-	// 6a: оторванные воксели просто удаляем (6b — спавн AVoxelDebris перед удалением).
+	// Материал вокселя (для меша дебриса; читаем ДО удаления — компоненты не пересекаются).
+	auto MaterialAt = [this, N](const FIntVector& G) -> uint8
+	{
+		const FIntVector CC(G.X / N, G.Y / N, G.Z / N);
+		const FVoxelChunk* Ch = Chunks.Find(CC);
+		return Ch ? Ch->Get(G.X - CC.X * N, G.Y - CC.Y * N, G.Z - CC.Z * N) : 0;
+	};
+
+	const float S = NgxVoxel::VoxelSizeCm;
+	UWorld* World = GetWorld();
 	int32 RemovedVox = 0;
+	int32 SpawnedDebris = 0;
+
 	for (const TArray<FIntVector>& Comp : Detached)
 	{
+		// 6b: спавним падающий кусок (до удаления его вокселей из структуры).
+		if (bSpawnDebris && World && Comp.Num() >= MinDebrisVoxels)
+		{
+			TSet<FIntVector> Set;
+			Set.Append(Comp);
+
+			FIntVector Origin = Comp[0];
+			for (const FIntVector& G : Comp)
+			{
+				Origin.X = FMath::Min(Origin.X, G.X);
+				Origin.Y = FMath::Min(Origin.Y, G.Y);
+				Origin.Z = FMath::Min(Origin.Z, G.Z);
+			}
+
+			FVoxelMeshData DebrisMesh;
+			FVoxelMesher::GenerateFromVoxelSet(Set, MaterialAt, Origin, DebrisMesh);
+
+			if (!DebrisMesh.IsEmpty())
+			{
+				FTransform Xf = GetActorTransform();
+				Xf.SetLocation(GetActorTransform().TransformPosition(
+					FVector(Origin.X, Origin.Y, Origin.Z) * S));
+
+				if (AVoxelDebris* Debris = World->SpawnActor<AVoxelDebris>(
+						AVoxelDebris::StaticClass(), Xf))
+				{
+					Debris->Init(DebrisMesh, DebrisLifeSeconds);
+					++SpawnedDebris;
+				}
+			}
+		}
+
+		// Удаляем воксели куска из структуры.
 		for (const FIntVector& G : Comp)
 		{
 			const FIntVector CC(G.X / N, G.Y / N, G.Z / N);
@@ -703,8 +749,8 @@ void AVoxelStructure::RunIntegrityCheck()
 		}
 	}
 
-	UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': integrity → %d detached comp, %d voxels removed"),
-		*GetName(), Detached.Num(), RemovedVox);
+	UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': integrity → %d detached comp, %d debris, %d voxels removed"),
+		*GetName(), Detached.Num(), SpawnedDebris, RemovedVox);
 
 	if (DirtyChunks.Num() > 0)
 	{

@@ -88,6 +88,18 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
 	int32 AnchorMaxGlobalZ = NgxVoxel::ChunkSize - 1;
 
+	// Спавнить оторванное телом Chaos (падает). false → просто удалять (поведение 6a).
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
+	bool bSpawnDebris = true;
+
+	// Время жизни дебриса до авто-деспавна (сек).
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
+	float DebrisLifeSeconds = 8.f;
+
+	// Куски мельче этого (в вокселях) — без дебриса, просто удаляются.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "1"))
+	int32 MinDebrisVoxels = 2;
+
 	// Полный ребилд: пересобрать тестовые чанки и весь меш.
 	UFUNCTION(CallInEditor, Category = "Voxel")
 	void Rebuild();

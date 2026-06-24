@@ -42,4 +42,13 @@ public:
 	// что и у наивного. Stateless — пригоден для async-вызова на воркере.
 	static void GenerateGreedy(const FVoxelChunk& Chunk, const FChunkNeighbors& Neighbors,
 		const FVector& OriginCm, FVoxelMeshData& Out);
+
+	// Меш произвольного набора вокселей (оторванный кусок под дебрис; может быть больше чанка).
+	// Membership в Voxels = solid; грань генерится, если соседа в наборе нет. Вершины — в локали
+	// относительно OriginVoxel (в воксельных координатах), умноженные на размер вокселя.
+	static void GenerateFromVoxelSet(
+		const TSet<FIntVector>& Voxels,
+		TFunctionRef<uint8(const FIntVector&)> MaterialOf,
+		const FIntVector& OriginVoxel,
+		FVoxelMeshData& Out);
 };
