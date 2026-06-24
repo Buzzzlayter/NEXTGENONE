@@ -63,6 +63,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Pawn|Tool")
 	bool bDrawToolDebug = false;
 
+	// Перф-оверлей (шаг 8): кадр-время + счётчики вокселей/дебриса на экране.
+	UPROPERTY(EditAnywhere, Category = "Pawn|Debug")
+	bool bShowPerfHUD = false;
+
 	// --- Enhanced Input (рантайм-объекты) ---
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> InputMapping;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> FwdAction;

@@ -2,12 +2,14 @@
 
 #include "NextgenonePawn.h"
 #include "VoxelStructure.h"
+#include "VoxelDebris.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
@@ -66,17 +68,44 @@ void ANextgenonePawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	// Пушим позицию камеры как «точку фокуса» воксельным структурам — они сами решают,
-	// каким чанкам кукать коллизию. Модуль вокселей про паун ничего не знает (зависимость в одну сторону).
-	if (!Camera)
+	UWorld* W = GetWorld();
+	if (!W)
 	{
 		return;
 	}
 
-	const FVector Focus = Camera->GetComponentLocation();
-	for (TActorIterator<AVoxelStructure> It(GetWorld()); It; ++It)
+	// Пушим позицию камеры как «точку фокуса» структурам (5b) + собираем метрики (8).
+	// Модуль вокселей про паун ничего не знает — зависимость в одну сторону.
+	const bool bHaveCamera = (Camera != nullptr);
+	const FVector Focus = bHaveCamera ? Camera->GetComponentLocation() : FVector::ZeroVector;
+
+	int32 NumStructures = 0;
+	int32 NumChunks = 0;
+	int32 NumSections = 0;
+	for (TActorIterator<AVoxelStructure> It(W); It; ++It)
 	{
-		It->SetCollisionFocus(Focus);
+		if (bHaveCamera)
+		{
+			It->SetCollisionFocus(Focus);
+		}
+		++NumStructures;
+		NumChunks += It->GetNumChunks();
+		NumSections += It->GetNumSections();
+	}
+
+	if (bShowPerfHUD && GEngine)
+	{
+		int32 NumDebris = 0;
+		for (TActorIterator<AVoxelDebris> It(W); It; ++It)
+		{
+			++NumDebris;
+		}
+
+		GEngine->AddOnScreenDebugMessage(101, 0.3f, FColor::Green,
+			FString::Printf(TEXT("frame %.1f ms  (%.0f fps)"), GAverageMS, GAverageFPS));
+		GEngine->AddOnScreenDebugMessage(102, 0.3f, FColor::White,
+			FString::Printf(TEXT("voxel: %d struct, %d chunks, %d sections | debris: %d | tool r=%.0f"),
+				NumStructures, NumChunks, NumSections, NumDebris, ToolRadiusCm));
 	}
 }
 
