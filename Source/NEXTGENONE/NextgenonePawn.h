@@ -78,6 +78,7 @@ protected:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CarveAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RadiusAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> CascadeAction;
 
 private:
 	void EnsureInputObjects();          // идемпотентно создаёт IA + IMC
@@ -92,4 +93,5 @@ private:
 	void OnCarve(const FInputActionValue& V);
 	void OnBuild(const FInputActionValue& V);
 	void OnRadius(const FInputActionValue& V);
+	void OnCascade(const FInputActionValue& V);
 };

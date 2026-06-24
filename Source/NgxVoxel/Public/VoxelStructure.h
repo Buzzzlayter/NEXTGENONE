@@ -152,6 +152,7 @@ public:
 	// Метрики для перф-оверлея (шаг 8). Только чтение.
 	int32 GetNumChunks() const { return Chunks.Num(); }
 	int32 GetNumSections() const { return SectionOf.Num(); }
+	bool IsCascadeRunning() const { return bCascadeRunning; }
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;

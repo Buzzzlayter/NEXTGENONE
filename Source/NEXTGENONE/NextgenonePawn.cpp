@@ -135,6 +135,7 @@ void ANextgenonePawn::EnsureInputObjects()
 	CarveAction     = MakeAction(TEXT("IA_Carve"),     EInputActionValueType::Boolean);
 	BuildAction     = MakeAction(TEXT("IA_Build"),     EInputActionValueType::Boolean);
 	RadiusAction    = MakeAction(TEXT("IA_Radius"),    EInputActionValueType::Axis1D);
+	CascadeAction   = MakeAction(TEXT("IA_Cascade"),   EInputActionValueType::Boolean);
 
 	InputMapping = NewObject<UInputMappingContext>(this, TEXT("IMC_Nextgenone"));
 	InputMapping->MapKey(FwdAction,       EKeys::W);
@@ -146,6 +147,7 @@ void ANextgenonePawn::EnsureInputObjects()
 	InputMapping->MapKey(CarveAction,     EKeys::LeftMouseButton);
 	InputMapping->MapKey(BuildAction,     EKeys::RightMouseButton);
 	InputMapping->MapKey(RadiusAction,    EKeys::MouseWheelAxis);
+	InputMapping->MapKey(CascadeAction,   EKeys::C);
 }
 
 void ANextgenonePawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -164,6 +166,7 @@ void ANextgenonePawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EIC->BindAction(CarveAction,     ETriggerEvent::Triggered, this, &ANextgenonePawn::OnCarve);
 		EIC->BindAction(BuildAction,     ETriggerEvent::Triggered, this, &ANextgenonePawn::OnBuild);
 		EIC->BindAction(RadiusAction,    ETriggerEvent::Triggered, this, &ANextgenonePawn::OnRadius);
+		EIC->BindAction(CascadeAction,   ETriggerEvent::Triggered, this, &ANextgenonePawn::OnCascade);
 	}
 }
 
@@ -214,6 +217,21 @@ void ANextgenonePawn::OnBuild(const FInputActionValue& /*V*/)
 void ANextgenonePawn::OnRadius(const FInputActionValue& V)
 {
 	ToolRadiusCm = FMath::Clamp(ToolRadiusCm + V.Get<float>() * 5.f, ToolRadiusMinCm, ToolRadiusMaxCm);
+}
+
+void ANextgenonePawn::OnCascade(const FInputActionValue& /*V*/)
+{
+	// Клавиша C: запустить каскад на всех воксельных структурах (идемпотентно — пока идёт, не перезапускаем).
+	if (UWorld* W = GetWorld())
+	{
+		for (TActorIterator<AVoxelStructure> It(W); It; ++It)
+		{
+			if (!It->IsCascadeRunning())
+			{
+				It->StartCascade();
+			}
+		}
+	}
 }
 
 void ANextgenonePawn::FireTool(uint8 NewMaterial)
