@@ -67,6 +67,17 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Async", meta = (ClampMin = "1"))
 	int32 ApplyBudgetPerFrame = 4;
 
+	// --- Коллизия (шаг 5b): кукать collision только у чанков около «точки фокуса» ---
+	// Точку фокуса задаёт ИГРА извне через SetCollisionFocus (модуль вокселей про игрока не знает).
+
+	// Скоупить ли коллизию по фокусу. false → кукать у всех чанков.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Collision")
+	bool bScopeCollisionToFocus = true;
+
+	// Радиус активной коллизии вокруг фокуса (см). Должен покрывать дальность взаимодействия.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Collision", meta = (ClampMin = "0"))
+	float CollisionActiveRadiusCm = 2000.f;
+
 	// Полный ребилд: пересобрать тестовые чанки и весь меш.
 	UFUNCTION(CallInEditor, Category = "Voxel")
 	void Rebuild();
@@ -97,6 +108,11 @@ public:
 	// >0 добавляет (опора). Возвращает число изменённых вокселей; затронутые чанки (+ соседи на
 	// границах) ставятся в async-ремеш. Точка входа для будущей привязки к прицелу игрока.
 	int32 ApplyDamageSphere(const FVector& WorldCenter, float RadiusCm, uint8 NewMaterial);
+
+	// Задать «точку фокуса» (мир) для скоупинга коллизии — вызывает ИГРА (паун/камера).
+	// Модуль вокселей про игрока не знает: получает только мировую точку и сам решает,
+	// какие чанки в радиусе → им и кукает collision.
+	void SetCollisionFocus(const FVector& WorldCenter);
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -141,4 +157,11 @@ private:
 
 	// Шаг 6 — заглушка: здесь будет запуск FStructuralSolver на затронутом регионе.
 	void NotifyStructuralShock(const FVector& WorldCenter, float RadiusCm) const;
+
+	// --- Коллизия (шаг 5b): скоупинг на активные чанки около точки фокуса ---
+	FVector CollisionFocus = FVector::ZeroVector;
+	bool bHasFocus = false;          // задавалась ли точка фокуса игрой (до этого кукаем всё)
+	TSet<FIntVector> ActiveChunks;   // чанки, для которых сейчас кукается коллизия
+	bool ShouldCookCollision(const FIntVector& Coord) const;
+	void UpdateActiveChunks(bool bForceAllDirty); // пересчёт активных чанков по CollisionFocus
 };

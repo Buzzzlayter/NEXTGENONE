@@ -9,6 +9,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
+#include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
@@ -18,7 +19,8 @@
 
 ANextgenonePawn::ANextgenonePawn()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.15f;   // пушим фокус коллизии структурам ~6–7 раз/сек
 
 	Collision = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
 	Collision->InitSphereRadius(34.f);
@@ -57,6 +59,24 @@ void ANextgenonePawn::BeginPlay()
 		{
 			Sub->AddMappingContext(InputMapping, 0);
 		}
+	}
+}
+
+void ANextgenonePawn::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	// Пушим позицию камеры как «точку фокуса» воксельным структурам — они сами решают,
+	// каким чанкам кукать коллизию. Модуль вокселей про паун ничего не знает (зависимость в одну сторону).
+	if (!Camera)
+	{
+		return;
+	}
+
+	const FVector Focus = Camera->GetComponentLocation();
+	for (TActorIterator<AVoxelStructure> It(GetWorld()); It; ++It)
+	{
+		It->SetCollisionFocus(Focus);
 	}
 }
 

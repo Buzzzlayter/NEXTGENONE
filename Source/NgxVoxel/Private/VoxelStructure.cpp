@@ -464,7 +464,7 @@ void AVoxelStructure::ApplyResult(FChunkMeshResult& Result)
 			Result.Data.UV0,
 			Result.Data.VertexColors,
 			TArray<FProcMeshTangent>(),
-			/*bCreateCollision=*/ true);
+			/*bCreateCollision=*/ ShouldCookCollision(Result.Coord));
 
 		SessionVerts += Result.Data.Vertices.Num();
 		SessionTris += Result.Data.Triangles.Num() / 3;
@@ -513,7 +513,7 @@ void AVoxelStructure::RebuildSync()
 				Data.UV0,
 				Data.VertexColors,
 				TArray<FProcMeshTangent>(),
-				/*bCreateCollision=*/ true);
+				/*bCreateCollision=*/ ShouldCookCollision(Pair.Key));
 
 			TotalVerts += Data.Vertices.Num();
 			TotalTris += Data.Triangles.Num() / 3;
@@ -547,4 +547,78 @@ FVector AVoxelStructure::ChunkOrigin(const FIntVector& Coord) const
 {
 	const float ChunkCm = (float)NgxVoxel::ChunkSize * NgxVoxel::VoxelSizeCm;
 	return FVector(Coord.X * ChunkCm, Coord.Y * ChunkCm, Coord.Z * ChunkCm);
+}
+
+// ---- Коллизия: скоупинг на активные чанки (шаг 5b) --------------------------
+
+void AVoxelStructure::SetCollisionFocus(const FVector& WorldCenter)
+{
+	const bool bFirst = !bHasFocus;
+	CollisionFocus = WorldCenter;
+	bHasFocus = true;
+	UpdateActiveChunks(bFirst);
+}
+
+bool AVoxelStructure::ShouldCookCollision(const FIntVector& Coord) const
+{
+	if (!bScopeCollisionToFocus)
+	{
+		return true;                      // скоупинг выключен → кукаем у всех
+	}
+	if (!bHasFocus)
+	{
+		return true;                      // фокус ещё не задан → кукаем всё (коллизия сразу доступна)
+	}
+	return ActiveChunks.Contains(Coord);  // только чанки в радиусе фокуса
+}
+
+void AVoxelStructure::UpdateActiveChunks(bool bForceAllDirty)
+{
+	if (!bScopeCollisionToFocus || !bHasFocus)
+	{
+		return;
+	}
+
+	const float ChunkCm = (float)NgxVoxel::ChunkSize * NgxVoxel::VoxelSizeCm;
+	const float RadiusSq = FMath::Square(CollisionActiveRadiusCm);
+	const FTransform& Xf = GetActorTransform();
+
+	bool bAnyDirty = false;
+	for (const TPair<FIntVector, FVoxelChunk>& Pair : Chunks)
+	{
+		const FIntVector& CC = Pair.Key;
+		const FVector LocalCenter(
+			(CC.X + 0.5f) * ChunkCm,
+			(CC.Y + 0.5f) * ChunkCm,
+			(CC.Z + 0.5f) * ChunkCm);
+		const FVector WorldCenter = Xf.TransformPosition(LocalCenter);
+
+		const bool bNowActive = FVector::DistSquared(WorldCenter, CollisionFocus) <= RadiusSq;
+		const bool bWasActive = ActiveChunks.Contains(CC);
+
+		if (bNowActive)
+		{
+			ActiveChunks.Add(CC);
+		}
+		else
+		{
+			ActiveChunks.Remove(CC);
+		}
+
+		// Дёрти при смене активности; при первом пересчёте — все (флаг коллизии у всех поменялся).
+		if (bForceAllDirty || (bNowActive != bWasActive))
+		{
+			DirtyChunks.Add(CC);
+			bAnyDirty = true;
+		}
+	}
+
+	if (bAnyDirty)
+	{
+		if (!Pipeline.IsValid())
+		{
+			Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
+		}
+		EnsureTicker();
+	}
 }
