@@ -172,6 +172,112 @@ void AVoxelStructure::RemeshCenterChunk()
 	EnsureTicker();
 }
 
+// ---- Разрушение (шаг 4) -----------------------------------------------------
+
+void AVoxelStructure::ApplyTestDamage()
+{
+	const FVector World = GetActorTransform().TransformPosition(TestDamageLocalCm);
+	ApplyDamageSphere(World, TestDamageRadiusCm, TestDamageMaterial);
+}
+
+int32 AVoxelStructure::ApplyDamageSphere(const FVector& WorldCenter, float RadiusCm, uint8 NewMaterial)
+{
+	if (Chunks.Num() == 0 || RadiusCm <= 0.f)
+	{
+		return 0;
+	}
+
+	const int32 N = NgxVoxel::ChunkSize;
+	const float S = NgxVoxel::VoxelSizeCm;
+
+	// Мир → локаль актёра → воксельные единицы.
+	const FVector LocalCm = GetActorTransform().InverseTransformPosition(WorldCenter);
+	const FVector CenterVx = LocalCm / S;
+	const float RadiusVx = RadiusCm / S;
+	const float RadiusVxSq = RadiusVx * RadiusVx;
+
+	const FIntVector Dims(
+		FMath::Max(ChunkDims.X, 1),
+		FMath::Max(ChunkDims.Y, 1),
+		FMath::Max(ChunkDims.Z, 1));
+	const FIntVector MaxVox(Dims.X * N, Dims.Y * N, Dims.Z * N);
+
+	// Bbox сферы в глобальных воксельных координатах, клампим к объёму структуры.
+	const int32 MinX = FMath::Max(0, FMath::FloorToInt((float)CenterVx.X - RadiusVx));
+	const int32 MinY = FMath::Max(0, FMath::FloorToInt((float)CenterVx.Y - RadiusVx));
+	const int32 MinZ = FMath::Max(0, FMath::FloorToInt((float)CenterVx.Z - RadiusVx));
+	const int32 MaxX = FMath::Min(MaxVox.X - 1, FMath::CeilToInt((float)CenterVx.X + RadiusVx));
+	const int32 MaxY = FMath::Min(MaxVox.Y - 1, FMath::CeilToInt((float)CenterVx.Y + RadiusVx));
+	const int32 MaxZ = FMath::Min(MaxVox.Z - 1, FMath::CeilToInt((float)CenterVx.Z + RadiusVx));
+
+	int32 Changed = 0;
+
+	for (int32 GZ = MinZ; GZ <= MaxZ; ++GZ)
+	for (int32 GY = MinY; GY <= MaxY; ++GY)
+	for (int32 GX = MinX; GX <= MaxX; ++GX)
+	{
+		// Сравниваем центр вокселя со сферой.
+		const FVector VoxCenter(GX + 0.5f, GY + 0.5f, GZ + 0.5f);
+		if (FVector::DistSquared(VoxCenter, CenterVx) > RadiusVxSq)
+		{
+			continue;
+		}
+
+		const FIntVector CC(GX / N, GY / N, GZ / N);
+		FVoxelChunk* Ch = Chunks.Find(CC);
+		if (!Ch)
+		{
+			continue;
+		}
+
+		const int32 LX = GX - CC.X * N;
+		const int32 LY = GY - CC.Y * N;
+		const int32 LZ = GZ - CC.Z * N;
+
+		if (Ch->Get(LX, LY, LZ) == NewMaterial)
+		{
+			continue;   // без изменений
+		}
+
+		Ch->Set(LX, LY, LZ, NewMaterial);
+		++Changed;
+
+		// Этот чанк + соседи по осям, где воксель лежит на границе чанка (их граничные
+		// грани зависят от изменённого вокселя). Несуществующих соседей не трогаем.
+		DirtyChunks.Add(CC);
+		if (LX == 0     && Chunks.Contains(CC + FIntVector(-1, 0, 0))) DirtyChunks.Add(CC + FIntVector(-1, 0, 0));
+		if (LX == N - 1 && Chunks.Contains(CC + FIntVector( 1, 0, 0))) DirtyChunks.Add(CC + FIntVector( 1, 0, 0));
+		if (LY == 0     && Chunks.Contains(CC + FIntVector(0, -1, 0))) DirtyChunks.Add(CC + FIntVector(0, -1, 0));
+		if (LY == N - 1 && Chunks.Contains(CC + FIntVector(0,  1, 0))) DirtyChunks.Add(CC + FIntVector(0,  1, 0));
+		if (LZ == 0     && Chunks.Contains(CC + FIntVector(0, 0, -1))) DirtyChunks.Add(CC + FIntVector(0, 0, -1));
+		if (LZ == N - 1 && Chunks.Contains(CC + FIntVector(0, 0,  1))) DirtyChunks.Add(CC + FIntVector(0, 0,  1));
+	}
+
+	if (Changed > 0)
+	{
+		if (!Pipeline.IsValid())
+		{
+			Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
+		}
+		NotifyStructuralShock(WorldCenter, RadiusCm);
+		EnsureTicker();
+
+		UE_LOG(LogNgxVoxel, Log,
+			TEXT("VoxelStructure '%s': damage r=%.0fcm mat=%u → %d voxels changed, %d chunks dirty"),
+			*GetName(), RadiusCm, NewMaterial, Changed, DirtyChunks.Num());
+	}
+
+	return Changed;
+}
+
+void AVoxelStructure::NotifyStructuralShock(const FVector& WorldCenter, float RadiusCm) const
+{
+	// Шаг 6: здесь запустим FStructuralSolver (flood-fill от якорей) на затронутом регионе,
+	// чтобы оторванные компоненты падали (→ AVoxelDebris). Пока — только трасса.
+	UE_LOG(LogNgxVoxel, Verbose, TEXT("Structural shock @ %s r=%.0f (solver — шаг 6)"),
+		*WorldCenter.ToString(), RadiusCm);
+}
+
 // ---- Async-пайплайн ---------------------------------------------------------
 
 void AVoxelStructure::MarkAllDirty()
@@ -362,7 +468,6 @@ void AVoxelStructure::RebuildSync()
 	SectionOf.Reset();
 	NextSection = 0;
 
-	int32 SectionIdx = 0;
 	int32 TotalVerts = 0;
 	int32 TotalTris = 0;
 
@@ -383,8 +488,13 @@ void AVoxelStructure::RebuildSync()
 
 		if (!Data.IsEmpty())
 		{
+			// Стабильный индекс секции на чанк — чтобы последующий dirty-ремеш (разрушение)
+			// обновлял ту же секцию, а не плодил новые.
+			const int32 SectionIdx = NextSection++;
+			SectionOf.Add(Pair.Key, SectionIdx);
+
 			Mesh->CreateMeshSection(
-				SectionIdx++,
+				SectionIdx,
 				Data.Vertices,
 				Data.Triangles,
 				Data.Normals,
@@ -402,7 +512,7 @@ void AVoxelStructure::RebuildSync()
 		*GetName(),
 		bUseGreedy ? TEXT("greedy") : TEXT("naive"),
 		Chunks.Num(),
-		SectionIdx,
+		NextSection,
 		TotalVerts,
 		TotalTris);
 }

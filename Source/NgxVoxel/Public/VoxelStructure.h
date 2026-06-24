@@ -75,6 +75,29 @@ public:
 	UFUNCTION(CallInEditor, Category = "Voxel")
 	void RemeshCenterChunk();
 
+	// --- Разрушение (шаг 4) ---
+
+	// Радиус тестового воздействия (см).
+	UPROPERTY(EditAnywhere, Category = "Voxel|Damage", meta = (ClampMin = "0"))
+	float TestDamageRadiusCm = 25.f;
+
+	// Материал тестового воздействия: 0 = убрать воксели (бур/заряд), >0 = добавить (опора/балка).
+	UPROPERTY(EditAnywhere, Category = "Voxel|Damage")
+	uint8 TestDamageMaterial = 0;
+
+	// Точка удара в локальных координатах актёра (см). Дефолт — у верхней грани тестового шара.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Damage")
+	FVector TestDamageLocalCm = FVector(80.f, 80.f, 150.f);
+
+	// Применить тестовое сферическое воздействие в TestDamageLocalCm (кнопка в редакторе).
+	UFUNCTION(CallInEditor, Category = "Voxel|Damage")
+	void ApplyTestDamage();
+
+	// Сферическое воздействие в МИРОВЫХ координатах. NewMaterial==0 убирает воксели (бур/заряд),
+	// >0 добавляет (опора). Возвращает число изменённых вокселей; затронутые чанки (+ соседи на
+	// границах) ставятся в async-ремеш. Точка входа для будущей привязки к прицелу игрока.
+	int32 ApplyDamageSphere(const FVector& WorldCenter, float RadiusCm, uint8 NewMaterial);
+
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -114,4 +137,7 @@ private:
 
 	FChunkNeighbors GatherNeighbors(const FIntVector& Coord) const; // для sync-пути
 	FVector ChunkOrigin(const FIntVector& Coord) const;
+
+	// Шаг 6 — заглушка: здесь будет запуск FStructuralSolver на затронутом регионе.
+	void NotifyStructuralShock(const FVector& WorldCenter, float RadiusCm) const;
 };
