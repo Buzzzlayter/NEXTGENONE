@@ -100,6 +100,12 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "1"))
 	int32 MinDebrisVoxels = 2;
 
+	// --- Каскад (шаг 7): фронт обрушения, идущий сверху вниз ---
+
+	// Скорость опускания фронта каскада (см/с).
+	UPROPERTY(EditAnywhere, Category = "Voxel|Cascade", meta = (ClampMin = "1"))
+	float CascadeSpeedCmS = 400.f;
+
 	// Полный ребилд: пересобрать тестовые чанки и весь меш.
 	UFUNCTION(CallInEditor, Category = "Voxel")
 	void Rebuild();
@@ -135,6 +141,17 @@ public:
 	// Модуль вокселей про игрока не знает: получает только мировую точку и сам решает,
 	// какие чанки в радиусе → им и кукает collision.
 	void SetCollisionFocus(const FVector& WorldCenter);
+
+	// Запустить/остановить каскад обрушения (фронт сверху вниз).
+	UFUNCTION(CallInEditor, Category = "Voxel|Cascade")
+	void StartCascade();
+
+	UFUNCTION(CallInEditor, Category = "Voxel|Cascade")
+	void StopCascade();
+
+	// Метрики для перф-оверлея (шаг 8). Только чтение.
+	int32 GetNumChunks() const { return Chunks.Num(); }
+	int32 GetNumSections() const { return SectionOf.Num(); }
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -191,4 +208,9 @@ private:
 	bool bIntegrityDirty = false;   // после удаления вокселей нужна проверка связности
 	void RunIntegrityCheck();
 	void MarkChunkDirtyAround(const FIntVector& ChunkCoord, int32 LX, int32 LY, int32 LZ);
+
+	// --- Каскад (шаг 7) ---
+	bool bCascadeRunning = false;
+	float CascadeFrontVoxelZ = 0.f;     // текущий фронт в воксельных Z (идёт сверху вниз)
+	void AdvanceCascade(float Dt);      // двигает фронт и выпиливает пройденную полосу
 };

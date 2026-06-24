@@ -328,8 +328,14 @@ void AVoxelStructure::RemoveTicker()
 	}
 }
 
-bool AVoxelStructure::TickPipeline(float /*Dt*/)
+bool AVoxelStructure::TickPipeline(float Dt)
 {
+	// 0) Каскад обрушения: двигаем фронт вниз (если запущен) — выпиливает полосу → целостность роняет верх.
+	if (bCascadeRunning)
+	{
+		AdvanceCascade(Dt);
+	}
+
 	// 1) Применить готовое (бюджет на кадр).
 	if (Pipeline.IsValid())
 	{
@@ -359,6 +365,7 @@ bool AVoxelStructure::TickPipeline(float /*Dt*/)
 	// 3) Делать больше нечего → снять тикер и подвести итог.
 	const bool bBusy = DirtyChunks.Num() > 0
 		|| InFlight.Num() > 0
+		|| bCascadeRunning
 		|| (Pipeline.IsValid() && !Pipeline->Completed.IsEmpty());
 
 	if (!bBusy)
@@ -759,5 +766,78 @@ void AVoxelStructure::RunIntegrityCheck()
 			Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
 		}
 		EnsureTicker();
+	}
+}
+
+// ---- Каскад (шаг 7) ---------------------------------------------------------
+
+void AVoxelStructure::StartCascade()
+{
+	const int32 N = NgxVoxel::ChunkSize;
+	CascadeFrontVoxelZ = (float)(FMath::Max(ChunkDims.Z, 1) * N); // старт с верхней границы структуры
+	bCascadeRunning = true;
+
+	if (!Pipeline.IsValid())
+	{
+		Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
+	}
+	EnsureTicker();
+
+	UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': cascade started"), *GetName());
+}
+
+void AVoxelStructure::StopCascade()
+{
+	bCascadeRunning = false;
+}
+
+void AVoxelStructure::AdvanceCascade(float Dt)
+{
+	const int32 N = NgxVoxel::ChunkSize;
+	const float S = NgxVoxel::VoxelSizeCm;
+	const FIntVector VDims(
+		FMath::Max(ChunkDims.X, 1) * N,
+		FMath::Max(ChunkDims.Y, 1) * N,
+		FMath::Max(ChunkDims.Z, 1) * N);
+
+	const float PrevZ = CascadeFrontVoxelZ;
+	CascadeFrontVoxelZ -= (CascadeSpeedCmS / S) * Dt;
+
+	// Полоса вокселей, через которую фронт прошёл за этот кадр → выпиливаем.
+	const int32 ZLo = FMath::Clamp(FMath::FloorToInt(CascadeFrontVoxelZ), 0, VDims.Z - 1);
+	const int32 ZHi = FMath::Clamp(FMath::CeilToInt(PrevZ) - 1, 0, VDims.Z - 1);
+
+	bool bChanged = false;
+	for (int32 Z = ZLo; Z <= ZHi; ++Z)
+	for (int32 Y = 0; Y < VDims.Y; ++Y)
+	for (int32 X = 0; X < VDims.X; ++X)
+	{
+		const FIntVector CC(X / N, Y / N, Z / N);
+		FVoxelChunk* Ch = Chunks.Find(CC);
+		if (!Ch)
+		{
+			continue;
+		}
+		const int32 LX = X - CC.X * N;
+		const int32 LY = Y - CC.Y * N;
+		const int32 LZ = Z - CC.Z * N;
+		if (Ch->Get(LX, LY, LZ) != 0)
+		{
+			Ch->Set(LX, LY, LZ, 0);
+			MarkChunkDirtyAround(CC, LX, LY, LZ);
+			bChanged = true;
+		}
+	}
+
+	// Выпил полосы мог оторвать верхнюю секцию → роняем её сразу (прогрессивный обвал).
+	if (bChanged)
+	{
+		RunIntegrityCheck();
+	}
+
+	if (CascadeFrontVoxelZ <= 0.f)
+	{
+		bCascadeRunning = false;
+		UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': cascade finished"), *GetName());
 	}
 }
