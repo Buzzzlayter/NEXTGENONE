@@ -96,14 +96,16 @@ void AVoxelStructure::FillTestPattern()
 		FMath::Max(ChunkDims.X, 1),
 		FMath::Max(ChunkDims.Y, 1),
 		FMath::Max(ChunkDims.Z, 1));
+	const int32 GX = Dims.X * N, GY = Dims.Y * N, GZ = Dims.Z * N;
 
-	// Глобальный воксельный объём всей структуры и вписанный в него сплошной шар.
-	// Шар намеренно пересекает границы чанков → проверяем, что внутренних «стен» нет.
-	const FVector Center(
-		Dims.X * N * 0.5f - 0.5f,
-		Dims.Y * N * 0.5f - 0.5f,
-		Dims.Z * N * 0.5f - 0.5f);
-	const float Radius = FMath::Min3(Dims.X, Dims.Y, Dims.Z) * N * 0.45f;
+	// Кусок «поверхности»: заполняем всё ниже бугристой высоты (heightfield) → читается как глыба
+	// грунта/скалы. Стоит на земле (нижние слои — якоря), сверху неровный рельеф с холмом по центру —
+	// масса, которой эффектно обрушаться глыбами при подрыве/карве.
+	const float BaseH  = GZ * 0.42f;                    // средняя высота поверхности
+	const float Amp    = GZ * 0.16f;                    // амплитуда бугров
+	const float MoundH = GZ * 0.40f;                    // высота центрального холма
+	const FVector2D Center(GX * 0.5f, GY * 0.5f);
+	const float MoundR = FMath::Min(GX, GY) * 0.32f;
 
 	for (int32 CZ = 0; CZ < Dims.Z; ++CZ)
 	for (int32 CY = 0; CY < Dims.Y; ++CY)
@@ -116,13 +118,29 @@ void AVoxelStructure::FillTestPattern()
 		for (int32 Y = 0; Y < N; ++Y)
 		for (int32 X = 0; X < N; ++X)
 		{
-			const FVector G(
-				(float)(CX * N + X),
-				(float)(CY * N + Y),
-				(float)(CZ * N + Z));
-			if ((G - Center).Size() <= Radius)
+			const int32 gx = CX * N + X;
+			const int32 gy = CY * N + Y;
+			const int32 gz = CZ * N + Z;
+
+			// Бугристая высота поверхности в этой точке (сумма синусов) + центральный купол.
+			float H = BaseH
+				+ Amp * FMath::Sin(gx * 0.09f) * FMath::Cos(gy * 0.07f)
+				+ Amp * 0.5f * FMath::Sin((gx + gy) * 0.05f);
+
+			const float Dist2D = FVector2D((float)gx - Center.X, (float)gy - Center.Y).Size();
+			if (Dist2D < MoundR)
 			{
-				Ch.Set(X, Y, Z, TestMaterial);
+				const float T = 1.f - (Dist2D / MoundR);
+				H += MoundH * T * T;   // гладкий купол к центру
+			}
+
+			if ((float)gz < H)
+			{
+				// Материал по высоте: низ — укреплённый (2), верхушка — «слабый» (3), середина — камень.
+				uint8 Mat = TestMaterial;
+				if ((float)gz < GZ * 0.2f)      Mat = 2;
+				else if ((float)gz > H - 3.f)   Mat = 3;
+				Ch.Set(X, Y, Z, Mat);
 			}
 		}
 	}
@@ -273,6 +291,9 @@ int32 AVoxelStructure::ApplyDamageSphere(const FVector& WorldCenter, float Radiu
 		if (NewMaterial == 0)
 		{
 			bIntegrityDirty = true;
+			// Запоминаем центр удара → радиальный импульс кускам в отложенной проверке.
+			bPendingShock = true;
+			PendingShockOrigin = WorldCenter;
 		}
 		NotifyStructuralShock(WorldCenter, RadiusCm);
 		EnsureTicker();
@@ -328,14 +349,8 @@ void AVoxelStructure::RemoveTicker()
 	}
 }
 
-bool AVoxelStructure::TickPipeline(float Dt)
+bool AVoxelStructure::TickPipeline(float /*Dt*/)
 {
-	// 0) Каскад обрушения: двигаем фронт вниз (если запущен) — выпиливает полосу → целостность роняет верх.
-	if (bCascadeRunning)
-	{
-		AdvanceCascade(Dt);
-	}
-
 	// 1) Применить готовое (бюджет на кадр).
 	if (Pipeline.IsValid())
 	{
@@ -365,7 +380,6 @@ bool AVoxelStructure::TickPipeline(float Dt)
 	// 3) Делать больше нечего → снять тикер и подвести итог.
 	const bool bBusy = DirtyChunks.Num() > 0
 		|| InFlight.Num() > 0
-		|| bCascadeRunning
 		|| (Pipeline.IsValid() && !Pipeline->Completed.IsEmpty());
 
 	if (!bBusy)
@@ -374,7 +388,16 @@ bool AVoxelStructure::TickPipeline(float Dt)
 		if (bIntegrityDirty)
 		{
 			bIntegrityDirty = false;
-			RunIntegrityCheck();   // может удалить оторванное → новые dirty-чанки
+			// Если был удар игрока — толкаем куски радиально от него; иначе просто падают.
+			if (bPendingShock)
+			{
+				bPendingShock = false;
+				RunIntegrityCheck(EDetachLaunch::Radial, PendingShockOrigin, DebrisLaunchSpeedCmS);
+			}
+			else
+			{
+				RunIntegrityCheck();   // может удалить оторванное → новые dirty-чанки
+			}
 			if (DirtyChunks.Num() > 0 || InFlight.Num() > 0)
 			{
 				return true;       // продолжаем тикать, доремешим
@@ -658,7 +681,7 @@ void AVoxelStructure::MarkChunkDirtyAround(const FIntVector& ChunkCoord, int32 L
 	if (LZ == N - 1 && Chunks.Contains(ChunkCoord + FIntVector(0, 0,  1))) DirtyChunks.Add(ChunkCoord + FIntVector(0, 0,  1));
 }
 
-void AVoxelStructure::RunIntegrityCheck()
+void AVoxelStructure::RunIntegrityCheck(EDetachLaunch Launch, const FVector& LaunchOrigin, float LaunchSpeed)
 {
 	if (!bEnableStructuralIntegrity || Chunks.Num() == 0)
 	{
@@ -683,8 +706,9 @@ void AVoxelStructure::RunIntegrityCheck()
 		return Z <= AnchorMaxGlobalZ;   // солвер вызывает IsAnchor только для solid-вокселей
 	};
 
+	// Реальная опора (gravity-aware): нависания без опоры снизу рушатся, а не «висят».
 	TArray<TArray<FIntVector>> Detached;
-	FStructuralSolver::FindDetachedComponents(VDims, IsSolid, IsAnchor, Detached);
+	FStructuralSolver::FindUnsupportedComponents(VDims, MaxCantileverVoxels, IsSolid, IsAnchor, Detached);
 
 	if (Detached.Num() == 0)
 	{
@@ -704,41 +728,85 @@ void AVoxelStructure::RunIntegrityCheck()
 	int32 RemovedVox = 0;
 	int32 SpawnedDebris = 0;
 
+	const int32 BSize = FMath::Max(BoulderSizeVoxels, 1);
+
 	for (const TArray<FIntVector>& Comp : Detached)
 	{
-		// 6b: спавним падающий кусок (до удаления его вокселей из структуры).
-		if (bSpawnDebris && World && Comp.Num() >= MinDebrisVoxels)
+		// Дробим оторванную массу на «глыбы» (~BoulderSizeVoxels): обвал идёт кусками, а не одним
+		// монолитом и не пылью. Бьём по грубой сетке — каждая занятая ячейка = одна глыба.
+		if (bSpawnDebris && World)
 		{
-			TSet<FIntVector> Set;
-			Set.Append(Comp);
-
-			FIntVector Origin = Comp[0];
+			TMap<FIntVector, TArray<FIntVector>> Cells;
 			for (const FIntVector& G : Comp)
 			{
-				Origin.X = FMath::Min(Origin.X, G.X);
-				Origin.Y = FMath::Min(Origin.Y, G.Y);
-				Origin.Z = FMath::Min(Origin.Z, G.Z);
+				const FIntVector Key(G.X / BSize, G.Y / BSize, G.Z / BSize);
+				Cells.FindOrAdd(Key).Add(G);
 			}
 
-			FVoxelMeshData DebrisMesh;
-			FVoxelMesher::GenerateFromVoxelSet(Set, MaterialAt, Origin, DebrisMesh);
-
-			if (!DebrisMesh.IsEmpty())
+			for (const TPair<FIntVector, TArray<FIntVector>>& Cell : Cells)
 			{
+				const TArray<FIntVector>& Vox = Cell.Value;
+				if (Vox.Num() < MinDebrisVoxels)
+				{
+					continue;   // совсем мелочь — без дебриса (удалится ниже)
+				}
+
+				TSet<FIntVector> Set;
+				Set.Append(Vox);
+
+				FIntVector Origin = Vox[0];
+				FVector CentroidVx = FVector::ZeroVector;
+				for (const FIntVector& G : Vox)
+				{
+					Origin.X = FMath::Min(Origin.X, G.X);
+					Origin.Y = FMath::Min(Origin.Y, G.Y);
+					Origin.Z = FMath::Min(Origin.Z, G.Z);
+					CentroidVx += FVector(G.X + 0.5f, G.Y + 0.5f, G.Z + 0.5f);
+				}
+				CentroidVx /= (float)Vox.Num();
+
+				FVoxelMeshData DebrisMesh;
+				FVoxelMesher::GenerateFromVoxelSet(Set, MaterialAt, Origin, DebrisMesh);
+				if (DebrisMesh.IsEmpty())
+				{
+					continue;
+				}
+
 				FTransform Xf = GetActorTransform();
 				Xf.SetLocation(GetActorTransform().TransformPosition(
 					FVector(Origin.X, Origin.Y, Origin.Z) * S));
 
+				// Стартовый импульс глыбы («ось разрушения») по её центроиду.
+				FVector LinVel = FVector::ZeroVector;
+				FVector AngVel = FVector::ZeroVector;
+				if (Launch != EDetachLaunch::Gravity && LaunchSpeed > 0.f)
+				{
+					const FVector CentroidWorld = GetActorTransform().TransformPosition(CentroidVx * S);
+					if (Launch == EDetachLaunch::Radial)
+					{
+						const FVector Dir = (CentroidWorld - LaunchOrigin).GetSafeNormal();
+						LinVel = Dir * LaunchSpeed + FVector(0.f, 0.f, LaunchSpeed * 0.25f); // чуть подбрасываем
+					}
+					else // Cascade: в основном вниз + лёгкий разлёт в стороны
+					{
+						LinVel = FVector(
+							FMath::FRandRange(-0.3f, 0.3f),
+							FMath::FRandRange(-0.3f, 0.3f),
+							-0.1f) * LaunchSpeed;
+					}
+					AngVel = FMath::VRand() * DebrisSpinRadS;
+				}
+
 				if (AVoxelDebris* Debris = World->SpawnActor<AVoxelDebris>(
 						AVoxelDebris::StaticClass(), Xf))
 				{
-					Debris->Init(DebrisMesh, DebrisLifeSeconds);
+					Debris->Init(DebrisMesh, DebrisLifeSeconds, LinVel, AngVel);
 					++SpawnedDebris;
 				}
 			}
 		}
 
-		// Удаляем воксели куска из структуры.
+		// Удаляем воксели всей оторванной массы из структуры.
 		for (const FIntVector& G : Comp)
 		{
 			const FIntVector CC(G.X / N, G.Y / N, G.Z / N);
@@ -769,46 +837,24 @@ void AVoxelStructure::RunIntegrityCheck()
 	}
 }
 
-// ---- Каскад (шаг 7) ---------------------------------------------------------
+// ---- Тест-обвал (шаг 7) -----------------------------------------------------
+// Одношаговый триггер (клавиша C): подрываем опору — срезаем тонкую полосу прямо над якорным
+// слоем по всей площади → всё, что выше, теряет опору и обрушается ПО-НАСТОЯЩЕМУ через модель
+// опоры (RunIntegrityCheck) с дроблением на глыбы. Никаких скриптовых «слоёв».
 
 void AVoxelStructure::StartCascade()
 {
 	const int32 N = NgxVoxel::ChunkSize;
-	CascadeFrontVoxelZ = (float)(FMath::Max(ChunkDims.Z, 1) * N); // старт с верхней границы структуры
-	bCascadeRunning = true;
-
-	if (!Pipeline.IsValid())
-	{
-		Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
-	}
-	EnsureTicker();
-
-	UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': cascade started"), *GetName());
-}
-
-void AVoxelStructure::StopCascade()
-{
-	bCascadeRunning = false;
-}
-
-void AVoxelStructure::AdvanceCascade(float Dt)
-{
-	const int32 N = NgxVoxel::ChunkSize;
-	const float S = NgxVoxel::VoxelSizeCm;
 	const FIntVector VDims(
 		FMath::Max(ChunkDims.X, 1) * N,
 		FMath::Max(ChunkDims.Y, 1) * N,
 		FMath::Max(ChunkDims.Z, 1) * N);
 
-	const float PrevZ = CascadeFrontVoxelZ;
-	CascadeFrontVoxelZ -= (CascadeSpeedCmS / S) * Dt;
+	// Полоса подрыва: чуть выше якорного слоя, толщиной с «глыбу» — рвёт вертикальные опоры.
+	const int32 Z0 = FMath::Clamp(AnchorMaxGlobalZ + 1, 0, VDims.Z - 1);
+	const int32 Z1 = FMath::Clamp(Z0 + FMath::Max(BoulderSizeVoxels, 1) - 1, 0, VDims.Z - 1);
 
-	// Полоса вокселей, через которую фронт прошёл за этот кадр → выпиливаем.
-	const int32 ZLo = FMath::Clamp(FMath::FloorToInt(CascadeFrontVoxelZ), 0, VDims.Z - 1);
-	const int32 ZHi = FMath::Clamp(FMath::CeilToInt(PrevZ) - 1, 0, VDims.Z - 1);
-
-	bool bChanged = false;
-	for (int32 Z = ZLo; Z <= ZHi; ++Z)
+	for (int32 Z = Z0; Z <= Z1; ++Z)
 	for (int32 Y = 0; Y < VDims.Y; ++Y)
 	for (int32 X = 0; X < VDims.X; ++X)
 	{
@@ -825,19 +871,22 @@ void AVoxelStructure::AdvanceCascade(float Dt)
 		{
 			Ch->Set(LX, LY, LZ, 0);
 			MarkChunkDirtyAround(CC, LX, LY, LZ);
-			bChanged = true;
 		}
 	}
 
-	// Выпил полосы мог оторвать верхнюю секцию → роняем её сразу (прогрессивный обвал).
-	if (bChanged)
+	if (!Pipeline.IsValid())
 	{
-		RunIntegrityCheck();
+		Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
 	}
 
-	if (CascadeFrontVoxelZ <= 0.f)
-	{
-		bCascadeRunning = false;
-		UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': cascade finished"), *GetName());
-	}
+	// Подрыв опоры → масса выше обрушается глыбами (вниз + спин).
+	RunIntegrityCheck(EDetachLaunch::Cascade, FVector::ZeroVector, CascadeLaunchSpeedCmS);
+	EnsureTicker();
+
+	UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': collapse triggered (Z %d..%d)"), *GetName(), Z0, Z1);
+}
+
+void AVoxelStructure::StopCascade()
+{
+	bCascadeRunning = false;
 }

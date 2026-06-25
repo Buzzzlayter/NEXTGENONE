@@ -16,7 +16,9 @@ struct FInputActionValue;
 // Игровой паун VS0: летающая камера + воксельный инструмент (карв/опора по трейсу).
 // Сейчас простой летающий вариант на Enhanced Input — основа, дотюним позже.
 // Input Actions + Mapping Context создаются в рантайме (паун self-contained, ассеты не нужны).
-UCLASS()
+// PrioritizeCategories — категории "Pawn*" поднимаются в самый верх панели Details, чтобы
+// не прокручивать к настройкам инструмента/дебага каждый раз.
+UCLASS(meta = (PrioritizeCategories = "Pawn"))
 class NEXTGENONE_API ANextgenonePawn : public APawn
 {
 	GENERATED_BODY()

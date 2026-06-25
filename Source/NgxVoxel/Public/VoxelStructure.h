@@ -30,7 +30,9 @@ struct FVoxelMeshPipeline
 	TQueue<FChunkMeshResult, EQueueMode::Mpsc> Completed;
 };
 
-UCLASS()
+// PrioritizeCategories — категории "Voxel*" поднимаются в самый верх панели Details (над Transform),
+// чтобы не прокручивать к ним каждый раз.
+UCLASS(meta = (PrioritizeCategories = "Voxel"))
 class NGXVOXEL_API AVoxelStructure : public AActor
 {
 	GENERATED_BODY()
@@ -49,11 +51,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel")
 	bool bUseGreedy = true;
 
-	// Размер структуры в чанках (X×Y×Z). Тестовый шар вписывается в этот объём,
-	// что показывает куллинг граней на границах чанков (внутренних «стен» быть не должно).
-	// Значения <1 поджимаются до 1 в FillTestPattern.
+	// Размер структуры в чанках (X×Y×Z). Тестовый паттерн — кусок «поверхности» (heightfield),
+	// вписанный в этот объём. Значения <1 поджимаются до 1 в FillTestPattern.
+	// Дефолт 6×6×3 = 96×96×48 вокселей (≈4.8×4.8×2.4 м при 5 см) — крупная глыба под обвал.
 	UPROPERTY(EditAnywhere, Category = "Voxel")
-	FIntVector ChunkDims = FIntVector(2, 2, 2);
+	FIntVector ChunkDims = FIntVector(6, 6, 3);
 
 	// Меширование на воркере (game thread не блокируется). false → синхронно (A/B/отладка).
 	UPROPERTY(EditAnywhere, Category = "Voxel|Async")
@@ -100,11 +102,30 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "1"))
 	int32 MinDebrisVoxels = 2;
 
-	// --- Каскад (шаг 7): фронт обрушения, идущий сверху вниз ---
+	// Стартовая скорость оторванных кусков от удара/заряда (см/с) — радиально от центра удара.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "0"))
+	float DebrisLaunchSpeedCmS = 250.f;
 
-	// Скорость опускания фронта каскада (см/с).
-	UPROPERTY(EditAnywhere, Category = "Voxel|Cascade", meta = (ClampMin = "1"))
-	float CascadeSpeedCmS = 400.f;
+	// Случайный спин кусков (рад/с) — чтобы падали кувырком, а не плашмя.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "0"))
+	float DebrisSpinRadS = 5.f;
+
+	// Макс. вынос консоли (вокс): solid дальше этого по горизонтали от вертикальной опоры — рушится.
+	// 0 → держится только то, что стоит прямо на земле (агрессивный обвал). Больше → длиннее нависания.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "0"))
+	int32 MaxCantileverVoxels = 4;
+
+	// Размер «глыбы» (вокс): оторванная масса дробится на куски ~этого размера (обвал глыбами, не монолитом).
+	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "1"))
+	int32 BoulderSizeVoxels = 7;
+
+	// --- Тест-обвал (бывш. «Каскад», шаг 7) ---
+	// Клавиша C — тест-триггер: подрывает опору структуры (большая полость снизу), и она
+	// обрушается ПО-НАСТОЯЩЕМУ через модель опоры + дробление на глыбы. Без скриптовых «слоёв».
+
+	// Стартовая скорость глыб от обвала (см/с) — в основном вниз + спин.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Cascade", meta = (ClampMin = "0"))
+	float CascadeLaunchSpeedCmS = 150.f;
 
 	// Полный ребилд: пересобрать тестовые чанки и весь меш.
 	UFUNCTION(CallInEditor, Category = "Voxel")
@@ -207,11 +228,17 @@ private:
 
 	// --- Структурная целостность (шаг 6) ---
 	bool bIntegrityDirty = false;   // после удаления вокселей нужна проверка связности
-	void RunIntegrityCheck();
+
+	// Откуда толкать оторванные куски: вниз/гравитация, радиально от удара, обвал каскада.
+	enum class EDetachLaunch : uint8 { Gravity, Radial, Cascade };
+	void RunIntegrityCheck(EDetachLaunch Launch = EDetachLaunch::Gravity,
+		const FVector& LaunchOrigin = FVector::ZeroVector, float LaunchSpeed = 0.f);
 	void MarkChunkDirtyAround(const FIntVector& ChunkCoord, int32 LX, int32 LY, int32 LZ);
 
-	// --- Каскад (шаг 7) ---
-	bool bCascadeRunning = false;
-	float CascadeFrontVoxelZ = 0.f;     // текущий фронт в воксельных Z (идёт сверху вниз)
-	void AdvanceCascade(float Dt);      // двигает фронт и выпиливает пройденную полосу
+	// Источник последнего удара (для радиального импульса при отложенной проверке связности).
+	bool bPendingShock = false;
+	FVector PendingShockOrigin = FVector::ZeroVector;
+
+	// --- Тест-обвал (шаг 7) ---
+	bool bCascadeRunning = false;       // оставлен для геттера; обвал теперь одношаговый (клавиша C)
 };
