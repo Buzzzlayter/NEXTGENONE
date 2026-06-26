@@ -9,6 +9,7 @@
 class UCameraComponent;
 class USphereComponent;
 class UFloatingPawnMovement;
+class UFieldSystemComponent;
 class UInputAction;
 class UInputMappingContext;
 struct FInputActionValue;
@@ -40,6 +41,27 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Pawn")
 	TObjectPtr<UFloatingPawnMovement> Movement;
+
+	// Поле для Chaos-разрушения: взрыв = strain (рвёт кластеры) + radial force (расталкивает куски).
+	UPROPERTY(VisibleAnywhere, Category = "Pawn")
+	TObjectPtr<UFieldSystemComponent> Field;
+
+	// --- Взрыв (Chaos) ---
+	// Радиус взрыва (см).
+	UPROPERTY(EditAnywhere, Category = "Pawn|Explode", meta = (ClampMin = "0"))
+	float ExplodeRadiusCm = 400.f;
+
+	// Сила strain — должна превышать Damage Threshold у Geometry Collection, иначе не разорвёт.
+	UPROPERTY(EditAnywhere, Category = "Pawn|Explode", meta = (ClampMin = "0"))
+	float ExplodeStrain = 20000.f;
+
+	// Сила расталкивающего радиального импульса (величина поля силы).
+	UPROPERTY(EditAnywhere, Category = "Pawn|Explode", meta = (ClampMin = "0"))
+	float ExplodeForce = 500000.f;
+
+	// До скольких уровней кластеров разрывать strain-ом (глубина дробления).
+	UPROPERTY(EditAnywhere, Category = "Pawn|Explode", meta = (ClampMin = "1"))
+	int32 ExplodeClusterLevels = 5;
 
 	// --- Воксельный инструмент ---
 	UPROPERTY(EditAnywhere, Category = "Pawn|Tool")
@@ -81,6 +103,7 @@ protected:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RadiusAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CascadeAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> ExplodeAction;
 
 private:
 	void EnsureInputObjects();          // идемпотентно создаёт IA + IMC
@@ -96,4 +119,5 @@ private:
 	void OnBuild(const FInputActionValue& V);
 	void OnRadius(const FInputActionValue& V);
 	void OnCascade(const FInputActionValue& V);
+	void OnExplode(const FInputActionValue& V);   // клавиша F: трейс → Chaos-взрыв в точке
 };

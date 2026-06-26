@@ -13,7 +13,13 @@
 			"Name": "NgxVoxel",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "UIModule",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
 		}
+
 	],
 	"Plugins": [
 		{
@@ -35,6 +41,12 @@
 		{
 			"Name": "ProceduralMeshComponent",
 			"Enabled": true
+		},
+		{
+			"Name": "GCFSM",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/be0b4cb9916b4eba882cbe9dffd4fb5a"
 		}
+
 	]
 }

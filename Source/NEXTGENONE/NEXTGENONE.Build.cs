@@ -10,6 +10,16 @@ public class NEXTGENONE : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
 
+		// Chaos-разрушение (Geometry Collections + поля): пивот на Chaos для сносимых конструкций.
+		PublicDependencyModuleNames.AddRange(new string[] {
+			"GeometryCollectionEngine",   // UGeometryCollectionComponent, AGeometryCollectionActor
+			"FieldSystemEngine",          // поля: RadialFalloff (strain) + RadialVector (kick) → взрыв
+			"Chaos",
+			"ChaosSolverEngine",
+			"PhysicsCore",
+			"UIModule",
+		});
+
 		PrivateDependencyModuleNames.AddRange(new string[] { "NgxVoxel" });
 
 		// Uncomment if you are using Slate UI

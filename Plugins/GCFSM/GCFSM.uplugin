@@ -1,0 +1,42 @@
+{
+	"FileVersion": 3,
+	"Version": 26,
+	"VersionName": "1.7.10",
+	"FriendlyName": "GC FSM Plugin by Gamecentric",
+	"Description": "Event-driven, hierarchical Finite State Machines in blueprints",
+	"Category": "Blueprints",
+	"CreatedBy": "Gamecentric",
+	"CreatedByURL": "http://gamecentric.com",
+	"DocsURL": "http://gamecentric.com/gcfsm/",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/be0b4cb9916b4eba882cbe9dffd4fb5a",
+	"SupportURL": "http://gamecentric.com/contacts/",
+	"EngineVersion": "5.8.0",
+	"CanContainContent": false,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "GCFSM",
+			"Type": "Runtime",
+			"LoadingPhase": "PreDefault",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Android",
+				"Mac",
+				"IOS"
+			]
+		},
+		{
+			"Name": "GCFSMEditor",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "PreDefault",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Android",
+				"Mac",
+				"IOS"
+			]
+		}
+	]
+}

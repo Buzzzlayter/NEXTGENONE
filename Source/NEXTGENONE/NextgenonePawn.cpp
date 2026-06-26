@@ -5,6 +5,7 @@
 #include "VoxelDebris.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SphereComponent.h"
+#include "Field/FieldSystemComponent.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
@@ -38,6 +39,11 @@ ANextgenonePawn::ANextgenonePawn()
 	Movement->MaxSpeed = 1500.f;
 	Movement->Acceleration = 8000.f;
 	Movement->Deceleration = 8000.f;
+
+	// Поле Chaos-разрушения. Транзиентные команды (ApplyStrainField/ApplyRadialForce) действуют
+	// на все Geometry Collections в радиусе — компоненту достаточно быть в мире (на пауне).
+	Field = CreateDefaultSubobject<UFieldSystemComponent>(TEXT("Field"));
+	Field->SetupAttachment(Collision);
 
 	// Поворот — только у камеры (control rotation), тело не крутим → нет двойного yaw.
 	bUseControllerRotationYaw = false;
@@ -136,6 +142,7 @@ void ANextgenonePawn::EnsureInputObjects()
 	BuildAction     = MakeAction(TEXT("IA_Build"),     EInputActionValueType::Boolean);
 	RadiusAction    = MakeAction(TEXT("IA_Radius"),    EInputActionValueType::Axis1D);
 	CascadeAction   = MakeAction(TEXT("IA_Cascade"),   EInputActionValueType::Boolean);
+	ExplodeAction   = MakeAction(TEXT("IA_Explode"),   EInputActionValueType::Boolean);
 
 	InputMapping = NewObject<UInputMappingContext>(this, TEXT("IMC_Nextgenone"));
 	InputMapping->MapKey(FwdAction,       EKeys::W);
@@ -148,6 +155,7 @@ void ANextgenonePawn::EnsureInputObjects()
 	InputMapping->MapKey(BuildAction,     EKeys::RightMouseButton);
 	InputMapping->MapKey(RadiusAction,    EKeys::MouseWheelAxis);
 	InputMapping->MapKey(CascadeAction,   EKeys::C);
+	InputMapping->MapKey(ExplodeAction,   EKeys::F);
 }
 
 void ANextgenonePawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -167,6 +175,7 @@ void ANextgenonePawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EIC->BindAction(BuildAction,     ETriggerEvent::Triggered, this, &ANextgenonePawn::OnBuild);
 		EIC->BindAction(RadiusAction,    ETriggerEvent::Triggered, this, &ANextgenonePawn::OnRadius);
 		EIC->BindAction(CascadeAction,   ETriggerEvent::Triggered, this, &ANextgenonePawn::OnCascade);
+		EIC->BindAction(ExplodeAction,   ETriggerEvent::Triggered, this, &ANextgenonePawn::OnExplode);
 	}
 }
 
@@ -232,6 +241,36 @@ void ANextgenonePawn::OnCascade(const FInputActionValue& /*V*/)
 			}
 		}
 	}
+}
+
+void ANextgenonePawn::OnExplode(const FInputActionValue& /*V*/)
+{
+	if (!Field || !Camera || !GetWorld())
+	{
+		return;
+	}
+
+	// Точка взрыва: трейс из камеры; попал → точка удара, мимо → точка на дальности досягаемости.
+	const FVector Start = Camera->GetComponentLocation();
+	const FVector Dir = Camera->GetForwardVector();
+	const FVector End = Start + Dir * ReachCm;
+
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	FHitResult Hit;
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+	const FVector P = bHit ? Hit.ImpactPoint : End;
+
+	if (bDrawToolDebug)
+	{
+		DrawDebugSphere(GetWorld(), P, ExplodeRadiusCm, 16, FColor::Orange, false, 1.5f);
+	}
+
+	// 1) Strain рвёт кластеры Geometry Collection в радиусе (должен превышать Damage Threshold).
+	Field->ApplyStrainField(true, P, ExplodeRadiusCm, ExplodeStrain, ExplodeClusterLevels);
+	// 2) Радиальная сила с затуханием расталкивает отколовшиеся куски от центра взрыва.
+	Field->ApplyRadialVectorFalloffForce(true, P, ExplodeRadiusCm, ExplodeForce);
 }
 
 void ANextgenonePawn::FireTool(uint8 NewMaterial)
