@@ -278,6 +278,20 @@ UGCFSM* UGCFSMState::GetFSM(FName name) const
 	return pfsm ? *pfsm : nullptr;
 }
 
+void UGCFSMState::GetChildFSMs(TArray<UGCFSM*>& OutFSMs) const
+{
+	OutFSMs.Reset();
+	OutFSMs.Reserve(FSMs.Num());
+
+	for (const TPair<FName, TObjectPtr<UGCFSM>>& FSM : FSMs)
+	{
+		if (UGCFSM* ChildFSM = FSM.Value.Get())
+		{
+			OutFSMs.Add(ChildFSM);
+		}
+	}
+}
+
 UGCFSM* UGCFSMState::GetFSMRecursive(FName name) const
 {
 	auto result = GetFSM(name);

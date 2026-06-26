@@ -23,9 +23,6 @@ public:
 
 	UPROPERTY(BlueprintAssignable)
 	FOnInputModeChanged OnInputModeChanged;
-
-	static UPlayerInputSubsystem* GetPIS(UWorld* World);
-
 	
 	UFUNCTION(BlueprintPure, BlueprintCosmetic, meta = (WorldContext = "WCO", CompactNodeTitle = GetInputSubsystem))
 	static UPlayerInputSubsystem* GetInputSubsystem(const UObject* WCO);
@@ -67,6 +64,4 @@ private:
 
 	void InputModeChanged(EInputMode Mode);
 	void InputTypeChanged(EInputType Type);
-
-	bool ContainsPreProcessorManager() const;
 };

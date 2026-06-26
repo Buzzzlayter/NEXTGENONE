@@ -3,6 +3,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 #include "Input/PlayerInputSubsystem.h"
+#include "UIModule.h"
 
 void UHFSMInputComponent::Enter()
 {
@@ -16,14 +17,17 @@ void UHFSMInputComponent::Enter()
 	if (bSetupCursorMode)
 	{
 		const auto InputSubsystem = UPlayerInputSubsystem::GetInputSubsystem(GetWorld());
+		GENCHECK(InputSubsystem, "UHFSMInputComponent::Enter failed. InputSubsystem is null.");
 		InputSubsystem->SetGamepadCursorMode(DefaultCursorMode);
 	}
 
 	if (bSetupMappingContext)
 	{
-		check(MappingContext && Priority >= 0);
+		GENCHECK(MappingContext && Priority >= 0, "UHFSMInputComponent::Enter failed. MappingContext is null or Priority is invalid.");
 
 		const auto EnhancedInputSubsystem = GetEnhancedInputSubsystem();
+		GENCHECK(EnhancedInputSubsystem, "UHFSMInputComponent::Enter failed. EnhancedInputSubsystem is null.");
+
 		EnhancedInputSubsystem->AddMappingContext(MappingContext, Priority);
 
 		UE_LOG(LogPlayerInputSubsystem,
@@ -39,9 +43,12 @@ void UHFSMInputComponent::Exit(FName Event)
 	if (bSetupMappingContext)
 	{
 		const auto EnhancedInputSubsystem = GetEnhancedInputSubsystem();
-		EnhancedInputSubsystem->RemoveMappingContext(MappingContext);
+		if (EnhancedInputSubsystem && MappingContext)
+		{
+			EnhancedInputSubsystem->RemoveMappingContext(MappingContext);
 
-		UE_LOG(LogPlayerInputSubsystem, Log, TEXT("Mapping context removed: Name  = %s"), *MappingContext->GetName());
+			UE_LOG(LogPlayerInputSubsystem, Log, TEXT("Mapping context removed: Name  = %s"), *MappingContext->GetName());
+		}
 	}
 
 	Super::Exit(Event);
@@ -49,6 +56,17 @@ void UHFSMInputComponent::Exit(FName Event)
 
 UEnhancedInputLocalPlayerSubsystem* UHFSMInputComponent::GetEnhancedInputSubsystem() const
 {
-	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	const UWorld* world = GetWorld();
+	if (!world)
+	{
+		return nullptr;
+	}
+
+	const ULocalPlayer* LocalPlayer = world->GetFirstLocalPlayerFromController();
+	if (!LocalPlayer)
+	{
+		return nullptr;
+	}
+
 	return ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer);
 }

@@ -7,6 +7,23 @@
 #include "HFSMStateComponent.h"
 #include "UILayoutTemplate.generated.h"
 
+USTRUCT()
+struct FUIModuleWidgetDemountData
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString StateName;
+
+	UPROPERTY()
+	FGameplayTag PlaceholderID;
+
+	UPROPERTY()
+	TWeakObjectPtr<UWidget> Placeholder;
+
+	UPROPERTY()
+	TWeakObjectPtr<UUserWidget> Widget;
+};
 
 UCLASS(BlueprintType)
 class UIMODULE_API UUILayoutTemplate : public UHFSMStateComponent
@@ -35,14 +52,6 @@ public:
 	const TMap<FGameplayTag, UWidget*>& GetPlaceholders();
 
 protected:
-	struct FWidgetDemountData
-	{
-		FString StateName;
-		FGameplayTag PlaceholderID;
-		UWidget* Placeholder;
-		UUserWidget* Widget;
-	};
-
 	UPROPERTY(EditDefaultsOnly)
 	ELayoutLayer Layer = ELayoutLayer::Content;
 
@@ -56,7 +65,9 @@ protected:
 
 	UPROPERTY()
 	TMap<FGameplayTag, UWidget*> Placeholders;
-	TArray<FWidgetDemountData> WidgetsAwaitingDemount;
 
-	static void DemountWidgetsImmediate(const TArray<FWidgetDemountData>& WidgetsAwaitingDemount);
+	UPROPERTY()
+	TArray<FUIModuleWidgetDemountData> WidgetsAwaitingDemount;
+
+	static void DemountWidgetsImmediate(const TArray<FUIModuleWidgetDemountData>& WidgetsAwaitingDemount);
 };

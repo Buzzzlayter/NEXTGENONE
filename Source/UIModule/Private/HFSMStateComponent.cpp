@@ -6,14 +6,20 @@
 void UHFSMStateComponent::Init(UHFSMState* StateOwner)
 {
 	State = StateOwner;
-	World = State->GetWorld();
+	World = State ? State->GetWorld() : nullptr;
 }
 
 void UHFSMStateComponent::Enter()
 {
-	if(const APlayerController* PC  = World->GetFirstPlayerController())
+	if (World)
 	{
-		UInputDelegateBinding::BindInputDelegates(GetClass(), PC->InputComponent, this);		
+		if (const APlayerController* PC = World->GetFirstPlayerController())
+		{
+			if (PC->InputComponent)
+			{
+				UInputDelegateBinding::BindInputDelegates(GetClass(), PC->InputComponent, this);
+			}
+		}
 	}
 	OnEnter();
 }

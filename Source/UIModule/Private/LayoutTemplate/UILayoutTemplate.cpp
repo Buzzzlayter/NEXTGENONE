@@ -5,6 +5,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Kismet/GameplayStatics.h"
 #include "HFSMState.h"
+#include "UIModule.h"
 
 ULayoutTemplatesSorter* GetLayoutSorter(UHFSMState* State)
 {
@@ -19,7 +20,10 @@ void UUILayoutTemplate::MountWidgetTo(UUserWidget* Widget, FGameplayTag Placehol
 {
 	if (UWidget** Sample = Placeholders.Find(PlaceholderID))
 	{
-		IWidgetPlaceholder::Execute_MountWidget(*Sample, Widget);
+		if (*Sample)
+		{
+			IWidgetPlaceholder::Execute_MountWidget(*Sample, Widget);
+		}
 	}
 }
 
@@ -27,13 +31,18 @@ void UUILayoutTemplate::DemountWidget(UUserWidget* Widget, FGameplayTag Placehol
 {
 	if (UWidget** Placeholder = Placeholders.Find(PlaceholderID))
 	{
-		FWidgetDemountData DemountData;
+		if (!*Placeholder)
+		{
+			return;
+		}
+
+		FUIModuleWidgetDemountData DemountData;
 		DemountData.StateName = State ? State->GetName() : TEXT("<none>");
 		DemountData.PlaceholderID = PlaceholderID;
 		DemountData.Placeholder = *Placeholder;
 		DemountData.Widget = Widget;
 
-		if (TemplateWidget->FadeOutDuration > 0)
+		if (TemplateWidget && TemplateWidget->FadeOutDuration > 0)
 		{
 			WidgetsAwaitingDemount.Add(DemountData);
 		}
@@ -44,11 +53,16 @@ void UUILayoutTemplate::DemountWidget(UUserWidget* Widget, FGameplayTag Placehol
 	}
 }
 
-void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FWidgetDemountData>& WidgetsAwaitingDemount)
+void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIModuleWidgetDemountData>& WidgetsAwaitingDemount)
 {
-	for (const FWidgetDemountData& DemountData : WidgetsAwaitingDemount)
+	for (const FUIModuleWidgetDemountData& DemountData : WidgetsAwaitingDemount)
 	{
-		IWidgetPlaceholder::Execute_DemountWidget(DemountData.Placeholder, DemountData.Widget);
+		UWidget* Placeholder = DemountData.Placeholder.Get();
+		UUserWidget* Widget = DemountData.Widget.Get();
+		if (Placeholder && Widget)
+		{
+			IWidgetPlaceholder::Execute_DemountWidget(Placeholder, Widget);
+		}
 	}
 }
 
@@ -68,17 +82,26 @@ void UUILayoutTemplate::LayersUpdate(const int32 Index, bool& bOutConsumeDrawing
 
 void UUILayoutTemplate::Hide() const
 {
-	TemplateWidget->SetVisibility(ESlateVisibility::Collapsed);
+	if (TemplateWidget)
+	{
+		TemplateWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void UUILayoutTemplate::Show() const
 {
-	TemplateWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	if (TemplateWidget)
+	{
+		TemplateWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
 }
 
 void UUILayoutTemplate::SetOpacity(float Opacity)
 {
-	TemplateWidget->SetRenderOpacity(Opacity);
+	if (TemplateWidget)
+	{
+		TemplateWidget->SetRenderOpacity(Opacity);
+	}
 }
 
 bool UUILayoutTemplate::IsLayer(const ELayoutLayer& InLayer) const
@@ -100,20 +123,34 @@ void UUILayoutTemplate::Enter()
 {
 	bIsTickEnabled = true;
 
-	APlayerController* LocalPlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	GENCHECK(Template, "UILayoutTemplate::Enter failed. Template is null.");
+
+	UWorld* world = GetWorld();
+	GENCHECK(world, "UILayoutTemplate::Enter failed. World is null.");
+
+	APlayerController* LocalPlayerController = UGameplayStatics::GetPlayerController(world, 0);
+	GENCHECK(LocalPlayerController, "UILayoutTemplate::Enter failed. PlayerController is null.");
+
 	TemplateWidget = CreateWidget<ULayoutWidget>(LocalPlayerController, Template);
+	GENCHECK(TemplateWidget, "UILayoutTemplate::Enter failed. CreateWidget returned null.");
+
 	TemplateWidget->AddToViewport(ZOrder);
 	TemplateWidget->DoFadeIn();
-	TemplateWidget->WidgetTree->ForEachWidget(
-		[this](UWidget* Widget)
-		{
-			if (Widget->Implements<UWidgetPlaceholder>())
+	if (TemplateWidget->WidgetTree)
+	{
+		TemplateWidget->WidgetTree->ForEachWidget(
+			[this](UWidget* Widget)
 			{
-				const IWidgetPlaceholder* Placeholder = Cast<IWidgetPlaceholder>(Widget);
-				const FGameplayTag ID = Placeholder->Execute_GetID(Widget);
-				Placeholders.Add(ID, Widget);
-			}
-		});
+				if (Widget && Widget->Implements<UWidgetPlaceholder>())
+				{
+					const FGameplayTag ID = IWidgetPlaceholder::Execute_GetID(Widget);
+					if (ID.IsValid())
+					{
+						Placeholders.Add(ID, Widget);
+					}
+				}
+			});
+	}
 
 	Super::Enter();
 	
@@ -137,21 +174,42 @@ void UUILayoutTemplate::Exit(FName event)
 	if (const auto LayoutSorter = GetLayoutSorter(State))
 		LayoutSorter->RemoveLayout(this);
 
+	if (!TemplateWidget)
+	{
+		Super::Exit(event);
+		return;
+	}
+	
 	if (TemplateWidget->FadeOutDuration > 0)
 	{
 		TemplateWidget->DoFadeOut();
 		FTimerHandle DestroyTimer;
+		const TArray<FUIModuleWidgetDemountData> DemountList = WidgetsAwaitingDemount;
+		WidgetsAwaitingDemount.Reset();
+		TWeakObjectPtr<ULayoutWidget> TemplateWidgetWeak = TemplateWidget;
 		const auto Delegate = FTimerDelegate::CreateLambda(
-			[DemountList = WidgetsAwaitingDemount, Widget = TemplateWidget]()
+			[DemountList, TemplateWidgetWeak]()
 			{
 				UUILayoutTemplate::DemountWidgetsImmediate(DemountList);
-				Widget->RemoveFromParent();
+				if (ULayoutWidget* Widget = TemplateWidgetWeak.Get())
+				{
+					Widget->RemoveFromParent();
+				}
 			});
-		GetWorld()->GetTimerManager().SetTimer(DestroyTimer, Delegate, TemplateWidget->FadeOutDuration, false);
+		if (UWorld* world = GetWorld())
+		{
+			world->GetTimerManager().SetTimer(DestroyTimer, Delegate, TemplateWidget->FadeOutDuration, false);
+		}
+		else
+		{
+			DemountWidgetsImmediate(DemountList);
+			TemplateWidget->RemoveFromParent();
+		}
 	}
 	else
 	{
 		DemountWidgetsImmediate(WidgetsAwaitingDemount);
+		WidgetsAwaitingDemount.Reset();
 		TemplateWidget->RemoveFromParent();
 	}
 	Super::Exit(event);

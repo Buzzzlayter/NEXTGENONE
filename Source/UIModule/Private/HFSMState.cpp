@@ -1,7 +1,6 @@
 #include "HFSMState.h"
 
 #include "GameplayTagContainer.h"
-#include "Algo/Transform.h"
 #include "GCFSMUtilities.h"
 #include "HFSMStateComponent.h"
 
@@ -19,25 +18,22 @@ UHFSMState* UHFSMState::GetParent() const
 
 TArray<UHFSMState*> UHFSMState::GetChildren()
 {
-	const static FName FSMsMapPropertyName = TEXT("FSMs");
-
 	TArray<UGCFSM*> InternalFSMs;
-	const FProperty* Property = GetClass()->FindPropertyByName(FSMsMapPropertyName);
-	const TMap<FName, UGCFSM*>* Map = Property->ContainerPtrToValuePtr<TMap<FName, UGCFSM*>>(this);
-	Map->GenerateValueArray(InternalFSMs);
+	GetChildFSMs(InternalFSMs);
 
 	TArray<UHFSMState*> Output;
-	Algo::TransformIf(
-		InternalFSMs,
-		Output,
-		[](UGCFSM* FSM)
+	for (UGCFSM* FSM : InternalFSMs)
+	{
+		if (!FSM)
 		{
-			return FSM->GetActiveState()->IsA<UHFSMState>();
-		},
-		[](UGCFSM* FSM)
+			continue;
+		}
+
+		if (UHFSMState* ChildState = Cast<UHFSMState>(FSM->GetActiveState()))
 		{
-			return Cast<UHFSMState>(FSM->GetActiveState());
-		});
+			Output.Add(ChildState);
+		}
+	}
 
 	return Output;
 }

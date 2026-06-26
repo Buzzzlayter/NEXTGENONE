@@ -89,6 +89,7 @@ public:
 	// End of UGCFSMBasicState public interface
 
 	UGCFSM* GetFSM(FName fsmName) const;
+	void GetChildFSMs(TArray<UGCFSM*>& OutFSMs) const;
 	UGCFSM* GetFSMRecursive(FName name) const;
 	UGCFSM* ResolveFSMPathName(const TArray<FName>& fsmPathName, bool startIfNecessary, int startIdx = 0) override;
 

@@ -8,25 +8,32 @@ public class UIModule : ModuleRules
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
         bEnableExceptions = true;
 
+        PrivateIncludePaths.AddRange(
+            new string[]
+            {
+                ModuleDirectory
+            }
+        );
+
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
                 "Core",
+                "CoreUObject",
+                "Engine",
+                "GameplayTags",
+                "GCFSM",
+                "UMG",
             }
         );
 
         PrivateDependencyModuleNames.AddRange(
             new string[]
             {
-                "CoreUObject",
-                "Engine",
                 "Slate",
                 "SlateCore",
                 "InputCore",
                 "EnhancedInput",
-                "UMG",
-                "GameplayTags",
-                "GCFSM",
                 "DeveloperSettings",
                 "DeveloperSettings", 
                 "StructUtils"

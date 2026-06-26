@@ -1,26 +1,60 @@
 
 #include "Input/PlayerInputSubsystem.h"
 #include "Components/Widget.h"
+#include "UIModule.h"
 
 #include "Widgets/SViewport.h"
 
 UPlayerInputSubsystem* UPlayerInputSubsystem::GetInputSubsystem(const UObject* WCO)
 {
-	const auto World = WCO->GetWorld();
+	if (!WCO)
+	{
+		return nullptr;
+	}
+
+	const UWorld* World = WCO->GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
 	const ULocalPlayer* LocalPlayer = World->GetFirstLocalPlayerFromController();
+	if (!LocalPlayer)
+	{
+		return nullptr;
+	}
+
 	return LocalPlayer->GetSubsystem<UPlayerInputSubsystem>();
 }
 
 void UPlayerInputSubsystem::SetInputMode(UObject* WCO, EInputMode Mode, bool bFlushInput)
 {
-	const auto World = WCO->GetWorld();
+	GENCHECK(WCO, "UPlayerInputSubsystem::SetInputMode failed. WorldContextObject is null.");
+
+	UWorld* World = WCO->GetWorld();
+	GENCHECK(World, "UPlayerInputSubsystem::SetInputMode failed. World is null.");
+
 	ULocalPlayer* LocalPlayer = World->GetFirstLocalPlayerFromController();
+	GENCHECK(LocalPlayer, "UPlayerInputSubsystem::SetInputMode failed. LocalPlayer is null.");
+
 	APlayerController* PlayerController = LocalPlayer->GetPlayerController(World);
+	GENCHECK(PlayerController, "UPlayerInputSubsystem::SetInputMode failed. PlayerController is null.");
+
 	UPlayerInputSubsystem* PlayerInputSubsystem = GetInputSubsystem(WCO);
+	GENCHECK(PlayerInputSubsystem, "UPlayerInputSubsystem::SetInputMode failed. PlayerInputSubsystem is null.");
+
 	PlayerInputSubsystem->InputModeChanged(Mode);
 
 	FReply& SlateOperations = LocalPlayer->GetSlateOperations();
 	UGameViewportClient* GameViewport = World->GetGameViewport();
+	if (!GameViewport)
+	{
+		if (bFlushInput)
+		{
+			PlayerController->FlushPressedKeys();
+		}
+		return;
+	}
 	
 	switch (Mode)
 	{
@@ -114,8 +148,6 @@ void UPlayerInputSubsystem::InputModeChanged(EInputMode Mode)
 	InputMode = Mode;
 	OnInputModeChanged.Broadcast(InputMode);
 
-	//UE_LOG(LogPlayerInputSubsystem, Log, TEXT("Input mode changed: %s"), *UEnum::GetValueAsString(Mode));
-
 	if (InputMode == EInputMode::Game)
 	{
 		SetGamepadCursorMode(EGamepadCursorMode::Disabled);
@@ -126,21 +158,7 @@ void UPlayerInputSubsystem::InputTypeChanged(EInputType Type)
 {
 	InputType = Type;
 	OnInputTypeChanged.Broadcast(InputType);
-	//UE_LOG(LogPlayerInputSubsystem, Log, TEXT("Input type changed: %s"), *UEnum::GetValueAsString(Type));
-
 	SetGamepadCursorMode(GamepadInputMode);
-}
-
-bool UPlayerInputSubsystem::ContainsPreProcessorManager() const
-{
-	if (PreprocessorManager.IsValid())
-	{
-		// TODO:: REFACTOR
-		/*const int32 FoundIndex =
-			FSlateApplication::Get().FindInputPreProcessor(PreprocessorManager), EInputPreProcessorType::Game);
-		return (FoundIndex > INDEX_NONE);*/
-	}
-	return false;
 }
 
 void UPlayerInputSubsystem::SetGamepadCursorMode(EGamepadCursorMode Mode)
