@@ -49,9 +49,11 @@ namespace
 	{
 		switch (Material)
 		{
-		case 1:  return FColor(170, 160, 145); // камень
-		case 2:  return FColor(120, 110, 90);  // укреплённый
-		default: return FColor(200, 70, 60);   // слабый/прочее
+		case 1:  return FColor(105, 74, 45);   // earth
+		case 2:  return FColor(116, 68, 31);   // wood
+		case 3:  return FColor(72, 143, 45);   // grass
+		case 4:  return FColor(145, 54, 42);   // brick
+		default: return FColor(185, 58, 63);   // debug/unknown
 		}
 	}
 

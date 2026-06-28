@@ -6,12 +6,11 @@
 #include "GameFramework/Actor.h"
 #include "VoxelChunk.h"
 #include "VoxelMesher.h"
+#include "VoxelProceduralMeshComponent.h"
 #include "Containers/Queue.h"
 #include "Containers/Ticker.h"
 #include "Templates/SharedPointer.h"
 #include "VoxelStructure.generated.h"
-
-class UProceduralMeshComponent;
 
 // Результат меширования одного чанка: собран на воркере, применяется на game thread.
 struct FChunkMeshResult
@@ -30,8 +29,6 @@ struct FVoxelMeshPipeline
 	TQueue<FChunkMeshResult, EQueueMode::Mpsc> Completed;
 };
 
-// PrioritizeCategories — категории "Voxel*" поднимаются в самый верх панели Details (над Transform),
-// чтобы не прокручивать к ним каждый раз.
 UCLASS(meta = (PrioritizeCategories = "Voxel"))
 class NGXVOXEL_API AVoxelStructure : public AActor
 {
@@ -41,7 +38,7 @@ public:
 	AVoxelStructure();
 
 	UPROPERTY(VisibleAnywhere, Category = "Voxel")
-	TObjectPtr<UProceduralMeshComponent> Mesh;
+	TObjectPtr<UVoxelProceduralMeshComponent> Mesh;
 
 	// Материал тестового заполнения (1=камень, 2=укреплённый).
 	UPROPERTY(EditAnywhere, Category = "Voxel")

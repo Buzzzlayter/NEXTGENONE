@@ -7,9 +7,11 @@
 #include "StructuralSolver.h"
 #include "VoxelDebris.h"
 #include "NgxVoxel.h"
-#include "ProceduralMeshComponent.h"
+#include "VoxelProceduralMeshComponent.h"
 #include "Async/Async.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
@@ -46,9 +48,15 @@ AVoxelStructure::AVoxelStructure()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	Mesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("VoxelMesh"));
+	Mesh = CreateDefaultSubobject<UVoxelProceduralMeshComponent>(TEXT("VoxelMesh"));
 	SetRootComponent(Mesh);
 	Mesh->bUseAsyncCooking = true;
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VoxelMaterial(
+		TEXT("/Game/Voxel/Materials/M_VoxelVertexBiome.M_VoxelVertexBiome"));
+	if (VoxelMaterial.Succeeded())
+	{
+		Mesh->SharedMaterial = VoxelMaterial.Object;
+	}
 	// Разрушаемый воксель-меш не должен гонять навмеш (дорого + транзиентные пустые баунды
 	// при async-ребилде → спам LogNavigation). Динамическую навигацию решим отдельно, если понадобится.
 	Mesh->SetCanEverAffectNavigation(false);
@@ -134,12 +142,19 @@ void AVoxelStructure::FillTestPattern()
 				H += MoundH * T * T;   // гладкий купол к центру
 			}
 
-			if ((float)gz < H)
+			const float TreeWave = FMath::Sin(gx * 0.13f + 1.7f) + FMath::Cos(gy * 0.11f - 0.4f);
+			const bool bTreePocket =
+				((gx % 31) >= 13 && (gx % 31) <= 17) &&
+				((gy % 29) >= 12 && (gy % 29) <= 16) &&
+				TreeWave > 0.35f;
+			const bool bWoodColumn = bTreePocket && (float)gz < H + 12.f && (float)gz > H - 9.f;
+
+			if ((float)gz < H || bWoodColumn)
 			{
-				// Материал по высоте: низ — укреплённый (2), верхушка — «слабый» (3), середина — камень.
-				uint8 Mat = TestMaterial;
-				if ((float)gz < GZ * 0.2f)      Mat = 2;
-				else if ((float)gz > H - 3.f)   Mat = 3;
+				uint8 Mat = TestMaterial; // 1 = earth
+				if (bWoodColumn)                   Mat = 2;
+				else if ((float)gz > H - 2.5f)     Mat = 3;
+				else if ((float)gz < GZ * 0.18f)   Mat = 4;
 				Ch.Set(X, Y, Z, Mat);
 			}
 		}

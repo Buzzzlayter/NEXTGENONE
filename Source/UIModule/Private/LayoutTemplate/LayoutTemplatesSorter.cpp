@@ -1,6 +1,5 @@
 #include "LayoutTemplate/LayoutTemplatesSorter.h"
 
-#include "Algo/FindLast.h"
 #include "LayoutTemplate/UILayoutTemplate.h"
 #include "LayoutTemplate/WidgetPlaceholder.h"
 
@@ -24,13 +23,16 @@ void ULayoutTemplatesSorter::SetCustomVisibility(bool bIsEnable, const FGameplay
 
 UUILayoutTemplate* ULayoutTemplatesSorter::GetLayer(const ELayoutLayer Layer)
 {
-	const auto LastTemplate = Algo::FindLastByPredicate(
-		TemplatesList,
-		[Layer](const UUILayoutTemplate* Template)
+	for (int32 Index = TemplatesList.Num() - 1; Index >= 0; --Index)
+	{
+		UUILayoutTemplate* Template = TemplatesList[Index];
+		if (Template->IsLayer(Layer))
 		{
-			return Template->IsLayer(Layer);
-		});
-	return LastTemplate ? *LastTemplate : nullptr;
+			return Template;
+		}
+	}
+
+	return nullptr;
 }
 
 void ULayoutTemplatesSorter::AddLayout(UUILayoutTemplate* LayoutTemplate)
