@@ -35,11 +35,6 @@ UUserWidget* UUIWidgetMounterComponent::GetWidget() const
 
 UUILayoutTemplate* UUIWidgetMounterComponent::ResolveLayout() const
 {
-	if (!GetState())
-	{
-		return nullptr;
-	}
-
 	if (bUseLayer)
 	{
 		UHFSMStateComponent* SorterComponent = nullptr;
@@ -87,13 +82,6 @@ void UUIWidgetMounterComponent::MountWidget()
 		Widget->AddToViewport(FallbackZOrder);
 		return;
 	}
-
-	UE_LOG(LogTemp,
-		Warning,
-		TEXT("Widget Mounter could not mount '%s': layout=%s placeholder='%s'."),
-		*GetNameSafe(Widget),
-		*GetNameSafe(MountedLayout),
-		*PlaceholderID.ToString());
 }
 
 void UUIWidgetMounterComponent::DemountWidget()
