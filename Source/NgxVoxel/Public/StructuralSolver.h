@@ -1,4 +1,4 @@
-// Copyright. NgxVoxel — structural connectivity solver (VS0 step 6).
+// Copyright. NgxVoxel — structural connectivity solver.
 
 #pragma once
 

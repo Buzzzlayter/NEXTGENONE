@@ -1,4 +1,4 @@
-// Copyright. NgxVoxel — destructible voxel structure actor (VS0 stub).
+// Copyright. NgxVoxel — destructible voxel structure actor.
 
 #pragma once
 
@@ -40,16 +40,16 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Voxel")
 	TObjectPtr<UVoxelProceduralMeshComponent> Mesh;
 
-	// Материал тестового заполнения (1=камень, 2=укреплённый).
+	// Базовый материал генератора стартового объёма.
 	UPROPERTY(EditAnywhere, Category = "Voxel")
-	uint8 TestMaterial = 1;
+	uint8 DefaultMaterial = 1;
 
 	// true → greedy meshing (прод-путь); false → наивный (для A/B-сравнения тришек).
 	UPROPERTY(EditAnywhere, Category = "Voxel")
 	bool bUseGreedy = true;
 
-	// Размер структуры в чанках (X×Y×Z). Тестовый паттерн — кусок «поверхности» (heightfield),
-	// вписанный в этот объём. Значения <1 поджимаются до 1 в FillTestPattern.
+	// Размер структуры в чанках (X×Y×Z). Стартовый генератор вписывает heightfield в этот объём.
+	// Значения <1 поджимаются до 1 в GenerateInitialTerrain.
 	// Дефолт 6×6×3 = 96×96×48 вокселей (≈4.8×4.8×2.4 м при 5 см) — крупная глыба под обвал.
 	UPROPERTY(EditAnywhere, Category = "Voxel")
 	FIntVector ChunkDims = FIntVector(6, 6, 3);
@@ -73,6 +73,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Collision")
 	bool bScopeCollisionToFocus = true;
 
+	// Expensive triangle collision is opt-in; gameplay tools raycast the voxel grid directly.
+	UPROPERTY(EditAnywhere, Category = "Voxel|Collision")
+	bool bEnableMeshCollision = false;
+
 	// Радиус активной коллизии вокруг фокуса (см). Должен покрывать дальность взаимодействия.
 	UPROPERTY(EditAnywhere, Category = "Voxel|Collision", meta = (ClampMin = "0"))
 	float CollisionActiveRadiusCm = 2000.f;
@@ -81,7 +85,7 @@ public:
 
 	// Проверять связность после разрушения; оторванное (не достигает якорей) — удаляется/падает.
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
-	bool bEnableStructuralIntegrity = true;
+	bool bEnableStructuralIntegrity = false;
 
 	// Solid-воксели с глобальным Z <= этого — якоря («земля»). Дефолт — нижний слой чанков.
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
@@ -89,7 +93,7 @@ public:
 
 	// Спавнить оторванное телом Chaos (падает). false → просто удалять (поведение 6a).
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
-	bool bSpawnDebris = true;
+	bool bSpawnDebris = false;
 
 	// Время жизни дебриса до авто-деспавна (сек).
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure")
@@ -116,67 +120,33 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Structure", meta = (ClampMin = "1"))
 	int32 BoulderSizeVoxels = 7;
 
-	// --- Тест-обвал (бывш. «Каскад», шаг 7) ---
-	// Клавиша C — тест-триггер: подрывает опору структуры (большая полость снизу), и она
-	// обрушается ПО-НАСТОЯЩЕМУ через модель опоры + дробление на глыбы. Без скриптовых «слоёв».
-
-	// Стартовая скорость глыб от обвала (см/с) — в основном вниз + спин.
-	UPROPERTY(EditAnywhere, Category = "Voxel|Cascade", meta = (ClampMin = "0"))
-	float CascadeLaunchSpeedCmS = 150.f;
-
-	// Полный ребилд: пересобрать тестовые чанки и весь меш.
+	// Полный ребилд: пересобрать данные чанков и весь меш.
 	UFUNCTION(CallInEditor, Category = "Voxel")
 	void Rebuild();
 
-	// Точечный ремеш одного (центрального) чанка — демонстрация dirty-пути без полного ребилда.
-	UFUNCTION(CallInEditor, Category = "Voxel")
-	void RemeshCenterChunk();
-
 	// --- Разрушение (шаг 4) ---
-
-	// Радиус тестового воздействия (см).
-	UPROPERTY(EditAnywhere, Category = "Voxel|Damage", meta = (ClampMin = "0"))
-	float TestDamageRadiusCm = 25.f;
-
-	// Материал тестового воздействия: 0 = убрать воксели (бур/заряд), >0 = добавить (опора/балка).
-	UPROPERTY(EditAnywhere, Category = "Voxel|Damage")
-	uint8 TestDamageMaterial = 0;
-
-	// Точка удара в локальных координатах актёра (см). Дефолт — у верхней грани тестового шара.
-	UPROPERTY(EditAnywhere, Category = "Voxel|Damage")
-	FVector TestDamageLocalCm = FVector(80.f, 80.f, 150.f);
-
-	// Применить тестовое сферическое воздействие в TestDamageLocalCm (кнопка в редакторе).
-	UFUNCTION(CallInEditor, Category = "Voxel|Damage")
-	void ApplyTestDamage();
 
 	// Сферическое воздействие в МИРОВЫХ координатах. NewMaterial==0 убирает воксели (бур/заряд),
 	// >0 добавляет (опора). Возвращает число изменённых вокселей; затронутые чанки (+ соседи на
 	// границах) ставятся в async-ремеш. Точка входа для будущей привязки к прицелу игрока.
 	int32 ApplyDamageSphere(const FVector& WorldCenter, float RadiusCm, uint8 NewMaterial);
 
+	bool RaycastSolidVoxel(const FVector& WorldStart, const FVector& WorldEnd,
+		FVector& OutWorldImpact, FVector& OutWorldNormal) const;
+
 	// Задать «точку фокуса» (мир) для скоупинга коллизии — вызывает ИГРА (паун/камера).
 	// Модуль вокселей про игрока не знает: получает только мировую точку и сам решает,
 	// какие чанки в радиусе → им и кукает collision.
 	void SetCollisionFocus(const FVector& WorldCenter);
 
-	// Запустить/остановить каскад обрушения (фронт сверху вниз).
-	UFUNCTION(CallInEditor, Category = "Voxel|Cascade")
-	void StartCascade();
-
-	UFUNCTION(CallInEditor, Category = "Voxel|Cascade")
-	void StopCascade();
-
 	// Метрики для перф-оверлея (шаг 8). Только чтение.
 	int32 GetNumChunks() const { return Chunks.Num(); }
 	int32 GetNumSections() const { return SectionOf.Num(); }
-	bool IsCascadeRunning() const { return bCascadeRunning; }
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
-	virtual void BeginDestroy() override;
 
 private:
 	// Чанки структуры. Ключ = координата чанка в сетке (0..ChunkDims−1 по каждой оси).
@@ -200,7 +170,7 @@ private:
 	int32 SessionTris = 0;
 	int32 SessionSections = 0;
 
-	void FillTestPattern();
+	void GenerateInitialTerrain();
 	void RebuildSync();                                  // путь bAsyncMeshing=false
 
 	void MarkAllDirty();
@@ -226,8 +196,8 @@ private:
 	// --- Структурная целостность (шаг 6) ---
 	bool bIntegrityDirty = false;   // после удаления вокселей нужна проверка связности
 
-	// Откуда толкать оторванные куски: вниз/гравитация, радиально от удара, обвал каскада.
-	enum class EDetachLaunch : uint8 { Gravity, Radial, Cascade };
+	// Откуда толкать оторванные куски: вниз/гравитация или радиально от удара.
+	enum class EDetachLaunch : uint8 { Gravity, Radial };
 	void RunIntegrityCheck(EDetachLaunch Launch = EDetachLaunch::Gravity,
 		const FVector& LaunchOrigin = FVector::ZeroVector, float LaunchSpeed = 0.f);
 	void MarkChunkDirtyAround(const FIntVector& ChunkCoord, int32 LX, int32 LY, int32 LZ);
@@ -235,7 +205,4 @@ private:
 	// Источник последнего удара (для радиального импульса при отложенной проверке связности).
 	bool bPendingShock = false;
 	FVector PendingShockOrigin = FVector::ZeroVector;
-
-	// --- Тест-обвал (шаг 7) ---
-	bool bCascadeRunning = false;       // оставлен для геттера; обвал теперь одношаговый (клавиша C)
 };

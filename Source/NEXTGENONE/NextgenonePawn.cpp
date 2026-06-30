@@ -1,8 +1,10 @@
-// Copyright. NEXTGENONE — игровой паун (ОБВАЛ, VS0).
+// Copyright. NEXTGENONE — игровой паун.
 
 #include "NextgenonePawn.h"
+#include "VoxelPawnMovementComponent.h"
+#include "VoxelRuntimeRegistry.h"
 #include "VoxelStructure.h"
-#include "VoxelDebris.h"
+#include "VoxelWorld.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SphereComponent.h"
 #include "Field/FieldSystemComponent.h"
@@ -12,7 +14,6 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "DrawDebugHelpers.h"
-#include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
@@ -23,7 +24,7 @@
 ANextgenonePawn::ANextgenonePawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = 0.15f;   // пушим фокус коллизии структурам ~6–7 раз/сек
+	PrimaryActorTick.TickInterval = 0.f;
 
 	Collision = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
 	Collision->InitSphereRadius(34.f);
@@ -40,6 +41,10 @@ ANextgenonePawn::ANextgenonePawn()
 	Movement->Acceleration = 8000.f;
 	Movement->Deceleration = 8000.f;
 
+	VoxelMovement = CreateDefaultSubobject<UVoxelPawnMovementComponent>(TEXT("VoxelMovement"));
+	VoxelMovement->SetUpdatedComponent(Collision);
+	VoxelMovement->SetFocusComponent(Camera);
+
 	// Поле Chaos-разрушения. Транзиентные команды (ApplyStrainField/ApplyRadialForce) действуют
 	// на все Geometry Collections в радиусе — компоненту достаточно быть в мире (на пауне).
 	Field = CreateDefaultSubobject<UFieldSystemComponent>(TEXT("Field"));
@@ -55,6 +60,11 @@ void ANextgenonePawn::BeginPlay()
 {
 	Super::BeginPlay();
 	EnsureInputObjects();
+	if (VoxelMovement)
+	{
+		VoxelMovement->SetUpdatedComponent(Collision);
+		VoxelMovement->SetFocusComponent(Camera);
+	}
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -74,47 +84,24 @@ void ANextgenonePawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	UWorld* W = GetWorld();
-	if (!W)
+	if (!GetWorld())
 	{
 		return;
 	}
 
-	// Пушим позицию камеры как «точку фокуса» структурам (5b) + собираем метрики (8).
-	// Модуль вокселей про паун ничего не знает — зависимость в одну сторону.
-	const bool bHaveCamera = (Camera != nullptr);
-	const FVector Focus = bHaveCamera ? Camera->GetComponentLocation() : FVector::ZeroVector;
-
-	int32 NumStructures = 0;
-	int32 NumChunks = 0;
-	int32 NumSections = 0;
-	for (TActorIterator<AVoxelStructure> It(W); It; ++It)
-	{
-		if (bHaveCamera)
-		{
-			It->SetCollisionFocus(Focus);
-		}
-		++NumStructures;
-		NumChunks += It->GetNumChunks();
-		NumSections += It->GetNumSections();
-	}
-
 	if (bShowPerfHUD && GEngine)
 	{
-		int32 NumDebris = 0;
-		for (TActorIterator<AVoxelDebris> It(W); It; ++It)
-		{
-			++NumDebris;
-		}
-
-		const float Delta = W->GetDeltaSeconds();
+		const float Delta = GetWorld()->GetDeltaSeconds();
 		const float FrameMs = 1000.f * Delta;
 		const float Fps = (Delta > 0.f) ? (1.f / Delta) : 0.f;
 		GEngine->AddOnScreenDebugMessage(101, 0.3f, FColor::Green,
 			FString::Printf(TEXT("frame %.1f ms  (%.0f fps)"), FrameMs, Fps));
 		GEngine->AddOnScreenDebugMessage(102, 0.3f, FColor::White,
-			FString::Printf(TEXT("voxel: %d struct, %d chunks, %d sections | debris: %d | tool r=%.0f"),
-				NumStructures, NumChunks, NumSections, NumDebris, ToolRadiusCm));
+			FString::Printf(TEXT("voxel: %d actors, %d chunks, %d sections | tool r=%.0f"),
+				VoxelMovement ? VoxelMovement->GetCachedNumVoxelActors() : 0,
+				VoxelMovement ? VoxelMovement->GetCachedNumChunks() : 0,
+				VoxelMovement ? VoxelMovement->GetCachedNumSections() : 0,
+				ToolRadiusCm));
 	}
 }
 
@@ -141,7 +128,7 @@ void ANextgenonePawn::EnsureInputObjects()
 	CarveAction     = MakeAction(TEXT("IA_Carve"),     EInputActionValueType::Boolean);
 	BuildAction     = MakeAction(TEXT("IA_Build"),     EInputActionValueType::Boolean);
 	RadiusAction    = MakeAction(TEXT("IA_Radius"),    EInputActionValueType::Axis1D);
-	CascadeAction   = MakeAction(TEXT("IA_Cascade"),   EInputActionValueType::Boolean);
+	JumpAction      = MakeAction(TEXT("IA_Jump"),      EInputActionValueType::Boolean);
 	ExplodeAction   = MakeAction(TEXT("IA_Explode"),   EInputActionValueType::Boolean);
 
 	InputMapping = NewObject<UInputMappingContext>(this, TEXT("IMC_Nextgenone"));
@@ -154,7 +141,7 @@ void ANextgenonePawn::EnsureInputObjects()
 	InputMapping->MapKey(CarveAction,     EKeys::LeftMouseButton);
 	InputMapping->MapKey(BuildAction,     EKeys::RightMouseButton);
 	InputMapping->MapKey(RadiusAction,    EKeys::MouseWheelAxis);
-	InputMapping->MapKey(CascadeAction,   EKeys::C);
+	InputMapping->MapKey(JumpAction,      EKeys::SpaceBar);
 	InputMapping->MapKey(ExplodeAction,   EKeys::F);
 }
 
@@ -174,31 +161,43 @@ void ANextgenonePawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EIC->BindAction(CarveAction,     ETriggerEvent::Triggered, this, &ANextgenonePawn::OnCarve);
 		EIC->BindAction(BuildAction,     ETriggerEvent::Triggered, this, &ANextgenonePawn::OnBuild);
 		EIC->BindAction(RadiusAction,    ETriggerEvent::Triggered, this, &ANextgenonePawn::OnRadius);
-		EIC->BindAction(CascadeAction,   ETriggerEvent::Triggered, this, &ANextgenonePawn::OnCascade);
+		EIC->BindAction(JumpAction,      ETriggerEvent::Started, this, &ANextgenonePawn::OnJump);
 		EIC->BindAction(ExplodeAction,   ETriggerEvent::Triggered, this, &ANextgenonePawn::OnExplode);
 	}
+}
+
+FVector ANextgenonePawn::GetYawForward() const
+{
+	const FRotator YawRotation(0.f, GetControlRotation().Yaw, 0.f);
+	return FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+}
+
+FVector ANextgenonePawn::GetYawRight() const
+{
+	const FRotator YawRotation(0.f, GetControlRotation().Yaw, 0.f);
+	return FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 }
 
 // --- Движение / обзор (направления из control rotation) ---
 
 void ANextgenonePawn::OnFwd(const FInputActionValue& V)
 {
-	AddMovementInput(GetControlRotation().Vector(), V.Get<float>());
+	AddMovementInput(GetYawForward(), V.Get<float>());
 }
 
 void ANextgenonePawn::OnBack(const FInputActionValue& V)
 {
-	AddMovementInput(GetControlRotation().Vector(), -V.Get<float>());
+	AddMovementInput(GetYawForward(), -V.Get<float>());
 }
 
 void ANextgenonePawn::OnRight(const FInputActionValue& V)
 {
-	AddMovementInput(FRotationMatrix(GetControlRotation()).GetUnitAxis(EAxis::Y), V.Get<float>());
+	AddMovementInput(GetYawRight(), V.Get<float>());
 }
 
 void ANextgenonePawn::OnLeft(const FInputActionValue& V)
 {
-	AddMovementInput(FRotationMatrix(GetControlRotation()).GetUnitAxis(EAxis::Y), -V.Get<float>());
+	AddMovementInput(GetYawRight(), -V.Get<float>());
 }
 
 void ANextgenonePawn::OnLookYaw(const FInputActionValue& V)
@@ -228,18 +227,11 @@ void ANextgenonePawn::OnRadius(const FInputActionValue& V)
 	ToolRadiusCm = FMath::Clamp(ToolRadiusCm + V.Get<float>() * 5.f, ToolRadiusMinCm, ToolRadiusMaxCm);
 }
 
-void ANextgenonePawn::OnCascade(const FInputActionValue& /*V*/)
+void ANextgenonePawn::OnJump(const FInputActionValue& /*V*/)
 {
-	// Клавиша C: запустить каскад на всех воксельных структурах (идемпотентно — пока идёт, не перезапускаем).
-	if (UWorld* W = GetWorld())
+	if (VoxelMovement)
 	{
-		for (TActorIterator<AVoxelStructure> It(W); It; ++It)
-		{
-			if (!It->IsCascadeRunning())
-			{
-				It->StartCascade();
-			}
-		}
+		VoxelMovement->Jump();
 	}
 }
 
@@ -255,12 +247,52 @@ void ANextgenonePawn::OnExplode(const FInputActionValue& /*V*/)
 	const FVector Dir = Camera->GetForwardVector();
 	const FVector End = Start + Dir * ReachCm;
 
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
+	bool bHitVoxel = false;
+	FVector BestVoxelImpact = End;
+	float BestVoxelDistSq = TNumericLimits<float>::Max();
+	FVoxelRuntimeRegistry::ForEachStructure(GetWorld(), [&](AVoxelStructure& Structure)
+	{
+		FVector Impact;
+		FVector Normal;
+		if (Structure.RaycastSolidVoxel(Start, End, Impact, Normal))
+		{
+			const float DistSq = FVector::DistSquared(Start, Impact);
+			if (DistSq < BestVoxelDistSq)
+			{
+				BestVoxelDistSq = DistSq;
+				BestVoxelImpact = Impact;
+				bHitVoxel = true;
+			}
+		}
+	});
+	FVoxelRuntimeRegistry::ForEachWorld(GetWorld(), [&](AVoxelWorld& VoxelWorld)
+	{
+		FVector Impact;
+		FVector Normal;
+		if (VoxelWorld.RaycastSolidVoxel(Start, End, Impact, Normal))
+		{
+			const float DistSq = FVector::DistSquared(Start, Impact);
+			if (DistSq < BestVoxelDistSq)
+			{
+				BestVoxelDistSq = DistSq;
+				BestVoxelImpact = Impact;
+				bHitVoxel = true;
+			}
+		}
+	});
 
-	FHitResult Hit;
-	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
-	const FVector P = bHit ? Hit.ImpactPoint : End;
+	FVector P = bHitVoxel ? BestVoxelImpact : End;
+	if (!bHitVoxel)
+	{
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
+
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		{
+			P = Hit.ImpactPoint;
+		}
+	}
 
 	if (bDrawToolDebug)
 	{
@@ -284,32 +316,84 @@ void ANextgenonePawn::FireTool(uint8 NewMaterial)
 	const FVector Dir = Camera->GetForwardVector();
 	const FVector End = Start + Dir * ReachCm;
 
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
-	Params.bTraceComplex = true;   // у ProcMesh коллизия complex (per-triangle), simple нет
-
-	FHitResult Hit;
-	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
-
-	// Визуализация трейса (под галочкой): линия (зелёная — попал, красная — мимо).
-	const FVector LineEnd = bHit ? Hit.ImpactPoint : End;
-	if (bDrawToolDebug)
+	AVoxelStructure* BestVoxel = nullptr;
+	AVoxelWorld* BestWorld = nullptr;
+	FVector BestImpact = End;
+	float BestDistSq = TNumericLimits<float>::Max();
+	FVoxelRuntimeRegistry::ForEachStructure(GetWorld(), [&](AVoxelStructure& Structure)
 	{
-		DrawDebugLine(GetWorld(), Start, LineEnd, bHit ? FColor::Green : FColor::Red, false, 1.f, 0, 1.f);
+		FVector Impact;
+		FVector Normal;
+		if (Structure.RaycastSolidVoxel(Start, End, Impact, Normal))
+		{
+			const float DistSq = FVector::DistSquared(Start, Impact);
+			if (DistSq < BestDistSq)
+			{
+				BestDistSq = DistSq;
+				BestImpact = Impact;
+				BestVoxel = &Structure;
+			}
+		}
+	});
+	FVoxelRuntimeRegistry::ForEachWorld(GetWorld(), [&](AVoxelWorld& VoxelWorld)
+	{
+		FVector Impact;
+		FVector Normal;
+		if (VoxelWorld.RaycastSolidVoxel(Start, End, Impact, Normal))
+		{
+			const float DistSq = FVector::DistSquared(Start, Impact);
+			if (DistSq < BestDistSq)
+			{
+				BestDistSq = DistSq;
+				BestImpact = Impact;
+				BestVoxel = nullptr;
+				BestWorld = &VoxelWorld;
+			}
+		}
+	});
+
+	if (!BestVoxel && !BestWorld)
+	{
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
+		Params.bTraceComplex = true;
+
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		{
+			if (AVoxelStructure* HitVoxel = Cast<AVoxelStructure>(Hit.GetActor()))
+			{
+				BestImpact = Hit.ImpactPoint;
+				BestVoxel = HitVoxel;
+				BestWorld = nullptr;
+			}
+		}
 	}
 
-	if (bHit)
+	// Визуализация трейса (под галочкой): линия (зелёная — попал, красная — мимо).
+	const bool bHitVoxel = BestVoxel || BestWorld;
+	const FVector LineEnd = bHitVoxel ? BestImpact : End;
+	if (bDrawToolDebug)
 	{
-		if (AVoxelStructure* Vox = Cast<AVoxelStructure>(Hit.GetActor()))
+		DrawDebugLine(GetWorld(), Start, LineEnd, bHitVoxel ? FColor::Green : FColor::Red, false, 1.f, 0, 1.f);
+	}
+
+	if (bHitVoxel)
+	{
+		// Чуть углубим точку внутрь поверхности, чтобы сфера кусала, а не скользила по грани.
+		const FVector P = BestImpact + Dir * (ToolRadiusCm * 0.5f);
+		if (bDrawToolDebug)
 		{
-			// Чуть углубим точку внутрь поверхности, чтобы сфера кусала, а не скользила по грани.
-			const FVector P = Hit.ImpactPoint + Dir * (ToolRadiusCm * 0.5f);
-			if (bDrawToolDebug)
-			{
-				// Сфера воздействия инструмента в точке удара.
-				DrawDebugSphere(GetWorld(), P, ToolRadiusCm, 12, FColor::Cyan, false, 1.f);
-			}
-			Vox->ApplyDamageSphere(P, ToolRadiusCm, NewMaterial);
+			// Сфера воздействия инструмента в точке удара.
+			DrawDebugSphere(GetWorld(), P, ToolRadiusCm, 12, FColor::Cyan, false, 1.f);
+		}
+		if (BestVoxel)
+		{
+			BestVoxel->ApplyDamageSphere(P, ToolRadiusCm, NewMaterial);
+		}
+		else if (BestWorld)
+		{
+			BestWorld->ApplyDamageSphere(P, ToolRadiusCm, NewMaterial);
 		}
 	}
 }

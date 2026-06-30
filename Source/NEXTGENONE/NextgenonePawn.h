@@ -1,4 +1,4 @@
-// Copyright. NEXTGENONE — игровой паун (ОБВАЛ, VS0).
+// Copyright. NEXTGENONE — игровой паун.
 
 #pragma once
 
@@ -12,9 +12,10 @@ class UFloatingPawnMovement;
 class UFieldSystemComponent;
 class UInputAction;
 class UInputMappingContext;
+class UVoxelPawnMovementComponent;
 struct FInputActionValue;
 
-// Игровой паун VS0: летающая камера + воксельный инструмент (карв/опора по трейсу).
+// Игровой паун: летающая камера + воксельный инструмент (карв/опора по трейсу).
 // Сейчас простой летающий вариант на Enhanced Input — основа, дотюним позже.
 // Input Actions + Mapping Context создаются в рантайме (паун self-contained, ассеты не нужны).
 // PrioritizeCategories — категории "Pawn*" поднимаются в самый верх панели Details, чтобы
@@ -41,6 +42,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Pawn")
 	TObjectPtr<UFloatingPawnMovement> Movement;
+
+	UPROPERTY(VisibleAnywhere, Category = "Pawn")
+	TObjectPtr<UVoxelPawnMovementComponent> VoxelMovement;
 
 	// Поле для Chaos-разрушения: взрыв = strain (рвёт кластеры) + radial force (расталкивает куски).
 	UPROPERTY(VisibleAnywhere, Category = "Pawn")
@@ -102,12 +106,14 @@ protected:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CarveAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RadiusAction;
-	UPROPERTY(Transient) TObjectPtr<UInputAction> CascadeAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> JumpAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> ExplodeAction;
 
 private:
 	void EnsureInputObjects();          // идемпотентно создаёт IA + IMC
 	void FireTool(uint8 NewMaterial);   // трейс из камеры → ApplyDamageSphere
+	FVector GetYawForward() const;
+	FVector GetYawRight() const;
 
 	void OnFwd(const FInputActionValue& V);
 	void OnBack(const FInputActionValue& V);
@@ -118,6 +124,6 @@ private:
 	void OnCarve(const FInputActionValue& V);
 	void OnBuild(const FInputActionValue& V);
 	void OnRadius(const FInputActionValue& V);
-	void OnCascade(const FInputActionValue& V);
+	void OnJump(const FInputActionValue& V);
 	void OnExplode(const FInputActionValue& V);   // клавиша F: трейс → Chaos-взрыв в точке
 };

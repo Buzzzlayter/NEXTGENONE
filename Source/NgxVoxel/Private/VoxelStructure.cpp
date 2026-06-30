@@ -1,4 +1,4 @@
-// Copyright. NgxVoxel — AVoxelStructure implementation (VS0).
+// Copyright. NgxVoxel — AVoxelStructure implementation.
 
 #include "VoxelStructure.h"
 #include "VoxelMesher.h"
@@ -8,6 +8,7 @@
 #include "VoxelDebris.h"
 #include "NgxVoxel.h"
 #include "VoxelProceduralMeshComponent.h"
+#include "VoxelRuntimeRegistry.h"
 #include "Async/Async.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
@@ -60,8 +61,8 @@ AVoxelStructure::AVoxelStructure()
 	// Разрушаемый воксель-меш не должен гонять навмеш (дорого + транзиентные пустые баунды
 	// при async-ребилде → спам LogNavigation). Динамическую навигацию решим отдельно, если понадобится.
 	Mesh->SetCanEverAffectNavigation(false);
-	// Явно блокируем query-каналы → трейс инструмента игрока (Visibility, complex) попадает по структуре.
-	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	// Voxel tools use grid raycasts; triangle collision is opt-in for physics/blocking cases.
+	Mesh->SetCollisionEnabled(bEnableMeshCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 	Mesh->SetCollisionObjectType(ECC_WorldStatic);
 	Mesh->SetCollisionResponseToAllChannels(ECR_Block);
 }
@@ -75,6 +76,7 @@ void AVoxelStructure::OnConstruction(const FTransform& Transform)
 void AVoxelStructure::BeginPlay()
 {
 	Super::BeginPlay();
+	FVoxelRuntimeRegistry::Register(this);
 	// Chunks — не UPROPERTY и в рантайм-инстанс (PIE/дубликат) не переносятся, а OnConstruction
 	// в игре не перевызывается. Пересобираем данные+меш, иначе разрушению нечего менять.
 	Rebuild();
@@ -82,20 +84,16 @@ void AVoxelStructure::BeginPlay()
 
 void AVoxelStructure::EndPlay(const EEndPlayReason::Type Reason)
 {
+	FVoxelRuntimeRegistry::Unregister(this);
 	RemoveTicker();
+	Pipeline.Reset();
 	Super::EndPlay(Reason);
 }
 
-void AVoxelStructure::BeginDestroy()
-{
-	RemoveTicker();
-	Pipeline.Reset();   // воркеры в полёте держат свою копию TSharedPtr — пайплайн жив до их конца
-	Super::BeginDestroy();
-}
 
 // ---- Заполнение данных ------------------------------------------------------
 
-void AVoxelStructure::FillTestPattern()
+void AVoxelStructure::GenerateInitialTerrain()
 {
 	Chunks.Empty();
 
@@ -151,7 +149,7 @@ void AVoxelStructure::FillTestPattern()
 
 			if ((float)gz < H || bWoodColumn)
 			{
-				uint8 Mat = TestMaterial; // 1 = earth
+				uint8 Mat = DefaultMaterial; // 1 = earth
 				if (bWoodColumn)                   Mat = 2;
 				else if ((float)gz > H - 2.5f)     Mat = 3;
 				else if ((float)gz < GZ * 0.18f)   Mat = 4;
@@ -165,7 +163,8 @@ void AVoxelStructure::FillTestPattern()
 
 void AVoxelStructure::Rebuild()
 {
-	FillTestPattern();
+	GenerateInitialTerrain();
+	Mesh->SetCollisionEnabled(bEnableMeshCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 
 	if (!bAsyncMeshing)
 	{
@@ -194,40 +193,7 @@ void AVoxelStructure::Rebuild()
 	EnsureTicker();
 }
 
-void AVoxelStructure::RemeshCenterChunk()
-{
-	if (Chunks.Num() == 0)
-	{
-		return;
-	}
-
-	const FIntVector Dims(
-		FMath::Max(ChunkDims.X, 1),
-		FMath::Max(ChunkDims.Y, 1),
-		FMath::Max(ChunkDims.Z, 1));
-	const FIntVector Center(Dims.X / 2, Dims.Y / 2, Dims.Z / 2);
-
-	if (!Chunks.Contains(Center))
-	{
-		return;
-	}
-
-	// Точечный ремеш: не трогаем epoch (поверх текущего меша), помечаем один чанк.
-	DirtyChunks.Add(Center);
-	if (!Pipeline.IsValid())
-	{
-		Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
-	}
-	EnsureTicker();
-}
-
 // ---- Разрушение (шаг 4) -----------------------------------------------------
-
-void AVoxelStructure::ApplyTestDamage()
-{
-	const FVector World = GetActorTransform().TransformPosition(TestDamageLocalCm);
-	ApplyDamageSphere(World, TestDamageRadiusCm, TestDamageMaterial);
-}
 
 int32 AVoxelStructure::ApplyDamageSphere(const FVector& WorldCenter, float RadiusCm, uint8 NewMaterial)
 {
@@ -321,6 +287,149 @@ int32 AVoxelStructure::ApplyDamageSphere(const FVector& WorldCenter, float Radiu
 	return Changed;
 }
 
+bool AVoxelStructure::RaycastSolidVoxel(const FVector& WorldStart, const FVector& WorldEnd,
+	FVector& OutWorldImpact, FVector& OutWorldNormal) const
+{
+	if (Chunks.Num() == 0)
+	{
+		return false;
+	}
+
+	const int32 N = NgxVoxel::ChunkSize;
+	const FIntVector CDims(
+		FMath::Max(ChunkDims.X, 1),
+		FMath::Max(ChunkDims.Y, 1),
+		FMath::Max(ChunkDims.Z, 1));
+	const FIntVector VDims(CDims.X * N, CDims.Y * N, CDims.Z * N);
+
+	const FTransform& Xf = GetActorTransform();
+	const FVector LocalStart = Xf.InverseTransformPosition(WorldStart);
+	const FVector LocalEnd = Xf.InverseTransformPosition(WorldEnd);
+	const FVector StartV = LocalStart / NgxVoxel::VoxelSizeCm;
+	const FVector EndV = LocalEnd / NgxVoxel::VoxelSizeCm;
+	const FVector DeltaV = EndV - StartV;
+
+	auto ClipAxis = [](float MinV, float MaxV, float StartAxis, float DeltaAxis,
+		float& InOutMinT, float& InOutMaxT) -> bool
+	{
+		if (FMath::IsNearlyZero(DeltaAxis))
+		{
+			return StartAxis >= MinV && StartAxis <= MaxV;
+		}
+
+		float T0 = (MinV - StartAxis) / DeltaAxis;
+		float T1 = (MaxV - StartAxis) / DeltaAxis;
+		if (T0 > T1)
+		{
+			Swap(T0, T1);
+		}
+		InOutMinT = FMath::Max(InOutMinT, T0);
+		InOutMaxT = FMath::Min(InOutMaxT, T1);
+		return InOutMinT <= InOutMaxT;
+	};
+
+	float MinT = 0.f;
+	float MaxT = 1.f;
+	if (!ClipAxis(0.f, (float)VDims.X, StartV.X, DeltaV.X, MinT, MaxT) ||
+		!ClipAxis(0.f, (float)VDims.Y, StartV.Y, DeltaV.Y, MinT, MaxT) ||
+		!ClipAxis(0.f, (float)VDims.Z, StartV.Z, DeltaV.Z, MinT, MaxT))
+	{
+		return false;
+	}
+
+	const float EntryT = FMath::Clamp(MinT, 0.f, MaxT);
+	const FVector EntryV = StartV + DeltaV * EntryT;
+	FIntVector Voxel(
+		FMath::Clamp(FMath::FloorToInt(EntryV.X), 0, VDims.X - 1),
+		FMath::Clamp(FMath::FloorToInt(EntryV.Y), 0, VDims.Y - 1),
+		FMath::Clamp(FMath::FloorToInt(EntryV.Z), 0, VDims.Z - 1));
+
+	const FIntVector Step(
+		DeltaV.X > 0.f ? 1 : (DeltaV.X < 0.f ? -1 : 0),
+		DeltaV.Y > 0.f ? 1 : (DeltaV.Y < 0.f ? -1 : 0),
+		DeltaV.Z > 0.f ? 1 : (DeltaV.Z < 0.f ? -1 : 0));
+
+	FVector TMax(FLT_MAX, FLT_MAX, FLT_MAX);
+	FVector TDelta(FLT_MAX, FLT_MAX, FLT_MAX);
+	if (Step.X != 0)
+	{
+		const float Boundary = (float)(Voxel.X + (Step.X > 0 ? 1 : 0));
+		TMax.X = (Boundary - StartV.X) / DeltaV.X;
+		if (TMax.X < EntryT)
+		{
+			TMax.X = EntryT;
+		}
+		TDelta.X = 1.f / FMath::Abs(DeltaV.X);
+	}
+	if (Step.Y != 0)
+	{
+		const float Boundary = (float)(Voxel.Y + (Step.Y > 0 ? 1 : 0));
+		TMax.Y = (Boundary - StartV.Y) / DeltaV.Y;
+		if (TMax.Y < EntryT)
+		{
+			TMax.Y = EntryT;
+		}
+		TDelta.Y = 1.f / FMath::Abs(DeltaV.Y);
+	}
+	if (Step.Z != 0)
+	{
+		const float Boundary = (float)(Voxel.Z + (Step.Z > 0 ? 1 : 0));
+		TMax.Z = (Boundary - StartV.Z) / DeltaV.Z;
+		if (TMax.Z < EntryT)
+		{
+			TMax.Z = EntryT;
+		}
+		TDelta.Z = 1.f / FMath::Abs(DeltaV.Z);
+	}
+
+	auto MaterialAt = [this, N](const FIntVector& G) -> uint8
+	{
+		const FIntVector CC(G.X / N, G.Y / N, G.Z / N);
+		const FVoxelChunk* Ch = Chunks.Find(CC);
+		return Ch ? Ch->Get(G.X - CC.X * N, G.Y - CC.Y * N, G.Z - CC.Z * N) : 0;
+	};
+
+	float T = EntryT;
+	FVector LocalNormal = -DeltaV.GetSafeNormal();
+	while (T <= MaxT &&
+		Voxel.X >= 0 && Voxel.X < VDims.X &&
+		Voxel.Y >= 0 && Voxel.Y < VDims.Y &&
+		Voxel.Z >= 0 && Voxel.Z < VDims.Z)
+	{
+		if (MaterialAt(Voxel) != 0)
+		{
+			const FVector LocalImpact = FMath::Lerp(LocalStart, LocalEnd, T);
+			OutWorldImpact = Xf.TransformPosition(LocalImpact);
+			OutWorldNormal = Xf.TransformVectorNoScale(LocalNormal).GetSafeNormal();
+			return true;
+		}
+
+		if (TMax.X <= TMax.Y && TMax.X <= TMax.Z)
+		{
+			Voxel.X += Step.X;
+			T = TMax.X;
+			TMax.X += TDelta.X;
+			LocalNormal = FVector((float)-Step.X, 0.f, 0.f);
+		}
+		else if (TMax.Y <= TMax.Z)
+		{
+			Voxel.Y += Step.Y;
+			T = TMax.Y;
+			TMax.Y += TDelta.Y;
+			LocalNormal = FVector(0.f, (float)-Step.Y, 0.f);
+		}
+		else
+		{
+			Voxel.Z += Step.Z;
+			T = TMax.Z;
+			TMax.Z += TDelta.Z;
+			LocalNormal = FVector(0.f, 0.f, (float)-Step.Z);
+		}
+	}
+
+	return false;
+}
+
 void AVoxelStructure::NotifyStructuralShock(const FVector& WorldCenter, float RadiusCm) const
 {
 	// Шаг 6: здесь запустим FStructuralSolver (flood-fill от якорей) на затронутом регионе,
@@ -359,8 +468,9 @@ void AVoxelStructure::RemoveTicker()
 {
 	if (TickerHandle.IsValid())
 	{
-		FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
+		const FTSTicker::FDelegateHandle Handle = TickerHandle;
 		TickerHandle.Reset();
+		FTSTicker::GetCoreTicker().RemoveTicker(Handle);
 	}
 }
 
@@ -612,6 +722,11 @@ FVector AVoxelStructure::ChunkOrigin(const FIntVector& Coord) const
 
 void AVoxelStructure::SetCollisionFocus(const FVector& WorldCenter)
 {
+	if (!bEnableMeshCollision)
+	{
+		return;
+	}
+
 	const bool bFirst = !bHasFocus;
 	CollisionFocus = WorldCenter;
 	bHasFocus = true;
@@ -620,6 +735,10 @@ void AVoxelStructure::SetCollisionFocus(const FVector& WorldCenter)
 
 bool AVoxelStructure::ShouldCookCollision(const FIntVector& Coord) const
 {
+	if (!bEnableMeshCollision)
+	{
+		return false;
+	}
 	if (!bScopeCollisionToFocus)
 	{
 		return true;                      // скоупинг выключен → кукаем у всех
@@ -633,7 +752,7 @@ bool AVoxelStructure::ShouldCookCollision(const FIntVector& Coord) const
 
 void AVoxelStructure::UpdateActiveChunks(bool bForceAllDirty)
 {
-	if (!bScopeCollisionToFocus || !bHasFocus)
+	if (!bEnableMeshCollision || !bScopeCollisionToFocus || !bHasFocus)
 	{
 		return;
 	}
@@ -802,13 +921,6 @@ void AVoxelStructure::RunIntegrityCheck(EDetachLaunch Launch, const FVector& Lau
 						const FVector Dir = (CentroidWorld - LaunchOrigin).GetSafeNormal();
 						LinVel = Dir * LaunchSpeed + FVector(0.f, 0.f, LaunchSpeed * 0.25f); // чуть подбрасываем
 					}
-					else // Cascade: в основном вниз + лёгкий разлёт в стороны
-					{
-						LinVel = FVector(
-							FMath::FRandRange(-0.3f, 0.3f),
-							FMath::FRandRange(-0.3f, 0.3f),
-							-0.1f) * LaunchSpeed;
-					}
 					AngVel = FMath::VRand() * DebrisSpinRadS;
 				}
 
@@ -850,58 +962,4 @@ void AVoxelStructure::RunIntegrityCheck(EDetachLaunch Launch, const FVector& Lau
 		}
 		EnsureTicker();
 	}
-}
-
-// ---- Тест-обвал (шаг 7) -----------------------------------------------------
-// Одношаговый триггер (клавиша C): подрываем опору — срезаем тонкую полосу прямо над якорным
-// слоем по всей площади → всё, что выше, теряет опору и обрушается ПО-НАСТОЯЩЕМУ через модель
-// опоры (RunIntegrityCheck) с дроблением на глыбы. Никаких скриптовых «слоёв».
-
-void AVoxelStructure::StartCascade()
-{
-	const int32 N = NgxVoxel::ChunkSize;
-	const FIntVector VDims(
-		FMath::Max(ChunkDims.X, 1) * N,
-		FMath::Max(ChunkDims.Y, 1) * N,
-		FMath::Max(ChunkDims.Z, 1) * N);
-
-	// Полоса подрыва: чуть выше якорного слоя, толщиной с «глыбу» — рвёт вертикальные опоры.
-	const int32 Z0 = FMath::Clamp(AnchorMaxGlobalZ + 1, 0, VDims.Z - 1);
-	const int32 Z1 = FMath::Clamp(Z0 + FMath::Max(BoulderSizeVoxels, 1) - 1, 0, VDims.Z - 1);
-
-	for (int32 Z = Z0; Z <= Z1; ++Z)
-	for (int32 Y = 0; Y < VDims.Y; ++Y)
-	for (int32 X = 0; X < VDims.X; ++X)
-	{
-		const FIntVector CC(X / N, Y / N, Z / N);
-		FVoxelChunk* Ch = Chunks.Find(CC);
-		if (!Ch)
-		{
-			continue;
-		}
-		const int32 LX = X - CC.X * N;
-		const int32 LY = Y - CC.Y * N;
-		const int32 LZ = Z - CC.Z * N;
-		if (Ch->Get(LX, LY, LZ) != 0)
-		{
-			Ch->Set(LX, LY, LZ, 0);
-			MarkChunkDirtyAround(CC, LX, LY, LZ);
-		}
-	}
-
-	if (!Pipeline.IsValid())
-	{
-		Pipeline = MakeShared<FVoxelMeshPipeline, ESPMode::ThreadSafe>();
-	}
-
-	// Подрыв опоры → масса выше обрушается глыбами (вниз + спин).
-	RunIntegrityCheck(EDetachLaunch::Cascade, FVector::ZeroVector, CascadeLaunchSpeedCmS);
-	EnsureTicker();
-
-	UE_LOG(LogNgxVoxel, Log, TEXT("VoxelStructure '%s': collapse triggered (Z %d..%d)"), *GetName(), Z0, Z1);
-}
-
-void AVoxelStructure::StopCascade()
-{
-	bCascadeRunning = false;
 }

@@ -1,4 +1,4 @@
-// Copyright. NgxVoxel — detached voxel debris (VS0 step 6b).
+// Copyright. NgxVoxel — detached voxel debris.
 
 #include "VoxelDebris.h"
 #include "ProceduralMeshComponent.h"
