@@ -42,7 +42,7 @@ public:
 	virtual void Enter() override;
 	virtual void Tick(float deltaTime) override;
 	virtual void Exit(FName event) override;
-	void LayersUpdate(int32 Index, bool& bOutConsumeDrawing);
+	void LayersUpdate(bool& bOutConsumeDrawing);
 	void Hide() const;
 	void Show() const;
 	bool IsLayer(const ELayoutLayer& InLayer) const;
@@ -60,8 +60,6 @@ protected:
 
 	UPROPERTY()
 	ULayoutWidget* TemplateWidget;
-
-	int32 ZOrder = 0;
 
 	UPROPERTY()
 	TMap<FGameplayTag, UWidget*> Placeholders;

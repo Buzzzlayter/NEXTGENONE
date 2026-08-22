@@ -66,17 +66,9 @@ void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIModuleWidgetDemo
 	}
 }
 
-void UUILayoutTemplate::LayersUpdate(const int32 Index, bool& bOutConsumeDrawing)
+void UUILayoutTemplate::LayersUpdate(bool& bOutConsumeDrawing)
 {
-	if (Index != ZOrder)
-	{
-		ZOrder = Index;
-		//Take widget for prevent SWidget destruction while we changing ZOrder
-		TSharedPtr<SWidget> Capture = TemplateWidget->TakeWidget();
-		TemplateWidget->RemoveFromParent();
-		TemplateWidget->AddToViewport(ZOrder);
-	}
-
+	GENCHECK(TemplateWidget, "UILayoutTemplate::LayersUpdate failed. TemplateWidget is null.");
 	bOutConsumeDrawing |= TemplateWidget->bConsumeLoverLayers;
 }
 
@@ -134,7 +126,7 @@ void UUILayoutTemplate::Enter()
 	TemplateWidget = CreateWidget<ULayoutWidget>(LocalPlayerController, Template);
 	GENCHECK(TemplateWidget, "UILayoutTemplate::Enter failed. CreateWidget returned null.");
 
-	TemplateWidget->AddToViewport(ZOrder);
+	TemplateWidget->AddToViewport(static_cast<int32>(Layer));
 	TemplateWidget->DoFadeIn();
 	if (TemplateWidget->WidgetTree)
 	{

@@ -52,10 +52,9 @@ void ULayoutTemplatesSorter::Update() const
 	bool bConsumeDraw = !bLayoutsVisible;
 
 	auto TmpTemplatesList = TemplatesList;
-	TmpTemplatesList.Sort();
+	TmpTemplatesList.StableSort();
 
 	auto Iter = TmpTemplatesList.end();
-	auto Index = TmpTemplatesList.Num();
 	while (Iter != TmpTemplatesList.begin())
 	{
 		const auto Template = *--Iter;
@@ -66,7 +65,7 @@ void ULayoutTemplatesSorter::Update() const
 		else
 		{
 			Template->Show();
-			Template->LayersUpdate(--Index, bConsumeDraw);
+			Template->LayersUpdate(bConsumeDraw);
 		}
 	}
 }
