@@ -3,25 +3,27 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "HFSMStateComponent.h"
-#include "Input\InputData.h"
+#include "Components/HFSMPlayerStateComponent.h"
+#include "Input/InputData.h"
 #include "HFSMInputComponent.generated.h"
 
 class UInputMappingContext;
 class UEnhancedInputLocalPlayerSubsystem;
+class UPlayerInputSubsystem;
 
 // ********************************************************************************************************************
 //                                             UR5HFSMInputComponent
 // ********************************************************************************************************************
 
 UCLASS(DisplayName = "InputComponent")
-class UHFSMInputComponent : public UHFSMStateComponent
+class UHFSMInputComponent : public UHFSMPlayerStateComponent
 {
 	GENERATED_BODY()
 
 public:
-	virtual void Enter() override;
+	virtual bool Enter() override;
 	virtual void Exit(FName Event) override;
+	virtual void AbortEnter() override;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = MappingContext)
@@ -49,5 +51,15 @@ protected:
 	EGamepadCursorMode DefaultCursorMode = EGamepadCursorMode::Grid;
 
 private:
+	void RestoreInput();
+	UPlayerInputSubsystem* GetPlayerInputSubsystem() const;
 	UEnhancedInputLocalPlayerSubsystem* GetEnhancedInputSubsystem() const;
+
+	TWeakObjectPtr<UPlayerInputSubsystem> AppliedInputSubsystem;
+	TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> AppliedEnhancedInputSubsystem;
+	EInputMode PreviousInputMode = EInputMode::Game;
+	EGamepadCursorMode PreviousCursorMode = EGamepadCursorMode::Disabled;
+	int32 PreviousMappingPriority = 0;
+	bool bHadMappingContext = false;
+	bool bAppliedMappingContext = false;
 };

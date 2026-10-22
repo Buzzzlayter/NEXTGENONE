@@ -23,11 +23,17 @@ public:
 		TSubclassOf<UHFSMStateComponent> ComponentClass,
 		UHFSMStateComponent*& OutComponent);
 
-	UFUNCTION(BlueprintCallable, BlueprintCosmetic, meta = (CompactNodeTitle = "MultiTransition"))
+	UFUNCTION(BlueprintCallable, meta = (CompactNodeTitle = "MultiTransition"))
 	static void MultiTransition(UObject* stateOrContext, TArray<FGameplayTag> Events);
 
-	UFUNCTION(BlueprintCallable,BlueprintCosmetic, meta = (CompactNodeTitle = "SimpleTransition"))
+	UFUNCTION(BlueprintCallable, meta = (CompactNodeTitle = "SimpleTransition"))
 	static void SimpleTransition(UObject* stateOrContext, FGameplayTag Event);
+
+	UFUNCTION(BlueprintPure, Category = "HFSM")
+	bool HasEnteredSuccessfully() const { return bEnteredSuccessfully; }
+
+	UFUNCTION(BlueprintPure, Category = "HFSM|Context")
+	UObject* GetContextOwner() const { return GetContextObject(); }
 	
 protected:
 	virtual void Enter() override;
@@ -37,9 +43,19 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent)
 	void LaunchChildFSMs();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "HFSM")
+	void OnEnterFailed(UHFSMStateComponent* FailedComponent);
+
 private:
+	friend class FHFSMComponentActivationTest;
+
 	UPROPERTY(EditAnywhere, Instanced)
 	TArray<UHFSMStateComponent*> Components;
+
+	UPROPERTY(Transient)
+	TArray<UHFSMStateComponent*> ActiveComponents;
+
+	bool bEnteredSuccessfully = false;
 
 	UHFSMState* GetRoot();
 	UHFSMState* GetParent() const;

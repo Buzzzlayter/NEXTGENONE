@@ -24,11 +24,15 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnInputModeChanged OnInputModeChanged;
 	
-	UFUNCTION(BlueprintPure, BlueprintCosmetic, meta = (WorldContext = "WCO", CompactNodeTitle = GetInputSubsystem))
+	// Requires a player/state context; a world alone does not identify a player.
+	UFUNCTION(BlueprintPure, BlueprintCosmetic, meta = (DefaultToSelf = "WCO", CompactNodeTitle = GetInputSubsystem))
 	static UPlayerInputSubsystem* GetInputSubsystem(const UObject* WCO);
 	
-	UFUNCTION(BlueprintCallable, BlueprintCosmetic, meta = (WorldContext = WCO))
+	UFUNCTION(BlueprintCallable, BlueprintCosmetic, meta = (DefaultToSelf = "WCO"))
 	static void SetInputMode(UObject* WCO, EInputMode Mode, bool bFlushInput = true);
+
+	UFUNCTION(BlueprintCallable, BlueprintCosmetic, Category = "Input")
+	bool SetPlayerInputMode(EInputMode Mode, bool bFlushInput = true);
 
 	UFUNCTION(BlueprintCallable, BlueprintCosmetic)
 	void SetWidgetToFocus(UWidget* WidgetToFocus);
@@ -38,6 +42,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintCosmetic, meta = (CompactNodeTitle = ToggleCursorModes))
 	void ToggleCursorModes();
+
+	UFUNCTION(BlueprintPure, Category = "Input")
+	EGamepadCursorMode GetGamepadCursorMode() const { return GamepadInputMode; }
 
 	UFUNCTION(BlueprintPure)
 	EInputType GetInputType() const;
@@ -64,4 +71,5 @@ private:
 
 	void InputModeChanged(EInputMode Mode);
 	void InputTypeChanged(EInputType Type);
+	void ApplyGamepadCursorMode();
 };

@@ -4,7 +4,7 @@
 #include "LayoutLayer.h"
 #include "LayoutWidget.h"
 #include "GameplayTagContainer.h"
-#include "HFSMStateComponent.h"
+#include "Components/HFSMPlayerStateComponent.h"
 #include "UILayoutTemplate.generated.h"
 
 USTRUCT()
@@ -26,12 +26,12 @@ struct FUIModuleWidgetDemountData
 };
 
 UCLASS(BlueprintType)
-class UIMODULE_API UUILayoutTemplate : public UHFSMStateComponent
+class UIMODULE_API UUILayoutTemplate : public UHFSMPlayerStateComponent
 {
 	GENERATED_BODY()
 public:
 	UFUNCTION(BlueprintCallable)
-	void MountWidgetTo(UUserWidget* Widget, FGameplayTag PlaceholderID);
+	bool MountWidgetTo(UUserWidget* Widget, FGameplayTag PlaceholderID);
 
 	UFUNCTION(BlueprintCallable)
 	void DemountWidget(UUserWidget* Widget, FGameplayTag PlaceholderID);
@@ -39,12 +39,12 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetOpacity(float Opacity);
 	
-	virtual void Enter() override;
+	virtual bool Enter() override;
+	virtual void AbortEnter() override;
 	virtual void Tick(float deltaTime) override;
 	virtual void Exit(FName event) override;
 	void LayersUpdate(bool& bOutConsumeDrawing);
-	void Hide() const;
-	void Show() const;
+	void SetVisible(bool isVisible) const;
 	bool IsLayer(const ELayoutLayer& InLayer) const;
 
 	bool operator<(const UUILayoutTemplate& Other) const;

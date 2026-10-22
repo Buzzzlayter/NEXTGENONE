@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
-#include "HFSMStateComponent.h"
+#include "Components/HFSMPlayerStateComponent.h"
 #include "LayoutTemplate/LayoutLayer.h"
 #include "UIWidgetMounterComponent.generated.h"
 
@@ -10,13 +10,14 @@ class UUILayoutTemplate;
 class UUserWidget;
 
 UCLASS(Blueprintable, EditInlineNew, DisplayName = "Widget Mounter")
-class UIMODULE_API UUIWidgetMounterComponent : public UHFSMStateComponent
+class UIMODULE_API UUIWidgetMounterComponent : public UHFSMPlayerStateComponent
 {
 	GENERATED_BODY()
 
 public:
-	virtual void Enter() override;
+	virtual bool Enter() override;
 	virtual void Exit(FName Event) override;
+	virtual void AbortEnter() override;
 
 	UFUNCTION(BlueprintPure)
 	UUserWidget* GetWidget() const;
@@ -48,6 +49,6 @@ private:
 	UUILayoutTemplate* MountedLayout = nullptr;
 
 	UUILayoutTemplate* ResolveLayout() const;
-	void MountWidget();
-	void DemountWidget();
+	bool MountWidget();
+	void DemountWidget(bool bImmediate = false);
 };

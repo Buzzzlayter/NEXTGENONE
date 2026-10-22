@@ -1,6 +1,5 @@
 #include "HFSMStateComponent.h"
 #include "HFSMState.h"
-#include "Engine/InputDelegateBinding.h"
 
 
 void UHFSMStateComponent::Init(UHFSMState* StateOwner)
@@ -9,19 +8,19 @@ void UHFSMStateComponent::Init(UHFSMState* StateOwner)
 	World = State ? State->GetWorld() : nullptr;
 }
 
-void UHFSMStateComponent::Enter()
+bool UHFSMStateComponent::Enter()
 {
-	if (World)
+	if (!ensureMsgf(IsValid(State) && IsValid(GetContextOwner()), TEXT("State component has no valid context owner.")))
 	{
-		if (const APlayerController* PC = World->GetFirstPlayerController())
-		{
-			if (PC->InputComponent)
-			{
-				UInputDelegateBinding::BindInputDelegates(GetClass(), PC->InputComponent, this);
-			}
-		}
+		return false;
+	}
+	World = GetWorld();
+	if (!ensureMsgf(World, TEXT("State component has no world.")))
+	{
+		return false;
 	}
 	OnEnter();
+	return true;
 }
 
 void UHFSMStateComponent::Tick(float DeltaTime)
@@ -34,12 +33,9 @@ void UHFSMStateComponent::Exit(FName Event)
 	OnExit(Event);
 }
 
-void UHFSMStateComponent::PostInitProperties()
+void UHFSMStateComponent::AbortEnter()
 {
-	if (const UObject* Outer = GetOuter())
-		World = Outer->GetWorld();
-
-	Super::PostInitProperties();
+	Exit(NAME_None);
 }
 
 bool UHFSMStateComponent::IsTickEnabled()
@@ -52,7 +48,12 @@ UHFSMState* UHFSMStateComponent::GetState() const
 	return State;
 }
 
+UObject* UHFSMStateComponent::GetContextOwner() const
+{
+	return IsValid(State) ? State->GetContextOwner() : nullptr;
+}
+
 UWorld* UHFSMStateComponent::GetWorld() const
 {
-	return World;
+	return IsValid(State) ? State->GetWorld() : nullptr;
 }

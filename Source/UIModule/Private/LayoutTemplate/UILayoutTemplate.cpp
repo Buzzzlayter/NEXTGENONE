@@ -3,12 +3,17 @@
 #include "LayoutTemplate/LayoutTemplatesSorter.h"
 #include "LayoutTemplate/WidgetPlaceholder.h"
 #include "Blueprint/WidgetTree.h"
-#include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "HFSMState.h"
-#include "UIModule.h"
+#include "TimerManager.h"
 
 ULayoutTemplatesSorter* GetLayoutSorter(UHFSMState* State)
 {
+	if (!State)
+	{
+		return nullptr;
+	}
 	UHFSMStateComponent* Component = nullptr;
 	State->GetClosestComponentInHierarchyUp(ULayoutTemplatesSorter::StaticClass(), Component);
 	if (Component)
@@ -16,15 +21,17 @@ ULayoutTemplatesSorter* GetLayoutSorter(UHFSMState* State)
 	return nullptr;
 }
 
-void UUILayoutTemplate::MountWidgetTo(UUserWidget* Widget, FGameplayTag PlaceholderID)
+bool UUILayoutTemplate::MountWidgetTo(UUserWidget* Widget, FGameplayTag PlaceholderID)
 {
 	if (UWidget** Sample = Placeholders.Find(PlaceholderID))
 	{
 		if (*Sample)
 		{
-			IWidgetPlaceholder::Execute_MountWidget(*Sample, Widget);
+			return ensureMsgf(IWidgetPlaceholder::Execute_MountWidget(*Sample, Widget),
+				TEXT("Layout placeholder rejected the widget."));
 		}
 	}
+	return false;
 }
 
 void UUILayoutTemplate::DemountWidget(UUserWidget* Widget, FGameplayTag PlaceholderID)
@@ -68,23 +75,18 @@ void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIModuleWidgetDemo
 
 void UUILayoutTemplate::LayersUpdate(bool& bOutConsumeDrawing)
 {
-	GENCHECK(TemplateWidget, "UILayoutTemplate::LayersUpdate failed. TemplateWidget is null.");
+	if (!ensureMsgf(TemplateWidget, TEXT("Layout has no widget when updating layers.")))
+	{
+		return;
+	}
 	bOutConsumeDrawing |= TemplateWidget->bConsumeLoverLayers;
 }
 
-void UUILayoutTemplate::Hide() const
+void UUILayoutTemplate::SetVisible(bool isVisible) const
 {
 	if (TemplateWidget)
 	{
-		TemplateWidget->SetVisibility(ESlateVisibility::Collapsed);
-	}
-}
-
-void UUILayoutTemplate::Show() const
-{
-	if (TemplateWidget)
-	{
-		TemplateWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		TemplateWidget->SetVisibility(isVisible ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 	}
 }
 
@@ -111,22 +113,38 @@ const TMap<FGameplayTag, UWidget*>& UUILayoutTemplate::GetPlaceholders()
 	return Placeholders;
 }
 
-void UUILayoutTemplate::Enter()
+bool UUILayoutTemplate::Enter()
 {
-	bIsTickEnabled = true;
-
-	GENCHECK(Template, "UILayoutTemplate::Enter failed. Template is null.");
+	if (!ensureMsgf(Template, TEXT("Layout has no template class.")))
+	{
+		return false;
+	}
 
 	UWorld* world = GetWorld();
-	GENCHECK(world, "UILayoutTemplate::Enter failed. World is null.");
+	if (!ensureMsgf(world, TEXT("Layout has no world.")))
+	{
+		return false;
+	}
 
-	APlayerController* LocalPlayerController = UGameplayStatics::GetPlayerController(world, 0);
-	GENCHECK(LocalPlayerController, "UILayoutTemplate::Enter failed. PlayerController is null.");
+	APlayerController* LocalPlayerController = GetPlayerController();
+	if (!ensureMsgf(IsValid(LocalPlayerController) && LocalPlayerController->GetLocalPlayer(),
+		TEXT("Layout requires an explicit local player context.")))
+	{
+		return false;
+	}
 
 	TemplateWidget = CreateWidget<ULayoutWidget>(LocalPlayerController, Template);
-	GENCHECK(TemplateWidget, "UILayoutTemplate::Enter failed. CreateWidget returned null.");
+	if (!ensureMsgf(TemplateWidget, TEXT("Layout could not create its widget.")))
+	{
+		return false;
+	}
 
-	TemplateWidget->AddToViewport(static_cast<int32>(Layer));
+	if (!ensureMsgf(TemplateWidget->AddToPlayerScreen(static_cast<int32>(Layer)),
+		TEXT("Layout could not add its widget to the owning player's screen.")))
+	{
+		TemplateWidget = nullptr;
+		return false;
+	}
 	TemplateWidget->DoFadeIn();
 	if (TemplateWidget->WidgetTree)
 	{
@@ -144,10 +162,36 @@ void UUILayoutTemplate::Enter()
 			});
 	}
 
-	Super::Enter();
+	if (!Super::Enter())
+	{
+		TemplateWidget->RemoveFromParent();
+		TemplateWidget = nullptr;
+		Placeholders.Reset();
+		return false;
+	}
+	bIsTickEnabled = true;
 	
 	if (ULayoutTemplatesSorter* LayoutSorter = GetLayoutSorter(State))
 		LayoutSorter->AddLayout(this);
+	return true;
+}
+
+void UUILayoutTemplate::AbortEnter()
+{
+	if (ULayoutTemplatesSorter* LayoutSorter = GetLayoutSorter(State))
+	{
+		LayoutSorter->RemoveLayout(this);
+	}
+	DemountWidgetsImmediate(WidgetsAwaitingDemount);
+	WidgetsAwaitingDemount.Reset();
+	if (TemplateWidget)
+	{
+		TemplateWidget->RemoveFromParent();
+		TemplateWidget = nullptr;
+	}
+	Placeholders.Reset();
+	bIsTickEnabled = false;
+	Super::Exit(NAME_None);
 }
 
 void UUILayoutTemplate::Tick(float deltaTime)

@@ -2,30 +2,52 @@
 
 #include "Blueprint/UserWidget.h"
 #include "HFSMState.h"
-#include "Kismet/GameplayStatics.h"
+#include "GameFramework/PlayerController.h"
 #include "LayoutTemplate/LayoutTemplatesSorter.h"
 #include "LayoutTemplate/UILayoutTemplate.h"
-#include "UIModule.h"
+#include "LayoutTemplate/WidgetPlaceholder.h"
 
-void UUIWidgetMounterComponent::Enter()
+bool UUIWidgetMounterComponent::Enter()
 {
-	GENCHECK(WidgetClass, "UUIWidgetMounterComponent::Enter failed. WidgetClass is null.");
+	if (!ensureMsgf(GetState(), TEXT("Widget Mounter has no owning state.")))
+	{
+		return false;
+	}
+	if (!ensureMsgf(WidgetClass, TEXT("Widget Mounter has no widget class.")))
+	{
+		return false;
+	}
 
-	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-	GENCHECK(PlayerController, "UUIWidgetMounterComponent::Enter failed. PlayerController is null.");
+	APlayerController* PlayerController = GetPlayerController();
+	if (!ensureMsgf(IsValid(PlayerController) && PlayerController->GetLocalPlayer(),
+		TEXT("Widget Mounter requires an explicit local player context.")))
+	{
+		return false;
+	}
 
 	Widget = CreateWidget<UUserWidget>(PlayerController, WidgetClass);
-	GENCHECK(Widget, "UUIWidgetMounterComponent::Enter failed. CreateWidget returned null.");
-
-	MountWidget();
-
-	Super::Enter();
+	if (!ensureMsgf(Widget, TEXT("Widget Mounter could not create its widget.")))
+	{
+		return false;
+	}
+	if (!MountWidget() || !Super::Enter())
+	{
+		DemountWidget(true);
+		return false;
+	}
+	return true;
 }
 
 void UUIWidgetMounterComponent::Exit(FName Event)
 {
 	Super::Exit(Event);
 	DemountWidget();
+}
+
+void UUIWidgetMounterComponent::AbortEnter()
+{
+	Super::Exit(NAME_None);
+	DemountWidget(true);
 }
 
 UUserWidget* UUIWidgetMounterComponent::GetWidget() const
@@ -54,37 +76,35 @@ UUILayoutTemplate* UUIWidgetMounterComponent::ResolveLayout() const
 	return Cast<UUILayoutTemplate>(LayoutComponent);
 }
 
-void UUIWidgetMounterComponent::MountWidget()
+bool UUIWidgetMounterComponent::MountWidget()
 {
 	if (!Widget)
 	{
-		return;
+		return false;
 	}
 
 	MountedLayout = ResolveLayout();
 	if (MountedLayout && PlaceholderID.IsValid())
 	{
-		if (!MountedLayout->GetPlaceholders().Contains(PlaceholderID))
+		if (!ensureMsgf(MountedLayout->GetPlaceholders().Contains(PlaceholderID),
+			TEXT("Widget Mounter could not find its placeholder.")))
 		{
-			UE_LOG(LogTemp,
-				Warning,
-				TEXT("Widget Mounter did not find placeholder '%s' in layout '%s'."),
-				*PlaceholderID.ToString(),
-				*GetNameSafe(MountedLayout));
+			return false;
 		}
 
-		MountedLayout->MountWidgetTo(Widget, PlaceholderID);
-		return;
+		return MountedLayout->MountWidgetTo(Widget, PlaceholderID);
 	}
 
 	if (bAddToViewportIfNoLayout)
 	{
-		Widget->AddToViewport(FallbackZOrder);
-		return;
+		return ensureMsgf(Widget->AddToPlayerScreen(FallbackZOrder),
+			TEXT("Widget Mounter could not add its widget to the owning player's screen."));
 	}
+	ensureMsgf(false, TEXT("Widget Mounter has no layout target or viewport fallback."));
+	return false;
 }
 
-void UUIWidgetMounterComponent::DemountWidget()
+void UUIWidgetMounterComponent::DemountWidget(bool bImmediate)
 {
 	if (!Widget)
 	{
@@ -93,7 +113,21 @@ void UUIWidgetMounterComponent::DemountWidget()
 
 	if (MountedLayout && PlaceholderID.IsValid())
 	{
-		MountedLayout->DemountWidget(Widget, PlaceholderID);
+		if (bImmediate)
+		{
+			if (UWidget* const* Placeholder = MountedLayout->GetPlaceholders().Find(PlaceholderID))
+			{
+				if (*Placeholder)
+				{
+					IWidgetPlaceholder::Execute_DemountWidget(*Placeholder, Widget);
+				}
+			}
+			Widget->RemoveFromParent();
+		}
+		else
+		{
+			MountedLayout->DemountWidget(Widget, PlaceholderID);
+		}
 	}
 	else
 	{

@@ -45,23 +45,39 @@ TArray<UHFSMStateComponent*> UHFSMState::GetComponents()
 
 void UHFSMState::Enter()
 {
-	Super::Enter();
-
+	bEnteredSuccessfully = false;
+	ActiveComponents.Reset();
 	for (UHFSMStateComponent* Component : Components)
 	{
 		if (Component)
 		{
 			Component->Init(this);
-			Component->Enter();
+			if (!Component->Enter())
+			{
+				for (int32 Index = ActiveComponents.Num() - 1; Index >= 0; --Index)
+				{
+					ActiveComponents[Index]->AbortEnter();
+				}
+				ActiveComponents.Reset();
+				OnEnterFailed(Component);
+				return;
+			}
+			ActiveComponents.Add(Component);
 		}
 	}
 
+	bEnteredSuccessfully = true;
+	Super::Enter();
 	LaunchChildFSMs();
 }
 
 void UHFSMState::Tick(float deltaTime)
 {
-	for (UHFSMStateComponent* Component : Components)
+	if (!bEnteredSuccessfully)
+	{
+		return;
+	}
+	for (UHFSMStateComponent* Component : ActiveComponents)
 	{
 		if (Component && Component->IsTickEnabled())
 		{
@@ -74,15 +90,19 @@ void UHFSMState::Tick(float deltaTime)
 
 void UHFSMState::Exit(FName event)
 {
-	for (int32 idx = Components.Num() - 1; idx >= 0; --idx)
+	for (int32 idx = ActiveComponents.Num() - 1; idx >= 0; --idx)
 	{
-		if (UHFSMStateComponent* Component = Components[idx])
+		if (UHFSMStateComponent* Component = ActiveComponents[idx])
 		{
 			Component->Exit(event);
 		}
 	}
-
-	Super::Exit(event);
+	ActiveComponents.Reset();
+	if (bEnteredSuccessfully)
+	{
+		bEnteredSuccessfully = false;
+		Super::Exit(event);
+	}
 }
 
 bool UHFSMState::GetClosestComponentInHierarchyUp(

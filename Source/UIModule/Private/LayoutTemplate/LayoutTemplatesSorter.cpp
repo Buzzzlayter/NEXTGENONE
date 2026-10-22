@@ -60,11 +60,11 @@ void ULayoutTemplatesSorter::Update() const
 		const auto Template = *--Iter;
 		if (bConsumeDraw)
 		{
-			Template->Hide();
+			Template->SetVisible(false);
 		}
 		else
 		{
-			Template->Show();
+			Template->SetVisible(true);
 			Template->LayersUpdate(bConsumeDraw);
 		}
 	}
