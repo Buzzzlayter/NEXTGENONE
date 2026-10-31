@@ -1,4 +1,4 @@
-#include "Context/HFSMContextLibrary.h"
+#include "HFSMLibrary.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -52,19 +52,19 @@ bool FHFSMContextOwnershipTest::RunTest(const FString& Parameters)
 	UActorComponent* ActorComponent = NewObject<UActorComponent>(OwnerController);
 
 	TestEqual(TEXT("Controller resolves its own player"),
-		UHFSMContextLibrary::ResolveLocalPlayer(OwnerController), OwnerPlayer.Get());
+		UHFSMLibrary::ResolveLocalPlayer(OwnerController), OwnerPlayer.Get());
 	TestEqual(TEXT("Local player resolves its own controller"),
-		UHFSMContextLibrary::ResolvePlayerController(OwnerPlayer.Get()), OwnerController);
+		UHFSMLibrary::ResolvePlayerController(OwnerPlayer.Get()), OwnerController);
 	TestEqual(TEXT("HUD resolves its owning controller"),
-		UHFSMContextLibrary::ResolvePlayerController(HUD), OwnerController);
+		UHFSMLibrary::ResolvePlayerController(HUD), OwnerController);
 	TestEqual(TEXT("Widget resolves its owning player"),
-		UHFSMContextLibrary::ResolveLocalPlayer(Widget.Get()), OwnerPlayer.Get());
+		UHFSMLibrary::ResolveLocalPlayer(Widget.Get()), OwnerPlayer.Get());
 	TestEqual(TEXT("Actor component resolves its owning actor's player"),
-		UHFSMContextLibrary::ResolveLocalPlayer(ActorComponent), OwnerPlayer.Get());
-	TestNull(TEXT("World does not select a player"), UHFSMContextLibrary::ResolveLocalPlayer(World.Get()));
+		UHFSMLibrary::ResolveLocalPlayer(ActorComponent), OwnerPlayer.Get());
+	TestNull(TEXT("World does not select a player"), UHFSMLibrary::ResolveLocalPlayer(World.Get()));
 	TestNull(TEXT("World does not select an input subsystem"), UPlayerInputSubsystem::GetInputSubsystem(World.Get()));
 	TestNull(TEXT("Unpossessed pawn does not fall back to another player"),
-		UHFSMContextLibrary::ResolveLocalPlayer(UnpossessedPawn));
+		UHFSMLibrary::ResolveLocalPlayer(UnpossessedPawn));
 
 	TStrongObjectPtr<UGCFSMRootState> Root(UGCFSMRootState::MakeRootStateObject(HUD));
 	Root->SetPaused(true);
@@ -88,7 +88,7 @@ bool FHFSMContextOwnershipTest::RunTest(const FString& Parameters)
 		HUD->PlayerOwner = FirstController;
 		TestEqual(TEXT("Player context stays fixed until exit"), PlayerComponent->GetLocalPlayer(), OwnerPlayer.Get());
 		TestEqual(TEXT("Context library respects the captured player"),
-			UHFSMContextLibrary::ResolveLocalPlayer(PlayerComponent), OwnerPlayer.Get());
+			UHFSMLibrary::ResolveLocalPlayer(PlayerComponent), OwnerPlayer.Get());
 		PlayerComponent->AbortEnter();
 		TestEqual(TEXT("Rollback clears only the owning controller's bindings"), OwnerInput->GetNumActionBindings(), 0);
 		TestEqual(TEXT("Rollback leaves another controller untouched"), FirstInput->GetNumActionBindings(), 1);

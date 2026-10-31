@@ -1,8 +1,44 @@
 #include "HFSMState.h"
 
-#include "GameplayTagContainer.h"
-#include "GCFSMUtilities.h"
 #include "HFSMStateComponent.h"
+
+UHFSMStateComponent* UHFSMState::GetComponent(TSubclassOf<UHFSMStateComponent> ComponentClass) const
+{
+	const UClass* TargetClass = ComponentClass.Get();
+	if (!TargetClass)
+	{
+		return nullptr;
+	}
+
+	for (UHFSMStateComponent* Component : Components)
+	{
+		if (Component && Component->IsA(TargetClass))
+		{
+			return Component;
+		}
+	}
+	return nullptr;
+}
+
+TArray<UHFSMStateComponent*> UHFSMState::GetComponents(TSubclassOf<UHFSMStateComponent> ComponentClass) const
+{
+	TArray<UHFSMStateComponent*> Output;
+	const UClass* TargetClass = ComponentClass.Get();
+	if (!TargetClass)
+	{
+		return Output;
+	}
+
+	for (UHFSMStateComponent* Component : Components)
+	{
+		if (Component && Component->IsA(TargetClass))
+		{
+			Output.Add(Component);
+		}
+	}
+	return Output;
+}
+
 
 UHFSMState* UHFSMState::GetRoot()
 {
@@ -131,21 +167,26 @@ bool UHFSMState::GetClosestComponentInHierarchyUp(
 	return IsValid(OutComponent);
 }
 
-void UHFSMState::MultiTransition(UObject* stateOrContext, TArray<FGameplayTag> Events)
+void UHFSMState::IterateUpConditional(TFunctionRef<bool(UHFSMState*)> Func)
 {
-	for (const FGameplayTag& Event : Events)
+	for (UHFSMState* State = this; State; State = State->GetParent())
 	{
-		SimpleTransition(stateOrContext, Event);
+		if (!Func(State))
+		{
+			return;
+		}
 	}
 }
 
-void UHFSMState::SimpleTransition(UObject* stateOrContext, FGameplayTag Event)
+void UHFSMState::IterateDownConditional(TFunctionRef<bool(UHFSMState*)> Func)
 {
-	UGCFSMUtilities::TriggerEvent(
-		stateOrContext,
-		Event.GetTagName(),
-		EGCFSMTriggerEventTargetPolicy::ContextObject,
-		true,
-		false,
-		EGCFSMTriggerEventQueuePolicy::JustQueue);
+	if (!Func(this))
+	{
+		return;
+	}
+
+	for (UHFSMState* Child : GetChildren())
+	{
+		Child->IterateDownConditional(Func);
+	}
 }

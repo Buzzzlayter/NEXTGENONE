@@ -1,7 +1,7 @@
 
 #include "Input/PlayerInputSubsystem.h"
 #include "Components/Widget.h"
-#include "Context/HFSMContextLibrary.h"
+#include "HFSMLibrary.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -11,7 +11,7 @@
 
 UPlayerInputSubsystem* UPlayerInputSubsystem::GetInputSubsystem(const UObject* WCO)
 {
-	const ULocalPlayer* LocalPlayer = UHFSMContextLibrary::ResolveLocalPlayer(WCO);
+	const ULocalPlayer* LocalPlayer = UHFSMLibrary::ResolveLocalPlayer(WCO);
 	if (!LocalPlayer)
 	{
 		return nullptr;

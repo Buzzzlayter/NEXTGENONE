@@ -1,14 +1,14 @@
 #include "Components/HFSMPlayerStateComponent.h"
 
 #include "Components/InputComponent.h"
-#include "Context/HFSMContextLibrary.h"
+#include "HFSMLibrary.h"
 #include "Engine/InputDelegateBinding.h"
 #include "GameFramework/PlayerController.h"
 
 void UHFSMPlayerStateComponent::Init(UHFSMState* StateOwner)
 {
 	Super::Init(StateOwner);
-	APlayerController* Controller = UHFSMContextLibrary::ResolvePlayerController(GetContextOwner());
+	APlayerController* Controller = UHFSMLibrary::ResolvePlayerController(GetContextOwner());
 	PlayerContext = IsValid(Controller) && Controller->GetLocalPlayer()
 		? FLocalPlayerContext(Controller->GetLocalPlayer(), GetWorld()) : FLocalPlayerContext();
 	bHasPlayerContext = true;
@@ -24,7 +24,7 @@ APlayerController* UHFSMPlayerStateComponent::GetPlayerController() const
 	{
 		return PlayerContext.IsInitialized() ? PlayerContext.GetPlayerController() : nullptr;
 	}
-	return UHFSMContextLibrary::ResolvePlayerController(GetContextOwner());
+	return UHFSMLibrary::ResolvePlayerController(GetContextOwner());
 }
 
 ULocalPlayer* UHFSMPlayerStateComponent::GetLocalPlayer() const
@@ -37,7 +37,7 @@ ULocalPlayer* UHFSMPlayerStateComponent::GetLocalPlayer() const
 	{
 		return PlayerContext.IsInitialized() ? PlayerContext.GetLocalPlayer() : nullptr;
 	}
-	return UHFSMContextLibrary::ResolveLocalPlayer(GetContextOwner());
+	return UHFSMLibrary::ResolveLocalPlayer(GetContextOwner());
 }
 
 bool UHFSMPlayerStateComponent::Enter()

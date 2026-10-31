@@ -3,7 +3,10 @@
 UE **5.8** C++ проект.
 
 ## Структура
-- Единственный модуль `NEXTGENONE` (Runtime) — `Source/NEXTGENONE/`.
+- Модули проекта: основной `NEXTGENONE` (Runtime) — `Source/NEXTGENONE/`; UI — `Source/UIModule/`. Шаблонный модуль `ALSv4_Community` и `Content/ThirdPerson` полностью удалены. Реальная ALS-интеграция находится в плагине `Plugins/ALSV4_CPP` и сохранена.
+- Единая игровая цепочка: `ANextgenoneGameMode`, `ANextgenoneCharacter`, `ANextgenonePlayerController`, `ANextgenonePlayerState` в `Source/NEXTGENONE/Gameplay/`. `ANGCombatTestGameMode` наследует основной режим и добавляет только тестовый harness.
+- Рабочая карта проекта: `/Game/Maps/Gameplay`, Blueprint режима: `/Game/Blueprints/BP_NextgenoneGameMode`. Отдельная combat-карта удалена переносом в Gameplay; тестовый runner выбирает свой режим через URL override.
+- Voxel удалён: нет `NgxVoxel`, старого voxel Pawn, voxel-ассетов и `DevLevel`. Не восстанавливать эту подсистему без поручения пользователя.
 - Таргеты: `Source/NEXTGENONE.Target.cs`, `Source/NEXTGENONEEditor.Target.cs`.
 - Включённые плагины (`NEXTGENONE.uproject`): `ModelContextProtocol`, `Terminal`,
   `EditorToolset`, `ModelingToolsEditorMode`.
@@ -61,3 +64,9 @@ UE **5.8** C++ проект.
 - Бинарники — через **Git LFS** (`.gitattributes`): `.uasset`, `.umap`, `.fbx`, текстуры и т.д.
 - `.Codex/settings.local.json` — личные права (allow/deny/ask), в `.gitignore`, НЕ бэкапится.
 - В коммитах отключена приписка Клода (`attribution.commit: ""`) — автор только пользователь.
+
+## Апрув перед тестированием (правило пользователя, 2026-11-01)
+- Не начинать этап тестирования без отдельного явного апрува пользователя на этот этап.
+- Это относится к автотестам, PIE, сетевым проверкам, smoke/regression и прогонам с latency/packet loss.
+- После реализации сообщить о готовности к тестированию и ждать апрува. Общее поручение реализовать функциональность не заменяет отдельный апрув на тестовый этап.
+- Не расширять и не повторять тестовые прогоны инициативно за пределами согласованного объёма.

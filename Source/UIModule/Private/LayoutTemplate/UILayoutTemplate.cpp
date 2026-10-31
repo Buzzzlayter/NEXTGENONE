@@ -43,7 +43,7 @@ void UUILayoutTemplate::DemountWidget(UUserWidget* Widget, FGameplayTag Placehol
 			return;
 		}
 
-		FUIModuleWidgetDemountData DemountData;
+		FUIWidgetDemountData DemountData;
 		DemountData.StateName = State ? State->GetName() : TEXT("<none>");
 		DemountData.PlaceholderID = PlaceholderID;
 		DemountData.Placeholder = *Placeholder;
@@ -60,9 +60,9 @@ void UUILayoutTemplate::DemountWidget(UUserWidget* Widget, FGameplayTag Placehol
 	}
 }
 
-void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIModuleWidgetDemountData>& WidgetsAwaitingDemount)
+void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIWidgetDemountData>& WidgetsAwaitingDemount)
 {
-	for (const FUIModuleWidgetDemountData& DemountData : WidgetsAwaitingDemount)
+	for (const FUIWidgetDemountData& DemountData : WidgetsAwaitingDemount)
 	{
 		UWidget* Placeholder = DemountData.Placeholder.Get();
 		UUserWidget* Widget = DemountData.Widget.Get();
@@ -220,7 +220,7 @@ void UUILayoutTemplate::Exit(FName event)
 	{
 		TemplateWidget->DoFadeOut();
 		FTimerHandle DestroyTimer;
-		const TArray<FUIModuleWidgetDemountData> DemountList = WidgetsAwaitingDemount;
+		const TArray<FUIWidgetDemountData> DemountList = WidgetsAwaitingDemount;
 		WidgetsAwaitingDemount.Reset();
 		TWeakObjectPtr<ULayoutWidget> TemplateWidgetWeak = TemplateWidget;
 		const auto Delegate = FTimerDelegate::CreateLambda(
