@@ -11,6 +11,20 @@
 #include "NGAbilitySystem.generated.h"
 
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGDead);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputJump);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputDash);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputMantle);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputPickup);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGDashActive);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMantleActive);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputPunch);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGPunchActive);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMovementAbility);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGReloadActive);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMagazineAmmo);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGReserveAmmo);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputInteract);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInteractEvent);
 
 class ANextgenoneCharacter;
 
@@ -18,6 +32,14 @@ UCLASS()
 class NEXTGENONE_API UNGAbilitySystemComponent : public UAbilitySystemComponent
 {
 	GENERATED_BODY()
+public:
+	// Call on Started and Completed/Canceled, not every Triggered tick.
+	UFUNCTION(BlueprintCallable, Category="GAS|Input") void AbilityInputTagPressed(FGameplayTag InputTag);
+	UFUNCTION(BlueprintCallable, Category="GAS|Input") void AbilityInputTagReleased(FGameplayTag InputTag);
+	void ClearAbilityInput();
+	UFUNCTION(BlueprintCallable, Category="GAS|Input") bool TryActivateAbilityByInputTag(FGameplayTag InputTag);
+private:
+	void NotifyAbilityInput(FGameplayAbilitySpec& Spec, bool bPressed);
 };
 
 UCLASS()

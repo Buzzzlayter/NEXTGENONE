@@ -1,11 +1,90 @@
 #include "NGAbilitySystem.h"
 #include "NextgenoneCharacter.h"
+#include "NGInteraction.h"
 #include "GameplayEffectExtension.h"
 #include "NativeGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDamage, "Data.Damage");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGDead, "State.Dead");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputJump, "Input.Jump");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputDash, "Input.Dash");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputMantle, "Input.Mantle");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPickup, "Input.Interaction.PickupWeapon");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGDashActive, "State.Action.Dash");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGMantleActive, "State.Action.Mantle");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPunch, "Input.Combat.Punch");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGPunchActive, "State.Action.Punch");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGMovementAbility, "Ability.Type.Movement");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadActive, "State.Action.Reload");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGMagazineAmmo, "Weapon.MagazineAmmo");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGReserveAmmo, "Weapon.ReserveAmmo");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputInteract, "Input.Interaction.Interact");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractEvent, "Event.Interaction.Request");
+
+bool UNGAbilitySystemComponent::TryActivateAbilityByInputTag(FGameplayTag InputTag)
+{
+	if (InputTag==TAG_NGInputInteract || InputTag==TAG_NGInputPickup)
+	{
+		if (auto* Pawn=Cast<ANextgenoneCharacter>(GetAvatarActor())) { Pawn->Interaction->RequestInteract(); return true; }
+		return false;
+	}
+	if (!InputTag.IsValid() || !AbilityActorInfo.IsValid() ||
+		(!AbilityActorInfo->IsLocallyControlled() && !IsOwnerActorAuthoritative())) return false;
+	FGameplayAbilitySpecHandle Handle;
+	{
+		ABILITYLIST_SCOPE_LOCK();
+		for (const FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+			if (Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag)) { Handle = Spec.Handle; break; }
+	}
+	return Handle.IsValid() && TryActivateAbility(Handle);
+}
+
+void UNGAbilitySystemComponent::NotifyAbilityInput(FGameplayAbilitySpec& Spec, bool bPressed)
+{
+	if (bPressed) AbilitySpecInputPressed(Spec);
+	else AbilitySpecInputReleased(Spec);
+	// Ability tasks (including Blueprint Wait Input Release) use generic events.
+	for (UGameplayAbility* Instance : Spec.GetAbilityInstances())
+	{
+		if (Instance && Instance->IsActive())
+			InvokeReplicatedEvent(bPressed ? EAbilityGenericReplicatedEvent::InputPressed : EAbilityGenericReplicatedEvent::InputReleased,
+				Spec.Handle, Instance->GetCurrentActivationInfo().GetActivationPredictionKey());
+	}
+}
+void UNGAbilitySystemComponent::AbilityInputTagPressed(FGameplayTag InputTag)
+{
+	if (InputTag==TAG_NGInputInteract || InputTag==TAG_NGInputPickup) { TryActivateAbilityByInputTag(InputTag); return; }
+	if (!InputTag.IsValid() || !AbilityActorInfo.IsValid() || !AbilityActorInfo->IsLocallyControlled()) return;
+	TArray<FGameplayAbilitySpecHandle> ToActivate;
+	{
+		ABILITYLIST_SCOPE_LOCK();
+		for (FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+		{
+			if (!Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag) || Spec.InputPressed) continue;
+			Spec.InputPressed = true;
+			if (Spec.IsActive()) NotifyAbilityInput(Spec, true);
+			else ToActivate.Add(Spec.Handle);
+		}
+	}
+	for (const auto Handle : ToActivate) TryActivateAbility(Handle);
+}
+void UNGAbilitySystemComponent::AbilityInputTagReleased(FGameplayTag InputTag)
+{
+	if (!InputTag.IsValid() || !AbilityActorInfo.IsValid() || !AbilityActorInfo->IsLocallyControlled()) return;
+	ABILITYLIST_SCOPE_LOCK();
+	for (FGameplayAbilitySpec& Spec : GetActivatableAbilities())
+	{
+		if (!Spec.GetDynamicSpecSourceTags().HasTagExact(InputTag)) continue;
+		Spec.InputPressed = false;
+		if (Spec.IsActive()) NotifyAbilityInput(Spec, false);
+	}
+}
+void UNGAbilitySystemComponent::ClearAbilityInput()
+{
+	ABILITYLIST_SCOPE_LOCK();
+	for (FGameplayAbilitySpec& Spec : GetActivatableAbilities()) Spec.InputPressed = false;
+}
 
 UNGHealthSet::UNGHealthSet() : Health(100.f), MaxHealth(100.f), IncomingDamage(0.f) {}
 FGameplayAttribute UNGHealthSet::GetHealthAttribute() { return FindFProperty<FProperty>(StaticClass(), GET_MEMBER_NAME_CHECKED(UNGHealthSet, Health)); }

@@ -59,16 +59,28 @@ void ANGCombatTestGameMode::SmokeTick()
 	if (Phase==1 && Reports.Num()==2) { Players[0]->ClientSmoke(1); Phase=2; PhaseTime=Now; return; }
 	auto* A = Cast<ANextgenoneCharacter>(Players[0]->GetPawn()); auto* B = Cast<ANextgenoneCharacter>(Players[1]->GetPawn());
 	if (!A || !B) { Fail(TEXT("missing Pawn")); return; }
+	// Player abilities now coexist with the equipment grant. Do not assume
+	// the whole ASC contains only GA_Fire as the ability library grows.
+	auto HasUniqueFoundationGrants = [A]()
+	{
+		int32 FireGrants = 0, JumpGrants = 0;
+		for (const FGameplayAbilitySpec& Spec : A->GetAbilitySystemComponent()->GetActivatableAbilities())
+		{
+			if (Spec.Ability && Spec.Ability->IsA<UNGFireAbility>()) ++FireGrants;
+			if (Spec.GetDynamicSpecSourceTags().HasTagExact(TAG_NGInputJump)) ++JumpGrants;
+		}
+		return FireGrants == 1 && JumpGrants == 1;
+	};
 	if (Phase==2 && Now-PhaseTime>2 && A->Combat->GetEquipment().bEquipped)
 	{
 		A->TryInitializeGameplay(); A->TryInitializeGameplay();
-		if (A->GetAbilitySystemComponent()->GetActivatableAbilities().Num()!=1) { Fail(TEXT("duplicate grants")); return; }
+		if (!HasUniqueFoundationGrants()) { Fail(TEXT("duplicate/missing foundation grants")); return; }
 		Players[0]->ClientSmoke(2); Phase=3; PhaseTime=Now; return;
 	}
 	if (Phase==3 && Now-PhaseTime>2)
 	{
 		if (B->GetHealth()!=75 || A->Combat->GetMagazineAmmo()!=11) { Fail(FString::Printf(TEXT("burst/equip hp=%.0f ammo=%d"),B->GetHealth(),A->Combat->GetMagazineAmmo())); return; }
-		if (A->GetAbilitySystemComponent()->GetActivatableAbilities().Num()!=1) { Fail(TEXT("equip duplicated grants")); return; }
+		if (!HasUniqueFoundationGrants()) { Fail(TEXT("equip duplicated foundation grants")); return; }
 		AskClients(4); Phase=4; return;
 	}
 	if (Phase==4 && Reports.Num()==2) { Shots=0; Phase=5; PhaseTime=Now; return; }
