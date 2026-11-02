@@ -10,11 +10,6 @@
 			"LoadingPhase": "Default"
 		},
 		{
-			"Name": "NgxVoxel",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
-		},
-		{
 			"Name": "UIModule",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
@@ -22,6 +17,18 @@
 
 	],
 	"Plugins": [
+		{
+			"Name": "Niagara",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "ALSV4_CPP",
+			"Enabled": true
+		},
 		{
 			"Name": "ModelingToolsEditorMode",
 			"Enabled": false
@@ -36,10 +43,6 @@
 		},
 		{
 			"Name": "EditorToolset",
-			"Enabled": true
-		},
-		{
-			"Name": "ProceduralMeshComponent",
 			"Enabled": true
 		},
 		{

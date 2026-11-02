@@ -8,7 +8,7 @@
 #include "UILayoutTemplate.generated.h"
 
 USTRUCT()
-struct FUIModuleWidgetDemountData
+struct FUIWidgetDemountData
 {
 	GENERATED_BODY()
 
@@ -65,7 +65,7 @@ protected:
 	TMap<FGameplayTag, UWidget*> Placeholders;
 
 	UPROPERTY()
-	TArray<FUIModuleWidgetDemountData> WidgetsAwaitingDemount;
+	TArray<FUIWidgetDemountData> WidgetsAwaitingDemount;
 
-	static void DemountWidgetsImmediate(const TArray<FUIModuleWidgetDemountData>& WidgetsAwaitingDemount);
+	static void DemountWidgetsImmediate(const TArray<FUIWidgetDemountData>& WidgetsAwaitingDemount);
 };

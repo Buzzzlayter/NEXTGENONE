@@ -8,19 +8,13 @@ public class NEXTGENONE : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "UMG", "InputCore", "EnhancedInput", "GameplayAbilities", "GameplayTags", "GameplayTasks", "NetCore", "ALSV4_CPP" });
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "Kismet", "BlueprintGraph", "AssetTools", "AssetRegistry", "UMGEditor" });
+		}
 
-		// Chaos-разрушение (Geometry Collections + поля): пивот на Chaos для сносимых конструкций.
-		PublicDependencyModuleNames.AddRange(new string[] {
-			"GeometryCollectionEngine",   // UGeometryCollectionComponent, AGeometryCollectionActor
-			"FieldSystemEngine",          // поля: RadialFalloff (strain) + RadialVector (kick) → взрыв
-			"Chaos",
-			"ChaosSolverEngine",
-			"PhysicsCore",
-			"UIModule",
-		});
-
-		PrivateDependencyModuleNames.AddRange(new string[] { "NgxVoxel" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "UIModule", "Slate", "SlateCore", "PhysicsCore", "Niagara" });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
