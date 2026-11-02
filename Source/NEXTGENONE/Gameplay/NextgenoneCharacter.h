@@ -11,6 +11,8 @@ class UNGMantleAdapterComponent;
 class UNGInteractionComponent;
 class UNGAimComponent;
 class UNGHitReactionComponent;
+class UNGCharacterInputComponent;
+class UNGCharacterStateMachineComponent;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
@@ -28,6 +30,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGInteractionComponent> Interaction;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGAimComponent> Aim;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGHitReactionComponent> HitReaction;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGCharacterInputComponent> GameplayInput;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGCharacterStateMachineComponent> CharacterStateMachine;
+	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	virtual void PossessedBy(AController* Controller) override;
 	virtual void UnPossessed() override;

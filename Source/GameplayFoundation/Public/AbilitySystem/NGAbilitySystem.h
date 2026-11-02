@@ -3,47 +3,43 @@
 #include "CoreMinimal.h"
 #include "AbilitySystemComponent.h"
 #include "AttributeSet.h"
-#include "AbilitySystemInterface.h"
 #include "Abilities/GameplayAbility.h"
 #include "Engine/DataAsset.h"
-#include "GameFramework/PlayerState.h"
 #include "NativeGameplayTags.h"
 #include "NGAbilitySystem.generated.h"
 
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGDead);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputJump);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputDash);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputMantle);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputPickup);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGDashActive);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMantleActive);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputPunch);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGPunchActive);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMovementAbility);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGReloadActive);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMagazineAmmo);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGReserveAmmo);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputInteract);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInteractEvent);
-
-class ANextgenoneCharacter;
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGDead);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputJump);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputDash);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputMantle);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputPickup);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGDashActive);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMantleActive);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputPunch);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGPunchActive);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMovementAbility);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGReloadActive);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGMagazineAmmo);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGReserveAmmo);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputInteract);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInteractEvent);
 
 UCLASS()
-class NEXTGENONE_API UNGAbilitySystemComponent : public UAbilitySystemComponent
+class GAMEPLAYFOUNDATION_API UNGAbilitySystemComponent : public UAbilitySystemComponent
 {
 	GENERATED_BODY()
 public:
-	// Call on Started and Completed/Canceled, not every Triggered tick.
-	UFUNCTION(BlueprintCallable, Category="GAS|Input") void AbilityInputTagPressed(FGameplayTag InputTag);
+	// Call once on first Triggered and on Completed/Canceled, not every Triggered tick.
+	UFUNCTION(BlueprintCallable, Category="GAS|Input") virtual void AbilityInputTagPressed(FGameplayTag InputTag);
 	UFUNCTION(BlueprintCallable, Category="GAS|Input") void AbilityInputTagReleased(FGameplayTag InputTag);
 	void ClearAbilityInput();
-	UFUNCTION(BlueprintCallable, Category="GAS|Input") bool TryActivateAbilityByInputTag(FGameplayTag InputTag);
+	UFUNCTION(BlueprintCallable, Category="GAS|Input") virtual bool TryActivateAbilityByInputTag(FGameplayTag InputTag);
 private:
 	void NotifyAbilityInput(FGameplayAbilitySpec& Spec, bool bPressed);
 };
 
 UCLASS()
-class NEXTGENONE_API UNGHealthSet : public UAttributeSet
+class GAMEPLAYFOUNDATION_API UNGHealthSet : public UAttributeSet
 {
 	GENERATED_BODY()
 public:
@@ -62,21 +58,21 @@ public:
 };
 
 UCLASS()
-class NEXTGENONE_API UNGInitHealthEffect : public UGameplayEffect
+class GAMEPLAYFOUNDATION_API UNGInitHealthEffect : public UGameplayEffect
 {
 	GENERATED_BODY()
 public: UNGInitHealthEffect();
 };
 
 UCLASS()
-class NEXTGENONE_API UNGDamageEffect : public UGameplayEffect
+class GAMEPLAYFOUNDATION_API UNGDamageEffect : public UGameplayEffect
 {
 	GENERATED_BODY()
 public: UNGDamageEffect();
 };
 
 USTRUCT(BlueprintType)
-struct FNGAbilityGrant
+struct GAMEPLAYFOUNDATION_API FNGAbilityGrant
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere) TSubclassOf<UGameplayAbility> Ability;
@@ -85,7 +81,7 @@ struct FNGAbilityGrant
 };
 
 USTRUCT()
-struct FNGGrantedHandles
+struct GAMEPLAYFOUNDATION_API FNGGrantedHandles
 {
 	GENERATED_BODY()
 	UPROPERTY() TArray<FGameplayAbilitySpecHandle> Abilities;
@@ -94,12 +90,12 @@ struct FNGGrantedHandles
 };
 
 UCLASS(BlueprintType)
-class NEXTGENONE_API UNGAbilitySet : public UDataAsset
+class GAMEPLAYFOUNDATION_API UNGAbilitySet : public UDataAsset
 {
 	GENERATED_BODY()
 public:
 	UPROPERTY(EditDefaultsOnly) TArray<FNGAbilityGrant> Abilities;
 	UPROPERTY(EditDefaultsOnly) TArray<TSubclassOf<UGameplayEffect>> Effects;
-	void Give(UAbilitySystemComponent* ASC, UObject* Source, FNGGrantedHandles& Out) const;
+	void Give(UAbilitySystemComponent* ASC, UObject* Source, FNGGrantedHandles& Out, bool bApplyInstantEffects = true) const;
 };
 

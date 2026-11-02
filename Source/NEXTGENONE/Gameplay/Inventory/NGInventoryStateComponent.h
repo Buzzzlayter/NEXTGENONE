@@ -8,6 +8,9 @@
 
 class ANextgenonePlayerController;
 class UNGInventoryManagerComponent;
+class UInputAction;
+class UPlayerInputSubsystem;
+class UEnhancedInputComponent;
 
 UCLASS()
 class UNGInventoryWindowMounter : public UUIWidgetMounterComponent
@@ -27,11 +30,15 @@ public:
 	virtual void Exit(FName Event) override;
 	virtual void AbortEnter() override;
 	UPROPERTY(EditAnywhere, Category="Inventory") TSoftClassPtr<UUserWidget> PanelClass;
+	UPROPERTY(EditAnywhere, Category="Inventory|Input") TObjectPtr<UInputAction> ToggleAction;
 private:
 	TWeakObjectPtr<ANextgenonePlayerController> Controller;
 	UPROPERTY(Transient) TObjectPtr<UNGInventoryWindowMounter> Mounter;
-	EInputMode PreviousMode = EInputMode::Game;
-	bool bPreviousCursor = false;
+	TWeakObjectPtr<UPlayerInputSubsystem> InputSubsystem;
+	TWeakObjectPtr<UEnhancedInputComponent> BoundInput;
+	uint32 ToggleBinding = 0;
+	FGuid PolicyHandle;
+	void RequestToggle();
 	UFUNCTION() void Toggle(UNGInventoryManagerComponent* Inventory);
 	void Close();
 	void Unbind();

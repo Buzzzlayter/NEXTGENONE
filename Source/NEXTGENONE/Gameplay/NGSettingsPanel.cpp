@@ -44,7 +44,7 @@ TSharedRef<SWidget> UNGSettingsPanel::RebuildWidget()
 			Text(Label); auto* Field=WidgetTree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(),Name);
 			for (const auto& Option:Options) Field->AddOption(Option); Body->AddChild(Field); return Field;
 		};
-		Text(TEXT("НАСТРОЙКИ"),32); Text(TEXT("Изменения сохраняются кнопкой «Применить». Esc / «Назад» отменяет несохранённые правки."),16);
+		Text(TEXT("НАСТРОЙКИ"),32); Text(TEXT("Изменения сохраняются кнопкой «Применить». Кнопка «Назад» отменяет несохранённые правки."),16);
 		Text(TEXT("ЭКРАН И КАЧЕСТВО"),23);
 		Quality=Combo(TEXT("Quality"),TEXT("Общее качество — влияет на тени, эффекты, текстуры и дальность прорисовки"),{TEXT("Низкое"),TEXT("Среднее"),TEXT("Высокое"),TEXT("Эпическое"),TEXT("Кинематографическое"),TEXT("Пользовательское")});
 		WindowMode=Combo(TEXT("WindowMode"),TEXT("Режим экрана"),{TEXT("Полноэкранный"),TEXT("Без рамки"),TEXT("Оконный")});
@@ -57,8 +57,8 @@ TSharedRef<SWidget> UNGSettingsPanel::RebuildWidget()
 		Sensitivity=WidgetTree->ConstructWidget<USlider>(USlider::StaticClass(),TEXT("Sensitivity")); Sensitivity->SetMinValue(.1f); Sensitivity->SetMaxValue(3.f); Sensitivity->SetStepSize(.05f); Body->AddChild(Sensitivity);
 		Text(TEXT("Инвертировать вертикальный обзор")); Invert=WidgetTree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(),TEXT("InvertY")); Body->AddChild(Invert);
 		Text(TEXT("КЛАВИШИ"),23);
-		Text(TEXT("W A S D — движение · Мышь — обзор\nSpace — прыжок · Q — деш только в воздухе · V — залезание\nE — взаимодействие / подбор предмета · I — инвентарь\nЛКМ — стрельба / удар кулаком без оружия · ПКМ — прицеливание\n1 — пистолет · 2 — автомат · 3 — дробовик · R — перезарядка · U — убрать оружие\nEsc — настройки / назад · F — тестовая экипировка"));
-		Text(TEXT("Дополнительные привязки ALS задаются в DefaultInputMappingContext. Переназначение клавиш в этом экране пока не предусмотрено."),14);
+		if (!ControlsDescription.IsEmpty()) Text(ControlsDescription.ToString());
+		Text(TEXT("Управление задаётся в Input Mapping Contexts персонажа и UI. Переназначение в этом экране пока не предусмотрено."),14);
 		Text(TEXT("СЕТЬ"),23);
 		if (GetOwningPlayer()) if (auto* Network=CreateWidget<UNGConnectionPanel>(GetOwningPlayer(),ConnectionPanelClass ? ConnectionPanelClass.Get() : UNGConnectionPanel::StaticClass())) Body->AddChild(Network);
 #if !UE_BUILD_SHIPPING
@@ -116,7 +116,9 @@ void UNGSettingsPanel::Defaults()
 void UNGSettingsPanel::Cancel() { LoadValues(); OnBack.Broadcast(); }
 FReply UNGSettingsPanel::NativeOnPreviewKeyDown(const FGeometry& Geometry,const FKeyEvent& Event)
 {
-	if (Event.GetKey()==EKeys::Escape) { Cancel(); return FReply::Handled(); } return Super::NativeOnPreviewKeyDown(Geometry,Event);
+	if (!Event.IsRepeat()) if (const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this))
+		for (const UInputAction* Action : CloseActions) if (Input->IsKeyMappedToAction(Event.GetKey(), Action)) { Cancel(); return FReply::Handled(); }
+	return Super::NativeOnPreviewKeyDown(Geometry,Event);
 }
 UNGSettingsScreenMounter::UNGSettingsScreenMounter() { WidgetClass=UNGSettingsPanel::StaticClass(); bAddToViewportIfNoLayout=true; FallbackZOrder=100; }
 bool UNGSettingsScreenMounter::Enter()
@@ -124,17 +126,24 @@ bool UNGSettingsScreenMounter::Enter()
 	if (!Super::Enter()) return false;
 	auto* PC=Cast<ANextgenonePlayerController>(GetPlayerController()); auto* Panel=Cast<UNGSettingsPanel>(GetWidget());
 	if (!PC || !Panel) { Super::AbortEnter(); return false; }
-	PC->NGFireStopForUI(); bPreviousCursor=PC->bShowMouseCursor; PC->bSettingsUIOpen=true; PC->SetIgnoreMoveInput(true); PC->SetIgnoreLookInput(true); PC->bShowMouseCursor=true; bLocked=true;
+	auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
+	if (!Input) { Super::AbortEnter(); return false; }
+	AppliedInput = Input;
+	FPlayerInputPolicy Policy; Policy.InputMode = EInputMode::UI; Policy.bBlockGameplay = true;
+	Policy.bSetCursorMode = true; Policy.CursorMode = EGamepadCursorMode::Grid;
+	PolicyHandle = Input->AcquireInputPolicy(this, Policy);
+	PC->bSettingsUIOpen = true;
 	Panel->OnBack.AddUniqueDynamic(this,&ThisClass::Back); Panel->SetUserFocus(PC);
-	if (auto* Input=UPlayerInputSubsystem::GetInputSubsystem(this)) Input->SetWidgetToFocus(Panel);
+	Input->SetWidgetToFocus(Panel);
 	return true;
 }
 void UNGSettingsScreenMounter::Back() { NGTriggerUIEvent(GetState(),TEXT("Back")); }
 void UNGSettingsScreenMounter::Release()
 {
 	if (auto* Panel=Cast<UNGSettingsPanel>(GetWidget())) Panel->OnBack.RemoveDynamic(this,&ThisClass::Back);
-	if (bLocked) if (auto* PC=Cast<ANextgenonePlayerController>(GetPlayerController())) { PC->bSettingsUIOpen=false; PC->SetIgnoreMoveInput(false); PC->SetIgnoreLookInput(false); PC->bShowMouseCursor=bPreviousCursor; }
-	bLocked=false;
+	if (auto* Input = AppliedInput.Get()) Input->ReleaseInputPolicy(PolicyHandle);
+	PolicyHandle.Invalidate(); AppliedInput.Reset();
+	if (auto* PC=Cast<ANextgenonePlayerController>(GetPlayerController())) PC->bSettingsUIOpen=false;
 }
 void UNGSettingsScreenMounter::Exit(FName Event) { Release(); Super::Exit(Event); }
 void UNGSettingsScreenMounter::AbortEnter() { Release(); Super::AbortEnter(); }

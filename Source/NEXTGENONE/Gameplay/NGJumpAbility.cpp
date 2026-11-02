@@ -1,5 +1,5 @@
 #include "NGJumpAbility.h"
-#include "NGAbilitySystem.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "NextgenoneCharacter.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 

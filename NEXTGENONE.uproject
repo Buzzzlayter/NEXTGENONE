@@ -5,6 +5,11 @@
 	"Description": "",
 	"Modules": [
 		{
+			"Name": "GameplayFoundation",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "NEXTGENONE",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"

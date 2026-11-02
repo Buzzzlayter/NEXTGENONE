@@ -16,7 +16,7 @@ class UPlayerInputSubsystem;
 // ********************************************************************************************************************
 
 UCLASS(DisplayName = "InputComponent")
-class UHFSMInputComponent : public UHFSMPlayerStateComponent
+class UIMODULE_API UHFSMInputComponent : public UHFSMPlayerStateComponent
 {
 	GENERATED_BODY()
 
@@ -26,6 +26,8 @@ public:
 	virtual void AbortEnter() override;
 
 protected:
+	UPROPERTY(EditAnywhere, Category=Input)
+	bool bBlockGameplayInput = false;
 	UPROPERTY(EditDefaultsOnly, Category = MappingContext)
 	bool bSetupMappingContext = true;
 
@@ -41,7 +43,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Input, meta = (EditCondition = "bSetupInputMode"))
 	EInputMode InputMode;
 
-	UPROPERTY(EditDefaultsOnly, Category = Input, meta = (EditCondition = "bSetupInputMode"))
+	// Legacy serialized option. Policy transitions flush when the effective input mode changes.
+	UPROPERTY(meta = (DeprecatedProperty))
 	bool bFlushInput = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = Gamepad)
@@ -53,13 +56,8 @@ protected:
 private:
 	void RestoreInput();
 	UPlayerInputSubsystem* GetPlayerInputSubsystem() const;
-	UEnhancedInputLocalPlayerSubsystem* GetEnhancedInputSubsystem() const;
 
 	TWeakObjectPtr<UPlayerInputSubsystem> AppliedInputSubsystem;
-	TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> AppliedEnhancedInputSubsystem;
-	EInputMode PreviousInputMode = EInputMode::Game;
-	EGamepadCursorMode PreviousCursorMode = EGamepadCursorMode::Disabled;
-	int32 PreviousMappingPriority = 0;
-	bool bHadMappingContext = false;
-	bool bAppliedMappingContext = false;
+	FGuid MappingHandle;
+	FGuid PolicyHandle;
 };

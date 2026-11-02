@@ -34,6 +34,7 @@ class NEXTGENONE_API UNGRuntimeUIStateComponent : public UHFSMPlayerStateCompone
 	GENERATED_BODY()
 public:
 	UNGRuntimeUIStateComponent();
+	UPROPERTY(EditAnywhere, Category="Input") TObjectPtr<class UInputAction> OpenSettingsAction;
 	// Serialized compatibility only. Runtime no longer creates the ALS demo menus.
 	UPROPERTY(meta=(DeprecatedProperty)) TSoftClassPtr<UUserWidget> DebugHUDClass;
 	UPROPERTY(meta=(DeprecatedProperty)) TSoftClassPtr<UUserWidget> OverlayClass;
@@ -42,6 +43,7 @@ public:
 	virtual void AbortEnter() override;
 private:
 	TWeakObjectPtr<APlayerController> Controller;
+	uint32 SettingsBinding = 0;
 	void OpenSettings();
 	void Release();
 };
