@@ -5,7 +5,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "Components/ActorComponent.h"
 #include "GameFramework/Actor.h"
-#include "NGAbilitySystem.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "NGInteraction.generated.h"
 
 class ANextgenoneCharacter;

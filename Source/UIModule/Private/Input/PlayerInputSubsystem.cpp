@@ -8,6 +8,9 @@
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
 #include "InputProcessors/PreprocessorManager.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 
 UPlayerInputSubsystem* UPlayerInputSubsystem::GetInputSubsystem(const UObject* WCO)
 {
@@ -147,6 +150,9 @@ void UPlayerInputSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UPlayerInputSubsystem::Deinitialize()
 {
+	MappingRequests.Reset();
+	ApplyMappingRequests();
+	PolicyRequests.Reset();
 	if (PreprocessorManager)
 	{
 		PreprocessorManager->Shutdown();
@@ -208,4 +214,116 @@ void UPlayerInputSubsystem::ToggleCursorModes()
 {
 	SetGamepadCursorMode(GamepadInputMode == EGamepadCursorMode::Cursor
 		? EGamepadCursorMode::Grid : EGamepadCursorMode::Cursor);
+}
+
+FGuid UPlayerInputSubsystem::AcquireMappingContext(UObject* Owner, UInputMappingContext* Context, int32 Priority, bool bGameplay)
+{
+	auto* Enhanced = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	if (!IsValid(Owner) || !Context || !Enhanced || Priority < 0) return FGuid();
+	if (!OriginalContexts.Contains(Context))
+	{
+		int32 PreviousPriority = 0;
+		if (Enhanced->HasMappingContext(Context, PreviousPriority)) OriginalContexts.Add(Context, PreviousPriority);
+		else OriginalContexts.Add(Context, INDEX_NONE);
+	}
+	FPlayerMappingRequest& Request = MappingRequests.AddDefaulted_GetRef();
+	Request.Handle = FGuid::NewGuid(); Request.Owner = Owner; Request.Context = Context;
+	Request.Priority = Priority; Request.bGameplay = bGameplay;
+	const FGuid Handle = Request.Handle;
+	ApplyMappingRequests();
+	return Handle;
+}
+
+void UPlayerInputSubsystem::ReleaseMappingContext(FGuid Handle)
+{
+	if (!Handle.IsValid()) return;
+	MappingRequests.RemoveAll([Handle](const auto& Request) { return Request.Handle == Handle || !Request.Owner.IsValid(); });
+	ApplyMappingRequests();
+}
+
+void UPlayerInputSubsystem::ApplyMappingRequests()
+{
+	auto* Enhanced = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	if (!Enhanced) return;
+	MappingRequests.RemoveAll([](const auto& Request) { return !Request.Owner.IsValid(); });
+	TMap<UInputMappingContext*, int32> Desired;
+	for (const auto& Request : MappingRequests)
+		if (Request.Context && (!Request.bGameplay || !bGameplayBlocked))
+		{
+			int32* Existing = Desired.Find(Request.Context);
+			if (Existing) *Existing = FMath::Max(*Existing, Request.Priority);
+			else Desired.Add(Request.Context, Request.Priority);
+		}
+	FModifyContextOptions Options;
+	Options.bIgnoreAllPressedKeysUntilRelease = true;
+	TArray<TWeakObjectPtr<UInputMappingContext>> Finished;
+	for (const auto& Entry : OriginalContexts)
+	{
+		UInputMappingContext* Context = Entry.Key.Get();
+		if (!Context) continue;
+		const bool bHasOwner = MappingRequests.ContainsByPredicate([Context](const auto& Request) { return Request.Context == Context; });
+		if (const int32* Priority = Desired.Find(Context))
+		{
+			int32 CurrentPriority = 0;
+			const int32 Effective = FMath::Max(*Priority, Entry.Value);
+			if (!Enhanced->HasMappingContext(Context, CurrentPriority) || CurrentPriority != Effective)
+				Enhanced->AddMappingContext(Context, Effective, Options);
+			ManagedContexts.Add(Context);
+		}
+		else if (ManagedContexts.Contains(Context))
+		{
+			Enhanced->RemoveMappingContext(Context, Options);
+			if (Entry.Value != INDEX_NONE) Enhanced->AddMappingContext(Context, Entry.Value, Options);
+			ManagedContexts.Remove(Context);
+		}
+		if (!bHasOwner) Finished.Add(Context);
+	}
+	for (const auto& Context : Finished) OriginalContexts.Remove(Context);
+}
+
+FGuid UPlayerInputSubsystem::AcquireInputPolicy(UObject* Owner, FPlayerInputPolicy Policy)
+{
+	if (!IsValid(Owner)) return FGuid();
+	if (PolicyRequests.IsEmpty()) { PolicyBaseMode = InputMode; PolicyBaseCursor = GamepadInputMode; }
+	FPlayerPolicyRequest& Request = PolicyRequests.AddDefaulted_GetRef();
+	Request.Handle = FGuid::NewGuid(); Request.Owner = Owner; Request.Policy = Policy;
+	const FGuid Handle = Request.Handle;
+	ApplyPolicyRequests();
+	return Handle;
+}
+
+void UPlayerInputSubsystem::ReleaseInputPolicy(FGuid Handle)
+{
+	if (!Handle.IsValid()) return;
+	PolicyRequests.RemoveAll([Handle](const auto& Request) { return Request.Handle == Handle || !Request.Owner.IsValid(); });
+	ApplyPolicyRequests();
+}
+
+void UPlayerInputSubsystem::ApplyPolicyRequests()
+{
+	PolicyRequests.RemoveAll([](const auto& Request) { return !Request.Owner.IsValid(); });
+	EInputMode Mode = PolicyBaseMode;
+	EGamepadCursorMode Cursor = PolicyBaseCursor;
+	bool bBlocked = false;
+	for (const auto& Request : PolicyRequests)
+	{
+		bBlocked |= Request.Policy.bBlockGameplay;
+		if (Request.Policy.bSetInputMode) Mode = Request.Policy.InputMode;
+		if (Request.Policy.bSetCursorMode) Cursor = Request.Policy.CursorMode;
+	}
+	if (bGameplayBlocked != bBlocked)
+	{
+		bGameplayBlocked = bBlocked;
+		// Release gameplay before switching focus/mappings. Each consumer verifies its current Pawn.
+		OnGameplayInputBlockedChanged.Broadcast(bBlocked);
+		ApplyMappingRequests();
+	}
+	if (InputMode != Mode) SetPlayerInputMode(Mode, true);
+	SetGamepadCursorMode(Cursor);
+}
+
+bool UPlayerInputSubsystem::IsKeyMappedToAction(FKey Key, const UInputAction* Action) const
+{
+	const auto* Enhanced = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	return Action && Enhanced && Enhanced->QueryKeysMappedToAction(Action).Contains(Key);
 }

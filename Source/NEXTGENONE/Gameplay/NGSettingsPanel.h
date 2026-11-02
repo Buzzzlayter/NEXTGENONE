@@ -31,6 +31,8 @@ class NEXTGENONE_API UNGSettingsPanel : public UUserWidget
 public:
 	UPROPERTY(EditDefaultsOnly,Category="Network UI") TSubclassOf<UNGConnectionPanel> ConnectionPanelClass;
 	UPROPERTY(EditDefaultsOnly,Category="Debug UI") TSubclassOf<UNGDebugSettingsPanel> DebugPanelClass;
+	UPROPERTY(EditDefaultsOnly, Category="Input") TArray<TObjectPtr<class UInputAction>> CloseActions;
+	UPROPERTY(EditDefaultsOnly, Category="Input", meta=(MultiLine=true)) FText ControlsDescription;
 	UPROPERTY(BlueprintAssignable) FNGSettingsBack OnBack;
 	UFUNCTION(BlueprintCallable) void Apply();
 	UFUNCTION(BlueprintCallable) void Cancel();
@@ -65,6 +67,6 @@ public:
 private:
 	UFUNCTION() void Back();
 	void Release();
-	bool bLocked=false;
-	bool bPreviousCursor=false;
+	TWeakObjectPtr<class UPlayerInputSubsystem> AppliedInput;
+	FGuid PolicyHandle;
 };

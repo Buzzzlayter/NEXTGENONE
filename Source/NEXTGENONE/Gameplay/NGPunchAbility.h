@@ -1,8 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "NGAbilitySystem.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "NGPunchAbility.generated.h"
+
+class ANextgenoneCharacter;
 
 UCLASS(Blueprintable)
 class NEXTGENONE_API UNGPunchCooldownEffect : public UGameplayEffect

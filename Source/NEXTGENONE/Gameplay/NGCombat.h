@@ -2,11 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "NGAbilitySystem.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "NGGameplayAbilityFromEquipment.h"
 #include "Library/ALSCharacterEnumLibrary.h"
 #include "NGCombat.generated.h"
 
+class ANextgenoneCharacter;
 class UStaticMeshComponent;
 class USkeletalMeshComponent;
 class UNGInventoryItemInstance;
@@ -111,6 +112,8 @@ public:
 	void BindInventory();
 	UFUNCTION(BlueprintCallable) void RequestEquip(bool bEquip);
 	UFUNCTION(BlueprintCallable) void RequestFire();
+	void StartPrimaryInput();
+	void StopPrimaryInput();
 	void SetEquippedOnServer(bool bEquip);
 	bool TryPickupOnServer(UNGWeaponDefinition* Definition);
 	bool FireOnServer();
@@ -126,6 +129,8 @@ public:
 	// Shared damage entry point rejects stale Pawn/ASC pairings, including corpses.
 	static bool ApplyDamageToPawn(class ANextgenoneCharacter* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit = nullptr);
 private:
+	void ContinuePrimaryInput();
+	FTimerHandle PrimaryInputTimer;
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) FNGEquipmentState Equipment;
 	UPROPERTY(ReplicatedUsing=OnRep_CurrentItem) TObjectPtr<UNGInventoryItemInstance> CurrentItem;
 	UPROPERTY(ReplicatedUsing=OnRep_Aiming) bool bAiming = false;

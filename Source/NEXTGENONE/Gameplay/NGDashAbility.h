@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "NGAbilitySystem.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "NGDashAbility.generated.h"
 
 UCLASS(Blueprintable)

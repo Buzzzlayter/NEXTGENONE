@@ -8,13 +8,13 @@ public class NEXTGENONE : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "UMG", "InputCore", "EnhancedInput", "GameplayAbilities", "GameplayTags", "GameplayTasks", "NetCore", "ALSV4_CPP" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "UMG", "InputCore", "EnhancedInput", "GameplayAbilities", "GameplayTags", "GameplayTasks", "NetCore", "ALSV4_CPP", "GameplayFoundation" });
 		if (Target.bBuildEditor)
 		{
 			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "Kismet", "BlueprintGraph", "AssetTools", "AssetRegistry", "UMGEditor" });
 		}
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "UIModule", "Slate", "SlateCore", "PhysicsCore", "Niagara" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "UIModule", "GCFSM", "Slate", "SlateCore", "PhysicsCore", "Niagara" });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });

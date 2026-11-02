@@ -1,6 +1,8 @@
 #include "NextgenoneCharacter.h"
+#include "Input/NGCharacterInputComponent.h"
+#include "StateMachine/NGCharacterStateMachineComponent.h"
 #include "NextgenonePlayerState.h"
-#include "NGAbilitySystem.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "NGCombat.h"
 #include "NGMantleAbility.h"
 #include "NGInteraction.h"
@@ -22,6 +24,8 @@ ANextgenoneCharacter::ANextgenoneCharacter(const FObjectInitializer& Init) : Sup
 	Interaction = CreateDefaultSubobject<UNGInteractionComponent>(TEXT("Interaction"));
 	Aim = CreateDefaultSubobject<UNGAimComponent>(TEXT("Aim"));
 	HitReaction = CreateDefaultSubobject<UNGHitReactionComponent>(TEXT("HitReaction"));
+	GameplayInput = CreateDefaultSubobject<UNGCharacterInputComponent>(TEXT("GameplayInput"));
+	CharacterStateMachine = CreateDefaultSubobject<UNGCharacterStateMachineComponent>(TEXT("CharacterStateMachine"));
 	Combat->TestWeapon = CreateDefaultSubobject<UNGWeaponDefinition>(TEXT("TestWeapon"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	Combat->TestWeapon->Mesh = Cube.Object;
@@ -53,15 +57,19 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 		const auto* Old = Cast<ANextgenoneCharacter>(ASC->GetAvatarActor());
 		if (PS->GetPawn() != this && Old && !Old->IsDead()) return;
 	}
-	if (BoundASC == ASC && ASC->GetAvatarActor() == this) { ASC->RefreshAbilityActorInfo(); return; }
+	if (BoundASC == ASC && ASC->GetAvatarActor() == this) { ASC->RefreshAbilityActorInfo(); CharacterStateMachine->NotifyGameplayReady(ASC); return; }
 	UnbindGameplay();
-	if (HasAuthority()) PS->StartLife(this);
+	if (HasAuthority()) { if (!PS->StartLife(this)) return; }
 	else ASC->InitAbilityActorInfo(PS, this);
 	BoundASC = ASC;
 	Combat->BindInventory();
 	HealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
 	MaxHealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
-	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
+	// Startup effects run before delegate binding; observe their final health, including a lethal result.
+	FOnAttributeChangeData InitialHealth;
+	HealthChanged(InitialHealth);
+	CharacterStateMachine->NotifyGameplayReady(ASC);
+	if (bDead) CharacterStateMachine->NotifyDeath();
 	UE_LOG(LogTemp, Display, TEXT("NG_ASC_READY authority=%d pawn=%s owner=%s avatar=%s"), HasAuthority(), *GetName(), *GetNameSafe(ASC->GetOwnerActor()), *GetNameSafe(ASC->GetAvatarActor()));
 }
 void ANextgenoneCharacter::UnbindGameplay()
@@ -74,6 +82,8 @@ void ANextgenoneCharacter::UnbindGameplay()
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).Remove(MaxHealthHandle);
 		if (ASC->GetAvatarActor() == this)
 		{
+			CharacterStateMachine->SuspendResources();
+			if (HasAuthority()) if (auto* PS = GetPlayerState<ANextgenonePlayerState>()) PS->ReleaseCharacterAbilities(this);
 			if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
 			ASC->CancelAllAbilities();
 			ASC->SetAvatarActor(nullptr);
@@ -149,6 +159,9 @@ void ANextgenoneCharacter::HealthChanged(const FOnAttributeChangeData& Data)
 }
 void ANextgenoneCharacter::OnRep_Dead()
 {
+	if (bDead) CharacterStateMachine->NotifyDeath();
+	if (bDead && HasAuthority()) if (auto* PS = GetPlayerState<ANextgenonePlayerState>()) PS->ReleaseCharacterAbilities(this);
+	if (bDead && GameplayInput) GameplayInput->ShutdownInput();
 	if (bDead) GetCharacterMovement()->DisableMovement();
 	OnDeathChanged.Broadcast(bDead);
 	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
@@ -156,17 +169,32 @@ void ANextgenoneCharacter::OnRep_Dead()
 void ANextgenoneCharacter::PossessedBy(AController* C) { Super::PossessedBy(C); TryInitializeGameplay(); }
 void ANextgenoneCharacter::UnPossessed()
 {
+	GameplayInput->ShutdownInput();
 	if (HasAuthority()) Combat->SetEquippedOnServer(false);
 	UnbindGameplay(); Super::UnPossessed();
+	CharacterStateMachine->RefreshResources();
 }
 void ANextgenoneCharacter::OnRep_PlayerState() { Super::OnRep_PlayerState(); TryInitializeGameplay(); }
-void ANextgenoneCharacter::OnRep_Controller() { Super::OnRep_Controller(); TryInitializeGameplay(); }
+void ANextgenoneCharacter::OnRep_Controller() { Super::OnRep_Controller(); if (!IsLocallyControlled()) GameplayInput->ShutdownInput(); TryInitializeGameplay(); CharacterStateMachine->RefreshResources(); }
 void ANextgenoneCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	// Imported Blueprint defaults can override native constructor responses.
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	TryInitializeGameplay();
+	if (bDead)
+	{
+		if (auto* PS = GetPlayerState<ANextgenonePlayerState>()) CharacterStateMachine->NotifyGameplayReady(PS->AbilitySystem);
+		CharacterStateMachine->NotifyDeath();
+	}
 }
-void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason) { UnbindGameplay(); Super::EndPlay(Reason); }
+void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason) { GameplayInput->ShutdownInput(); CharacterStateMachine->SuspendResources(); UnbindGameplay(); Super::EndPlay(Reason); }
+
+void ANextgenoneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	if (!bDead) GameplayInput->InitializeInput(PlayerInputComponent);
+	else GameplayInput->ShutdownInput();
+	CharacterStateMachine->RefreshResources();
+}
 void ANextgenoneCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const { Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(ANextgenoneCharacter, bDead); }

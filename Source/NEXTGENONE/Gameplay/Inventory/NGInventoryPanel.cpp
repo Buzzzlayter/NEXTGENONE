@@ -1,4 +1,5 @@
 #include "NGInventoryPanel.h"
+#include "Input/PlayerInputSubsystem.h"
 #include "NGInventoryItemInstance.h"
 #include "NGInventoryItemDefinition.h"
 #include "../NextgenoneCharacter.h"
@@ -60,11 +61,13 @@ void UNGInventoryPanel::NativeDestruct()
 void UNGInventoryPanel::Changed(FNGInventoryChangeMessage Change) { Refresh(); }
 FReply UNGInventoryPanel::NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
 {
-	if (Event.GetKey() == EKeys::I || Event.GetKey() == EKeys::Escape)
-	{
-		if (auto* PC = Cast<ANextgenonePlayerController>(GetOwningPlayer())) PC->ToggleInventoryUI();
-		return FReply::Handled();
-	}
+	if (!Event.IsRepeat()) if (const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this))
+		for (const UInputAction* Action : CloseActions)
+			if (Input->IsKeyMappedToAction(Event.GetKey(), Action))
+			{
+				if (auto* PC = Cast<ANextgenonePlayerController>(GetOwningPlayer())) PC->ToggleInventoryUI();
+				return FReply::Handled();
+			}
 	return Super::NativeOnKeyDown(Geometry, Event);
 }
 void UNGInventoryPanel::Refresh()

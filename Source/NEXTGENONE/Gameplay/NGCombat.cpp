@@ -91,6 +91,7 @@ void UNGCombatComponent::BeginPlay()
 }
 void UNGCombatComponent::EndPlay(const EEndPlayReason::Type Reason)
 {
+	StopPrimaryInput();
 	if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner())) Pawn->OnDeathChanged.RemoveDynamic(this, &ThisClass::HandleDeath);
 	WeaponHandles.Remove(GrantedASC.Get());
 	if (BoundItem.IsValid()) BoundItem->OnStatsChanged.RemoveDynamic(this, &ThisClass::OnRep_Ammo);
@@ -208,7 +209,32 @@ void UNGCombatComponent::OnRep_CurrentItem()
 	if (CurrentItem) CurrentItem->OnStatsChanged.AddDynamic(this, &ThisClass::OnRep_Ammo);
 	OnRep_Ammo();
 }
-void UNGCombatComponent::HandleDeath(bool bDead) { if (bDead && GetOwner()->HasAuthority()) SetEquippedOnServer(false); }
+void UNGCombatComponent::HandleDeath(bool bDead) { if (bDead) { StopPrimaryInput(); if (GetOwner()->HasAuthority()) SetEquippedOnServer(false); } }
+
+void UNGCombatComponent::StartPrimaryInput()
+{
+	StopPrimaryInput();
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	if (!Pawn || !Pawn->IsLocallyControlled() || Pawn->IsDead()) return;
+	if (!Equipment.bEquipped)
+	{
+		if (auto* ASC = Cast<UNGAbilitySystemComponent>(Pawn->GetAbilitySystemComponent())) ASC->TryActivateAbilityByInputTag(TAG_NGInputPunch);
+		return;
+	}
+	RequestFire();
+	if (Equipment.Definition && Equipment.Definition->bAutomatic && FMath::IsFinite(Equipment.Definition->FireInterval))
+		GetWorld()->GetTimerManager().SetTimer(PrimaryInputTimer, this, &ThisClass::ContinuePrimaryInput, FMath::Max(.05f, Equipment.Definition->FireInterval), true);
+}
+
+void UNGCombatComponent::StopPrimaryInput() { if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(PrimaryInputTimer); }
+
+void UNGCombatComponent::ContinuePrimaryInput()
+{
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	if (!Pawn || !Pawn->IsLocallyControlled() || Pawn->IsDead() || !Equipment.bEquipped || !Equipment.Definition || !Equipment.Definition->bAutomatic)
+	{ StopPrimaryInput(); return; }
+	RequestFire();
+}
 void UNGCombatComponent::RequestFire()
 {
 	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());

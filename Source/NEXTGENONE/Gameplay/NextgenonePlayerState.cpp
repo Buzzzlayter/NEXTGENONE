@@ -1,52 +1,71 @@
 #include "NextgenonePlayerState.h"
+#include "NGPlayerAbilitySystem.h"
 #include "NextgenoneCharacter.h"
-#include "NGJumpAbility.h"
-#include "NGDashAbility.h"
-#include "NGMantleAbility.h"
-#include "NGWeaponPickup.h"
-#include "NGInteraction.h"
-#include "NGPunchAbility.h"
+#include "Input/NGCharacterInputComponent.h"
+#include "Character/NGCharacterDefinition.h"
+#include "StateMachine/NGCharacterStateMachineComponent.h"
 
 ANextgenonePlayerState::ANextgenonePlayerState()
 {
-	JumpAbility = UNGJumpAbility::StaticClass();
-	DefaultPlayerAbilitySet = TSoftObjectPtr<UNGAbilitySet>(FSoftObjectPath(TEXT("/Game/Gameplay/Abilities/DA_PlayerAbilities.DA_PlayerAbilities")));
-	AbilitySystem = CreateDefaultSubobject<UNGAbilitySystemComponent>(TEXT("AbilitySystem"));
-	AbilitySystem->SetIsReplicated(true); AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
-	HealthSet = CreateDefaultSubobject<UNGHealthSet>(TEXT("HealthSet"));
-	Inventory = CreateDefaultSubobject<UNGInventoryManagerComponent>(TEXT("Inventory"));
-	SetNetUpdateFrequency(30.f);
+    AbilitySystem = CreateDefaultSubobject<UNGPlayerAbilitySystemComponent>(TEXT("AbilitySystem"));
+    AbilitySystem->SetIsReplicated(true);
+    AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+    HealthSet = CreateDefaultSubobject<UNGHealthSet>(TEXT("HealthSet"));
+    Inventory = CreateDefaultSubobject<UNGInventoryManagerComponent>(TEXT("Inventory"));
+    SetNetUpdateFrequency(30.f);
 }
-void ANextgenonePlayerState::StartLife(ANextgenoneCharacter* Pawn)
+
+bool ANextgenonePlayerState::StartLife(ANextgenoneCharacter* Pawn)
 {
-	if (!HasAuthority() || !Pawn || InitializedPawn == Pawn) return;
-	InitializedPawn = Pawn; ++LifeSerial;
-	AbilitySystem->InitAbilityActorInfo(this, Pawn);
-	AbilitySystem->SetLooseGameplayTagCount(TAG_NGDead, 0, EGameplayTagReplicationState::TagOnly);
-	if (!bPlayerAbilitiesGranted)
-	{
-		const UNGAbilitySet* Set = PlayerAbilitySet ? PlayerAbilitySet.Get() : DefaultPlayerAbilitySet.LoadSynchronous();
-		if (Set) Set->Give(AbilitySystem, this, PlayerHandles);
-		for (FGameplayAbilitySpec& Spec : AbilitySystem->GetActivatableAbilities())
-			if (Spec.GetDynamicSpecSourceTags().HasTagExact(TAG_NGInputPickup))
-			{ Spec.GetDynamicSpecSourceTags().AddTag(TAG_NGInputInteract); AbilitySystem->MarkAbilitySpecDirty(Spec); }
-		auto EnsureDefaultGrant = [this](FGameplayTag Tag, TSubclassOf<UGameplayAbility> Ability)
-		{
-			if (!Ability) return;
-			for (const FGameplayAbilitySpec& Existing : AbilitySystem->GetActivatableAbilities())
-				if (Existing.GetDynamicSpecSourceTags().HasTagExact(Tag)) return;
-			FGameplayAbilitySpec Spec(Ability, 1);
-			Spec.SourceObject = this;
-			Spec.GetDynamicSpecSourceTags().AddTag(Tag);
-			PlayerHandles.Abilities.Add(AbilitySystem->GiveAbility(Spec));
-		};
-		EnsureDefaultGrant(TAG_NGInputJump, JumpAbility);
-		EnsureDefaultGrant(TAG_NGInputDash, UNGDashAbility::StaticClass());
-		EnsureDefaultGrant(TAG_NGInputMantle, UNGMantleAbility::StaticClass());
-		EnsureDefaultGrant(TAG_NGInputInteract, UNGInteractionAbility::StaticClass());
-		EnsureDefaultGrant(TAG_NGInputPunch, UNGPunchAbility::StaticClass());
-		bPlayerAbilitiesGranted = true;
-	}
-	AbilitySystem->ApplyGameplayEffectToSelf(GetDefault<UNGInitHealthEffect>(), 1.f, AbilitySystem->MakeEffectContext());
-	ForceNetUpdate();
+    if (!HasAuthority() || bChangingLife || !IsValid(Pawn) || Pawn->IsDead() ||
+        Pawn->GetPlayerState<ANextgenonePlayerState>() != this || (GetPawn() && GetPawn() != Pawn)) return false;
+    UNGCharacterDefinition* Definition = Pawn->GameplayInput ? Pawn->GameplayInput->CharacterDefinition.Get() : nullptr;
+    FString Error;
+    if (!Definition || !Definition->ValidateAbilityGrants(Error))
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: assign a valid GameplayInput.CharacterDefinition on %s. %s"), *GetName(), *Pawn->GetName(), *Error);
+        return false;
+    }
+    if (GrantedPawn == Pawn)
+    {
+        if (GrantedDefinition != Definition || AbilitySystem->GetAvatarActor() != Pawn)
+        {
+            UE_LOG(LogTemp, Error, TEXT("%s: active CharacterDefinition/Avatar changed outside the lifecycle; release before rebinding."), *GetName());
+            return false;
+        }
+        return true;
+    }
+    TGuardValue<bool> LifeGuard(bChangingLife, true);
+    if (AActor* PriorAvatar = AbilitySystem->GetAvatarActor(); PriorAvatar && PriorAvatar != Pawn)
+        if (auto* Machine = PriorAvatar->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->SuspendResources();
+    if (ANextgenoneCharacter* PreviousGrantPawn = GrantedPawn.Get()) ReleaseCharacterAbilities(PreviousGrantPawn);
+    else { CharacterHandles.Remove(AbilitySystem); GrantedDefinition.Reset(); }
+    // Cancel old actions before changing actor info: callbacks must never operate on the next Avatar.
+    AbilitySystem->ClearAbilityInput();
+    AbilitySystem->CancelAllAbilities();
+    const bool bNewLife = InitializedPawn != Pawn;
+    if (bNewLife) { InitializedPawn = Pawn; ++LifeSerial; }
+    AbilitySystem->InitAbilityActorInfo(this, Pawn);
+    AbilitySystem->SetLooseGameplayTagCount(TAG_NGDead, 0, EGameplayTagReplicationState::TagOnly);
+    if (bNewLife)
+        AbilitySystem->ApplyGameplayEffectToSelf(GetDefault<UNGInitHealthEffect>(), 1.f, AbilitySystem->MakeEffectContext());
+    if (!Definition->GiveAbilitySets(AbilitySystem, Pawn, CharacterHandles, bNewLife)) return false;
+    GrantedPawn = Pawn;
+    GrantedDefinition = Definition;
+    ForceNetUpdate();
+    return true;
+}
+
+void ANextgenonePlayerState::ReleaseCharacterAbilities(ANextgenoneCharacter* ExpectedPawn)
+{
+    if (!HasAuthority() || !ExpectedPawn || GrantedPawn != ExpectedPawn) return;
+    GrantedPawn.Reset(); GrantedDefinition.Reset();
+    CharacterHandles.Remove(AbilitySystem);
+}
+
+void ANextgenonePlayerState::EndPlay(EEndPlayReason::Type Reason)
+{
+    if (HasAuthority()) CharacterHandles.Remove(AbilitySystem);
+    GrantedPawn.Reset(); GrantedDefinition.Reset();
+    Super::EndPlay(Reason);
 }

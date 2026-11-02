@@ -22,6 +22,8 @@ public class UIModule : ModuleRules
                 "CoreUObject",
                 "Engine",
                 "GameplayTags",
+				"InputCore",
+				"EnhancedInput",
                 "GCFSM",
                 "UMG",
             }
@@ -32,8 +34,6 @@ public class UIModule : ModuleRules
             {
                 "Slate",
                 "SlateCore",
-                "InputCore",
-                "EnhancedInput",
                 "DeveloperSettings",
                 "DeveloperSettings", 
                 "StructUtils"
