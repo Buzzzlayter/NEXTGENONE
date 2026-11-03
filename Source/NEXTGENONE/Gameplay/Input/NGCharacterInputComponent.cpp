@@ -1,7 +1,5 @@
 #include "NGCharacterInputComponent.h"
 
-#include "Character/NGCharacterDefinition.h"
-#include "Input/NGGameplayInputConfig.h"
 #include "Input/PlayerInputSubsystem.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Character/ALSBaseCharacter.h"
@@ -28,27 +26,24 @@ UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputUnequip, "Input.Equipment.Unequip");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputSlot, "Input.Equipment.SelectSlot");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputReload, "Input.Equipment.Reload");
 
-void UNGCharacterInputComponent::AcquireInputContexts()
+void UNGCharacterInputComponent::BindInputPolicy()
 {
 	const APawn* Pawn = Cast<APawn>(GetOwner());
 	const APlayerController* PC = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
 	UPlayerInputSubsystem* Input = PC && PC->GetLocalPlayer() ? PC->GetLocalPlayer()->GetSubsystem<UPlayerInputSubsystem>() : nullptr;
-	if (!Input || !CharacterDefinition || !CharacterDefinition->InputConfig) return;
+	if (!Input) return;
 	LocalInput = Input;
 	Input->OnGameplayInputBlockedChanged.AddUniqueDynamic(this, &ThisClass::GameplayBlocked);
 	GameplayBlocked(Input->IsGameplayInputBlocked());
-	for (const auto& Entry : CharacterDefinition->InputConfig->MappingContexts)
-		ContextHandles.Add(Input->AcquireMappingContext(this, Entry.MappingContext, Entry.Priority, true));
 }
 
-void UNGCharacterInputComponent::ReleaseInputContexts()
+void UNGCharacterInputComponent::UnbindInputPolicy()
 {
 	if (UPlayerInputSubsystem* Input = LocalInput.Get())
 	{
 		Input->OnGameplayInputBlockedChanged.RemoveDynamic(this, &ThisClass::GameplayBlocked);
-		for (FGuid Handle : ContextHandles) Input->ReleaseMappingContext(Handle);
 	}
-	ContextHandles.Reset(); LocalInput.Reset();
+	LocalInput.Reset();
 }
 
 void UNGCharacterInputComponent::GameplayBlocked(bool bBlocked)

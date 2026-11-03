@@ -36,26 +36,17 @@ void UPlayerInputSubsystem::SetInputMode(UObject* WCO, EInputMode Mode, bool bFl
 bool UPlayerInputSubsystem::SetPlayerInputMode(EInputMode Mode, bool bFlushInput)
 {
 	ULocalPlayer* LocalPlayer = GetLocalPlayer();
-	if (!ensureMsgf(LocalPlayer, TEXT("Input subsystem has no local player.")))
-	{
-		return false;
-	}
+	if (!ensureMsgf(LocalPlayer, TEXT("Input subsystem has no local player."))) return false;
+	
 	UWorld* World = GetWorld();
-	if (!ensureMsgf(World, TEXT("Input subsystem has no world.")))
-	{
-		return false;
-	}
+	if (!ensureMsgf(World, TEXT("Input subsystem has no world."))) return false;
+	
 	APlayerController* PlayerController = LocalPlayer->GetPlayerController(World);
-	if (!ensureMsgf(PlayerController, TEXT("Input subsystem has no player controller.")))
-	{
-		return false;
-	}
+	if (!ensureMsgf(PlayerController, TEXT("Input subsystem has no player controller."))) return false;
+	
 	if (!ensureMsgf(LocalPlayer->ViewportClient && LocalPlayer->ViewportClient->GetGameViewportWidget().IsValid(),
-		TEXT("Input subsystem has no game viewport widget.")))
-	{
-		return false;
-	}
-
+		TEXT("Input subsystem has no game viewport widget."))) return false;
+	
 	switch (Mode)
 	{
 		case EInputMode::UI:
@@ -92,20 +83,14 @@ bool UPlayerInputSubsystem::SetPlayerInputMode(EInputMode Mode, bool bFlushInput
 
 void UPlayerInputSubsystem::SetWidgetToFocus(UWidget* WidgetToFocus)
 {
-	if (!ensureMsgf(WidgetToFocus, TEXT("Cannot focus a null widget.")))
-	{
-		return;
-	}
+	if (!ensureMsgf(WidgetToFocus, TEXT("Cannot focus a null widget."))) return;
+	
 	ULocalPlayer* LocalPlayer = GetLocalPlayer();
-	if (!ensureMsgf(LocalPlayer, TEXT("Input subsystem has no local player to focus a widget.")))
-	{
-		return;
-	}
+	if (!ensureMsgf(LocalPlayer, TEXT("Input subsystem has no local player to focus a widget."))) return;
+	
 	if (!ensureMsgf(WidgetToFocus->GetOwningLocalPlayer() == LocalPlayer,
-		TEXT("Cannot focus a widget owned by a different local player.")))
-	{
-		return;
-	}
+		TEXT("Cannot focus a widget owned by a different local player."))) return;
+	
 	FReply& SlateOperations = LocalPlayer->GetSlateOperations();
 	SlateOperations.SetUserFocus(WidgetToFocus->TakeWidget());
 }

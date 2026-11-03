@@ -2,6 +2,8 @@
 
 Status: implementation compiled; offline asset migration completed. No gameplay tests authorized or executed.
 
+Cleanup, 2026-11-03: NGSettingsAssets.cpp and NGSetup -SettingsOnly/-RemoveALSMenu were removed. Migration commands below describe completed historical work, not supported setup steps. Existing settings widgets/runtime classes are preserved; further Blueprint configuration is manual.
+
 ## Implementation
 
 `NGSettingsPanel.h/.cpp`: native UMG screen, staged fields with Apply / defaults / Back; machine graphics settings through UGameUserSettings; local persisted sensitivity, Y inversion and master volume through UNGInputPreferences. Graphics: overall quality, supported resolution, window mode, VSync, FPS cap. Overall quality Custom preserves granular quality. Input section documents current core bindings; it is not a key rebinding editor. Sensitivity multiplies PlayerController look input, including gamepad look, before the unchanged ALS camera path. Master volume applies to the current world's audio device and is restored on local Controller BeginPlay.

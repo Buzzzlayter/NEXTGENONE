@@ -14,7 +14,6 @@
 #include "GameFramework/GameUserSettings.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HFSMState.h"
-#include "NGDebugState.h"
 #include "Input/PlayerInputSubsystem.h"
 #include "AudioDevice.h"
 #include "Engine/World.h"
@@ -120,14 +119,14 @@ FReply UNGSettingsPanel::NativeOnPreviewKeyDown(const FGeometry& Geometry,const 
 		for (const UInputAction* Action : CloseActions) if (Input->IsKeyMappedToAction(Event.GetKey(), Action)) { Cancel(); return FReply::Handled(); }
 	return Super::NativeOnPreviewKeyDown(Geometry,Event);
 }
-UNGSettingsScreenMounter::UNGSettingsScreenMounter() { WidgetClass=UNGSettingsPanel::StaticClass(); bAddToViewportIfNoLayout=true; FallbackZOrder=100; }
-bool UNGSettingsScreenMounter::Enter()
+UNGSettingsScreenMounter::UNGSettingsScreenMounter() { WidgetClass=UNGSettingsPanel::StaticClass();}
+void UNGSettingsScreenMounter::Enter()
 {
-	if (!Super::Enter()) return false;
+	Super::Enter();
 	auto* PC=Cast<ANextgenonePlayerController>(GetPlayerController()); auto* Panel=Cast<UNGSettingsPanel>(GetWidget());
-	if (!PC || !Panel) { Super::AbortEnter(); return false; }
+	if (!PC || !Panel) { Super::Exit(NAME_None); return; }
 	auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
-	if (!Input) { Super::AbortEnter(); return false; }
+	if (!Input) { Super::Exit(NAME_None); return; }
 	AppliedInput = Input;
 	FPlayerInputPolicy Policy; Policy.InputMode = EInputMode::UI; Policy.bBlockGameplay = true;
 	Policy.bSetCursorMode = true; Policy.CursorMode = EGamepadCursorMode::Grid;
@@ -135,9 +134,11 @@ bool UNGSettingsScreenMounter::Enter()
 	PC->bSettingsUIOpen = true;
 	Panel->OnBack.AddUniqueDynamic(this,&ThisClass::Back); Panel->SetUserFocus(PC);
 	Input->SetWidgetToFocus(Panel);
-	return true;
 }
-void UNGSettingsScreenMounter::Back() { NGTriggerUIEvent(GetState(),TEXT("Back")); }
+void UNGSettingsScreenMounter::Back()
+{
+	
+}
 void UNGSettingsScreenMounter::Release()
 {
 	if (auto* Panel=Cast<UNGSettingsPanel>(GetWidget())) Panel->OnBack.RemoveDynamic(this,&ThisClass::Back);
@@ -146,4 +147,3 @@ void UNGSettingsScreenMounter::Release()
 	if (auto* PC=Cast<ANextgenonePlayerController>(GetPlayerController())) PC->bSettingsUIOpen=false;
 }
 void UNGSettingsScreenMounter::Exit(FName Event) { Release(); Super::Exit(Event); }
-void UNGSettingsScreenMounter::AbortEnter() { Release(); Super::AbortEnter(); }

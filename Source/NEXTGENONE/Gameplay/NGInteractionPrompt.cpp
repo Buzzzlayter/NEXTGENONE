@@ -84,5 +84,5 @@ void UNGInteractionPrompt::NativeDestruct()
 }
 UNGInteractionPromptMounter::UNGInteractionPromptMounter()
 {
-	WidgetClass=UNGInteractionPrompt::StaticClass(); bAddToViewportIfNoLayout=true; FallbackZOrder=20;
+	WidgetClass=UNGInteractionPrompt::StaticClass();
 }

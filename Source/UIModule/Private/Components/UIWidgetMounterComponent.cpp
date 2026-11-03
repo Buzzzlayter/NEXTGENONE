@@ -7,47 +7,31 @@
 #include "LayoutTemplate/UILayoutTemplate.h"
 #include "LayoutTemplate/WidgetPlaceholder.h"
 
-bool UUIWidgetMounterComponent::Enter()
+void UUIWidgetMounterComponent::Enter()
 {
-	if (!ensureMsgf(GetState(), TEXT("Widget Mounter has no owning state.")))
-	{
-		return false;
-	}
-	if (!ensureMsgf(WidgetClass, TEXT("Widget Mounter has no widget class.")))
-	{
-		return false;
-	}
-
+	if (!ensureMsgf(GetState(), TEXT("Widget Mounter has no owning state."))) return;
+	if (!ensureMsgf(WidgetClass, TEXT("Widget Mounter has no widget class."))) return;
+	if (!ensureMsgf(PlaceholderID.IsValid(), TEXT("Widget Mounter has no PlaceholderID."))) return;
+	
 	APlayerController* PlayerController = GetPlayerController();
 	if (!ensureMsgf(IsValid(PlayerController) && PlayerController->GetLocalPlayer(),
-		TEXT("Widget Mounter requires an explicit local player context.")))
-	{
-		return false;
-	}
-
+		TEXT("Widget Mounter requires an explicit local player context."))) return;
+	
 	Widget = CreateWidget<UUserWidget>(PlayerController, WidgetClass);
-	if (!ensureMsgf(Widget, TEXT("Widget Mounter could not create its widget.")))
-	{
-		return false;
-	}
-	if (!MountWidget() || !Super::Enter())
+	if (!ensureMsgf(Widget, TEXT("Widget Mounter could not create its widget."))) return;
+	
+	if (!MountWidget())
 	{
 		DemountWidget(true);
-		return false;
+		return;
 	}
-	return true;
+	Super::Enter();
 }
 
 void UUIWidgetMounterComponent::Exit(FName Event)
 {
 	Super::Exit(Event);
 	DemountWidget();
-}
-
-void UUIWidgetMounterComponent::AbortEnter()
-{
-	Super::Exit(NAME_None);
-	DemountWidget(true);
 }
 
 UUserWidget* UUIWidgetMounterComponent::GetWidget() const
@@ -57,20 +41,17 @@ UUserWidget* UUIWidgetMounterComponent::GetWidget() const
 
 UUILayoutTemplate* UUIWidgetMounterComponent::ResolveLayout() const
 {
-	if (bUseLayer)
-	{
-		UHFSMStateComponent* SorterComponent = nullptr;
-		GetState()->GetClosestComponentInHierarchyUp(ULayoutTemplatesSorter::StaticClass(), SorterComponent);
+	UHFSMStateComponent* SorterComponent = nullptr;
+	GetState()->GetClosestComponentInHierarchyUp(ULayoutTemplatesSorter::StaticClass(), SorterComponent);
 
-		if (ULayoutTemplatesSorter* Sorter = Cast<ULayoutTemplatesSorter>(SorterComponent))
+	if (ULayoutTemplatesSorter* Sorter = Cast<ULayoutTemplatesSorter>(SorterComponent))
+	{
+		if (UUILayoutTemplate* Layout = Sorter->GetLayer(Layer))
 		{
-			if (UUILayoutTemplate* Layout = Sorter->GetLayer(Layer))
-			{
-				return Layout;
-			}
+			return Layout;
 		}
 	}
-
+	
 	UHFSMStateComponent* LayoutComponent = nullptr;
 	GetState()->GetClosestComponentInHierarchyUp(UUILayoutTemplate::StaticClass(), LayoutComponent);
 	return Cast<UUILayoutTemplate>(LayoutComponent);
@@ -78,11 +59,8 @@ UUILayoutTemplate* UUIWidgetMounterComponent::ResolveLayout() const
 
 bool UUIWidgetMounterComponent::MountWidget()
 {
-	if (!Widget)
-	{
-		return false;
-	}
-
+	if (!Widget) return false;
+	
 	MountedLayout = ResolveLayout();
 	if (MountedLayout && PlaceholderID.IsValid())
 	{
@@ -94,23 +72,15 @@ bool UUIWidgetMounterComponent::MountWidget()
 
 		return MountedLayout->MountWidgetTo(Widget, PlaceholderID);
 	}
-
-	if (bAddToViewportIfNoLayout)
-	{
-		return ensureMsgf(Widget->AddToPlayerScreen(FallbackZOrder),
-			TEXT("Widget Mounter could not add its widget to the owning player's screen."));
-	}
+	
 	ensureMsgf(false, TEXT("Widget Mounter has no layout target or viewport fallback."));
 	return false;
 }
 
 void UUIWidgetMounterComponent::DemountWidget(bool bImmediate)
 {
-	if (!Widget)
-	{
-		return;
-	}
-
+	if (!Widget) return;
+	
 	if (MountedLayout && PlaceholderID.IsValid())
 	{
 		if (bImmediate)

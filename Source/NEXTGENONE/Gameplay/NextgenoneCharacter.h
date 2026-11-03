@@ -3,11 +3,11 @@
 #include "CoreMinimal.h"
 #include "Character/ALSCharacter.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayTagContainer.h"
 #include "NextgenoneCharacter.generated.h"
 
 class ANextgenonePlayerState;
 class UNGCombatComponent;
-class UNGMantleAdapterComponent;
 class UNGInteractionComponent;
 class UNGAimComponent;
 class UNGHitReactionComponent;
@@ -26,7 +26,6 @@ class NEXTGENONE_API ANextgenoneCharacter : public AALSCharacter, public IAbilit
 public:
 	ANextgenoneCharacter(const FObjectInitializer& Init);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGCombatComponent> Combat;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGMantleAdapterComponent> MantleAdapter;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGInteractionComponent> Interaction;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGAimComponent> Aim;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGHitReactionComponent> HitReaction;
@@ -43,18 +42,16 @@ public:
 	virtual void JumpAction_Implementation(bool bValue) override;
 	virtual void AimAction_Implementation(bool bValue) override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void RagdollStart() override;
+	virtual void RagdollEnd() override;
 	void ApplyCombatPresentation();
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
-	UFUNCTION(BlueprintPure, Category="Gameplay") bool IsDead() const { return bDead; }
+	UFUNCTION(BlueprintPure, Category="Gameplay") bool IsDead() const;
 	UFUNCTION(BlueprintPure, Category="Gameplay") float GetHealth() const;
 	UFUNCTION(BlueprintPure, Category="Gameplay") float GetMaxHealth() const;
 	UPROPERTY(BlueprintAssignable) FNGHealthChanged OnHealthChanged;
 	UPROPERTY(BlueprintAssignable) FNGDeathChanged OnDeathChanged;
 	void TryInitializeGameplay();
 	void UnbindGameplay();
-protected:
-	UPROPERTY(ReplicatedUsing=OnRep_Dead, BlueprintReadOnly, Category="Gameplay") bool bDead = false;
-	UFUNCTION() void OnRep_Dead();
 private:
 	bool bJumpInputHeld = false;
 	bool bAimInputHeld = false;
@@ -62,4 +59,5 @@ private:
 	FDelegateHandle HealthHandle;
 	FDelegateHandle MaxHealthHandle;
 	void HealthChanged(const FOnAttributeChangeData& Data);
+	void StateChanged(FGameplayTag Previous, FGameplayTag Current);
 };

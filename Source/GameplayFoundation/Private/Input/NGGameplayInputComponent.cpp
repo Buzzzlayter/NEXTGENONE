@@ -2,7 +2,6 @@
 
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "AbilitySystemGlobals.h"
-#include "Character/NGCharacterDefinition.h"
 #include "Input/NGGameplayInputConfig.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/Pawn.h"
@@ -25,22 +24,22 @@ void UNGGameplayInputComponent::InitializeInput(UInputComponent* Input)
 	const APawn* Pawn = Cast<APawn>(GetOwner());
 	auto* Enhanced = Cast<UEnhancedInputComponent>(Input);
 	if (!Pawn || !Pawn->IsLocallyControlled() || !Pawn->GetController() || Pawn->GetController()->GetPawn() != Pawn || !Enhanced) return;
-	const UNGGameplayInputConfig* Config = CharacterDefinition ? CharacterDefinition->InputConfig.Get() : nullptr;
-	if (!Config)
+	
+	if (!InputConfig)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("%s: assign CharacterDefinition.InputConfig on the Pawn's GameplayInput component; no legacy bindings are installed."), *GetNameSafe(GetOwner()));
 		return;
 	}
 	BoundInput = Enhanced;
 	TSet<const UInputAction*> BoundActions;
-	for (const FNGTaggedInputAction& Entry : Config->NativeInputActions)
+	for (const FNGTaggedInputAction& Entry : InputConfig->NativeInputActions)
 	{
 		if (!Entry.InputAction || !Entry.InputTag.IsValid() || BoundActions.Contains(Entry.InputAction)) continue;
 		BoundActions.Add(Entry.InputAction);
 		for (ETriggerEvent Phase : { ETriggerEvent::Started, ETriggerEvent::Triggered, ETriggerEvent::Completed, ETriggerEvent::Canceled })
 			BindingHandles.Add(Enhanced->BindAction(Entry.InputAction, Phase, this, &ThisClass::NativeInput, Entry.InputTag, Phase).GetHandle());
 	}
-	for (const FNGTaggedInputAction& Entry : Config->AbilityInputActions)
+	for (const FNGTaggedInputAction& Entry : InputConfig->AbilityInputActions)
 	{
 		if (!Entry.InputAction || !Entry.InputTag.IsValid() || BoundActions.Contains(Entry.InputAction)) continue;
 		BoundActions.Add(Entry.InputAction);
@@ -48,7 +47,7 @@ void UNGGameplayInputComponent::InitializeInput(UInputComponent* Input)
 		for (ETriggerEvent Phase : { ETriggerEvent::Completed, ETriggerEvent::Canceled })
 			BindingHandles.Add(Enhanced->BindAction(Entry.InputAction, Phase, this, &ThisClass::AbilityReleased, Entry.InputTag).GetHandle());
 	}
-	AcquireInputContexts();
+	BindInputPolicy();
 }
 
 void UNGGameplayInputComponent::NativeInput(const FInputActionValue& Value, FGameplayTag Tag, ETriggerEvent Phase)
@@ -111,7 +110,7 @@ void UNGGameplayInputComponent::SetGameplayInputBlocked(bool bBlocked)
 void UNGGameplayInputComponent::ShutdownInput()
 {
 	ReleaseHeldInput();
-	ReleaseInputContexts();
+	UnbindInputPolicy();
 	if (UEnhancedInputComponent* Input = BoundInput.Get())
 		for (uint32 Handle : BindingHandles) Input->RemoveBindingByHandle(Handle);
 	BindingHandles.Reset(); BoundInput.Reset(); SuppressedUntilRelease.Reset(); bGameplayBlocked = false;

@@ -1,6 +1,6 @@
 # GameplayFoundation runtime module
 
-2026-11-02. Общий модуль выделен; следующим пакетом добавлена новая обработка input. FSM персонажа пока не подключена.
+2026-11-02. Общий модуль выделен; следующим пакетом добавлена новая обработка input. FSM персонажа подключена; актуальный контракт в Docs/Gameplay/CharacterStateMachine.md.
 
 ## Границы
 
@@ -8,9 +8,9 @@
 
 Структура Source/GameplayFoundation:
 
-- Public/AbilitySystem/NGAbilitySystem.h — ASC с tag input, HealthSet, init/damage effects, Ability Set, grant/handle structs и экспортируемые native tags.
-- Public/Character/NGCharacterDefinition.h — конфигурация базовых Ability Sets и InputConfig; без привязки к классу Pawn.
-- Public/Input/NGGameplayInputConfig.h — Gameplay IA/tag bindings, IMC/priority и editor-валидация.
+- Public/AbilitySystem/NGAbilitySystem.h — ASC с tag input, HealthSet, init/damage effects, прямые grant/handle structs и экспортируемые native tags.
+- Public/Character/NGCharacterDefinition.h — InputConfig, без базовой выдачи способностей; без привязки к классу Pawn.
+- Public/Input/NGGameplayInputConfig.h — только Gameplay IA/tag bindings и editor-валидация маршрутов; IMC/priority принадлежат ControlStateDefinition.
 - Public/Input/NGGameplayInputComponent.h — повторно используемые Pawn bindings, tag-based GAS input, симметричный release/shutdown. Не зависит от UI/ALS.
 - Private — реализации и регистрация runtime-модуля.
 
@@ -35,6 +35,8 @@ HealthSet больше не приводит Avatar к ANextgenoneCharacter. У�
 При первоначальном переносе Blueprint/Data Assets не пересохранялись; последующая ограниченная миграция описана выше. Компонентные archetypes PlayerState и сетевое поведение в игре ещё не проверены. После обновления проекта в IDE новые файлы находятся в Source/GameplayFoundation. Новые типы ассетов доступны после полной сборки и запуска редактора.
 
 ## Следующий пакет
+
+Актуализация 2026-11-03: FSM уже подключена. Core ControlStateDefinition содержит StateTag, необязательный PresentationCue, прямые Abilities/Effects и MappingContexts. AbilitySet удалён; CharacterDefinition хранит только InputConfig. Проектные GA_Death, DeadStateEffect и ALS cue остаются в NEXTGENONE. Общий модуль не зависит от ALS/UI/NEXTGENONE. Текущий контракт: CharacterStateMachine.md; старые заметки ниже описывают предыдущие этапы.
 
 Сборка NEXTGENONEEditor Win64 Development: PASS (UBT exit 0), включая компиляцию проектного ASC и линковку GameplayFoundation. Лог: Saved/Logs/NGGameplayFoundationModuleBuild.log. PIE, игровые/сетевые тесты и загрузка Blueprint через redirects не запускались.
 

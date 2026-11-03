@@ -61,9 +61,8 @@ class NEXTGENONE_API UNGSettingsScreenMounter : public UUIWidgetMounterComponent
 	GENERATED_BODY()
 public:
 	UNGSettingsScreenMounter();
-	virtual bool Enter() override;
+	virtual void Enter() override;
 	virtual void Exit(FName Event) override;
-	virtual void AbortEnter() override;
 private:
 	UFUNCTION() void Back();
 	void Release();

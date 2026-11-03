@@ -4,7 +4,7 @@
 #include "LayoutLayer.h"
 #include "LayoutWidget.h"
 #include "GameplayTagContainer.h"
-#include "Components/HFSMPlayerStateComponent.h"
+#include "HFSMStateComponent.h"
 #include "UILayoutTemplate.generated.h"
 
 USTRUCT()
@@ -26,7 +26,7 @@ struct FUIWidgetDemountData
 };
 
 UCLASS(BlueprintType)
-class UIMODULE_API UUILayoutTemplate : public UHFSMPlayerStateComponent
+class UIMODULE_API UUILayoutTemplate : public UHFSMStateComponent
 {
 	GENERATED_BODY()
 public:
@@ -39,8 +39,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetOpacity(float Opacity);
 	
-	virtual bool Enter() override;
-	virtual void AbortEnter() override;
+	virtual void Enter() override;
 	virtual void Tick(float deltaTime) override;
 	virtual void Exit(FName event) override;
 	void LayersUpdate(bool& bOutConsumeDrawing);

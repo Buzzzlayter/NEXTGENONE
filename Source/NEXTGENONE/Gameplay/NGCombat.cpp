@@ -130,25 +130,20 @@ void UNGCombatComponent::SetEquippedOnServer(bool bEquip)
 	const auto* ItemDef = CurrentItem ? GetDefault<UNGInventoryItemDefinition>(CurrentItem->GetItemDef()) : nullptr;
 	if (bEquip && (!ItemDef || !ItemDef->Weapon || !BoundInventory->Contains(CurrentItem))) return;
 	WeaponHandles.Remove(GrantedASC.Get()); GrantedASC.Reset();
-	WeaponAbilities = nullptr;
 	bAiming = false; OnRep_Aiming();
 	Equipment.bEquipped = bEquip; ++Equipment.Revision;
 	if (bEquip)
 	{
 		Equipment.Definition = ItemDef->Weapon;
-		if (!WeaponAbilities)
-		{
-			WeaponAbilities = NewObject<UNGAbilitySet>(this);
-			FNGAbilityGrant Grant; Grant.Ability = Equipment.Definition->FireAbilityClass.LoadSynchronous();
-			if (!Grant.Ability) Grant.Ability = UNGFireAbility::StaticClass();
-			Grant.InputTag = TAG_NGFireInput;
-			WeaponAbilities->Abilities.Add(Grant);
-			Grant.Ability = Equipment.Definition->ReloadAbilityClass.LoadSynchronous();
-			if (!Grant.Ability) Grant.Ability = UNGReloadAbility::StaticClass();
-			Grant.InputTag = TAG_NGReloadInput;
-			WeaponAbilities->Abilities.Add(Grant);
-		}
-		WeaponAbilities->Give(ASC, this, WeaponHandles); GrantedASC = ASC;
+		FNGAbilityGrant Grant; Grant.Ability = Equipment.Definition->FireAbilityClass.LoadSynchronous();
+		if (!Grant.Ability) Grant.Ability = UNGFireAbility::StaticClass();
+		Grant.InputTag = TAG_NGFireInput;
+		WeaponHandles.Abilities.Add(Grant.Give(ASC, this));
+		Grant.Ability = Equipment.Definition->ReloadAbilityClass.LoadSynchronous();
+		if (!Grant.Ability) Grant.Ability = UNGReloadAbility::StaticClass();
+		Grant.InputTag = TAG_NGReloadInput;
+		WeaponHandles.Abilities.Add(Grant.Give(ASC, this));
+		GrantedASC = ASC;
 	}
 	OnRep_CurrentItem(); OnRep_Equipment(); OnRep_Ammo(); Pawn->ForceNetUpdate();
 }

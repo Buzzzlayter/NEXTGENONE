@@ -3,7 +3,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Components/ActorComponent.h"
-#include "Components/HFSMPlayerStateComponent.h"
+#include "HFSMStateComponent.h"
 #include "Components/InputComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
@@ -72,7 +72,7 @@ bool FHFSMContextOwnershipTest::RunTest(const FString& Parameters)
 	UGCFSM* FSM = Root->MakeFSM(TEXT("OwnershipTest"), EGCFSMReplicationOptions::NonReplicated, Exec);
 	TStrongObjectPtr<UHFSMState> State(Cast<UHFSMState>(UGCFSMState::MakeStateObject(
 		FSM, UHFSMState::StaticClass(), false, 0.f, TEXT("OwnershipTest"))));
-	UHFSMPlayerStateComponent* PlayerComponent = NewObject<UHFSMPlayerStateComponent>(State.Get());
+	UHFSMStateComponent* PlayerComponent = NewObject<UHFSMStateComponent>(State.Get());
 	PlayerComponent->Init(State.Get());
 	TestEqual(TEXT("State keeps the original GCFSM context"), State->GetContextOwner(), static_cast<UObject*>(HUD));
 	TestEqual(TEXT("Component keeps the state context"), PlayerComponent->GetContextOwner(), static_cast<UObject*>(HUD));
@@ -83,15 +83,16 @@ bool FHFSMContextOwnershipTest::RunTest(const FString& Parameters)
 	UInputComponent* OwnerInput = OwnerController->InputComponent;
 	FirstInput->BindAction(TEXT("Unrelated"), IE_Pressed, PlayerComponent, &UHFSMStateComponent::OnEnter);
 	OwnerInput->BindAction(TEXT("Owned"), IE_Pressed, PlayerComponent, &UHFSMStateComponent::OnEnter);
-	if (TestTrue(TEXT("Player component enters with its explicit owner"), PlayerComponent->Enter()))
+	PlayerComponent->Enter();
 	{
 		HUD->PlayerOwner = FirstController;
-		TestEqual(TEXT("Player context stays fixed until exit"), PlayerComponent->GetLocalPlayer(), OwnerPlayer.Get());
-		TestEqual(TEXT("Context library respects the captured player"),
-			UHFSMLibrary::ResolveLocalPlayer(PlayerComponent), OwnerPlayer.Get());
-		PlayerComponent->AbortEnter();
-		TestEqual(TEXT("Rollback clears only the owning controller's bindings"), OwnerInput->GetNumActionBindings(), 0);
-		TestEqual(TEXT("Rollback leaves another controller untouched"), FirstInput->GetNumActionBindings(), 1);
+		TestEqual(TEXT("State resolves the current context owner"), State->GetPlayerController(), FirstController);
+		TestEqual(TEXT("Component follows its state's current player"), PlayerComponent->GetLocalPlayer(), FirstPlayer.Get());
+		TestEqual(TEXT("Context library resolves the same player"),
+			UHFSMLibrary::ResolveLocalPlayer(PlayerComponent), FirstPlayer.Get());
+		PlayerComponent->Exit(NAME_None);
+		TestEqual(TEXT("Exit preserves direct Controller bindings"), OwnerInput->GetNumActionBindings(), 1);
+		TestEqual(TEXT("Exit leaves another controller untouched"), FirstInput->GetNumActionBindings(), 1);
 	}
 
 	TStrongObjectPtr<UGCFSMRootState> WorldRoot(UGCFSMRootState::MakeRootStateObject(World.Get()));
@@ -104,7 +105,7 @@ bool FHFSMContextOwnershipTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Generic component supports a world owner"), GenericComponent->GetContextOwner(),
 		static_cast<UObject*>(World.Get()));
 	FirstInput->BindAction(TEXT("Generic"), IE_Pressed, GenericComponent, &UHFSMStateComponent::OnEnter);
-	if (TestTrue(TEXT("Generic component enters without acquiring player input"), GenericComponent->Enter()))
+	GenericComponent->Enter();
 	{
 		GenericComponent->Exit(NAME_None);
 		TestEqual(TEXT("Generic component does not manage player bindings"), FirstInput->GetNumActionBindings(), 2);

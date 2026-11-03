@@ -1,72 +1,62 @@
-# FSM персонажа и временные ресурсы
+# FSM персонажа и ресурсы состояний
 
-## Создано через MCP — 2026-11-03
+Актуализация lifecycle: UHFSMStateComponent и все наследники используют **void Enter/Exit**, как UHFSMState. Общий отказ/откат входа, AbortEnter, OnEnterFailed, HasEnteredSuccessfully и отдельный ActiveComponents удалены по решению пользователя. State вызывает все настроенные компоненты; каждый проверяет свои данные, освобождает собственные частичные ресурсы и делает return при ошибке. Ошибка одного компонента не откатывает остальные. Внутренние GAS validation/grant/handle проверки и барьер готовности ресурсов для смены Avatar сохранены. Blueprint пользователь настраивает сам: удалить старые узлы OnEnterFailed/HasEnteredSuccessfully и ненужный переход ResourceFailure, если он обслуживал только общий rollback. Более ранние описания rollback ниже исторические.
 
-Дополнение: после пользовательского запуска лог сообщил `assign a valid GameplayInput.CharacterDefinition`. Через MCP созданы /Game/Gameplay/Definitions/DA_Character_Default и DA_Input_Character, Definition назначен на GameplayInput Pawn, его AbilitySets ссылается на существующий DA_PlayerAbilities. Затем InputConfig заполнен Gameplay actions/mappings для клавиатуры и геймпада, UI получил отдельные contexts; подробности и раскладка в CharacterInputSetup.md. Повторный запуск игры агентом не выполнялся. Дополнительный Blueprint Launch на BeginPlay не добавлялся: штатный C++ launch ожидает успешную инициализацию GAS.
+Актуальный контракт — 2026-11-03. Персонаж не получает базовых способностей при создании/possession. Их единственный источник — активные UNGControlStateDefinition. UNGAbilitySet и DA_PlayerAbilities удалены. CharacterDefinition содержит InputConfig, без базовых GAS grants.
 
-В BP_NextgenoneCharacter:EventGraph добавлена GCFSM entry **FSM** (это фактическое имя стартового узла, MachineName также FSM). Branch по IsDead сразу выбирает Dead для уже мёртвого Pawn, иначе Alive. Alive → Dead через событие **State.Dead**; использован уже зарегистрированный native tag, новый словарь тегов не требуется. Ошибка входа в любой из состояний посылает ResourceFailure и ведёт в FSM Stop.
+## Граф и владельцы
 
-Созданы в /Game/Gameplay/States:
+Граф находится в BP_NextgenoneCharacter:EventGraph: Start **FSM** → Branch IsDead → Alive / Dead; Alive → Dead по **State.Dead**; ResourceFailure → Stop. На Pawn один native CharacterStateMachine (GCFSM replication component), MachineName=FSM, DeathEvent=State.Dead, deferProxyInitialization=true. Отдельный Launch на BeginPlay не нужен: C++ ждёт BeginPlay и готовый ASC. GCFSM replicated context требует Actor, поэтому граф не переносится в ActorComponent.
 
-- FSM_CharacterAlive и FSM_CharacterDead — наследники UHFSMState с Character State Resources и обработкой OnEnterFailed.
-- DA_CharacterState_Alive и DA_CharacterState_Dead — пустые временные GAS scopes; Dead блокирует Gameplay input и не требует ASC.
+ASC остаётся единственным на PlayerState. PlayerState.StartLife задаёт OwnerActor/AvatarActor и инициализирует здоровье один раз на новый Pawn. Init-health не является ресурсом Alive и не повторяется при входах в состояние. Второго ASC/здоровья нет.
 
-CharacterStateMachine настроен: MachineName=FSM, DeathEvent=State.Dead, deferProxyInitialization=true. Все три Blueprint скомпилированы и пять ассетов сохранены через MCP. Проверены фактические соединения пинов (оба входа в Dead, оба входа в Stop), ссылки компонентов на Definition и сохранность прежних ALS held-object веток. DSL-чтение MCP не отображает повторное использование shared-узлов полностью, поэтому оно не использовалось как единственное доказательство связей.
+## Конфиг каждого состояния
 
-Оригинальный BP перед изменением сохранён и скопирован в Saved/FSMGraphBackup/20261103-Character/BP_NextgenoneCharacter.uasset. Plugin ALS/AnimBP и C++ не менялись. PIE/сетевые/игровые тесты не запускались.
+FSM_CharacterAlive и FSM_CharacterDead — существующие UHFSMState Blueprint. В Components каждого находится **Character State Resources** (UNGCharacterStateResources), с соответствующим UNGControlStateDefinition:
 
-На первоначальный момент авторинга GameplayInput.CharacterDefinition не был назначен; это исправлено дополнением выше. Раскладка InputConfig теперь заполнена по CharacterInputSetup.md. Сам граф уже создан — повторять нижеприведённые шаги создания существующих ассетов не нужно; они остаются контрактом для новых Pawn.
+- **StateTag** — идентичность состояния на Pawn, сохраняющаяся после отвязки ASC.
+- **PresentationCue** — необязательный локальный GameplayCue; для Dead — NGDeathRagdollCue.
+- **Abilities: TArray<FNGAbilityGrant>** — Ability, InputTag, Level, bActivateOnEnter.
+- **Effects** — временные Duration/Infinite GE, StackingType=None. Instant не допускается: его нельзя снять при выходе.
+- **MappingContexts** — gameplay IMC и приоритеты, принадлежащие только состоянию.
+- **bBlockGameplayInput** — политика через существующий UPlayerInputSubsystem. UI IA/IMC остаются отдельными.
 
-2026-11-02. Первоначально реализован C++ каркас. Последующий Blueprint-сетап описан выше. Пока CharacterStateMachine.MachineName не задан, новый граф не запускается. CharacterDefinition/base GAS и UI FSM работают отдельно.
+Enter на сервере проверяет конфиг/текущий Avatar, выдаёт все способности, применяет эффекты, сохраняет handles и регистрирует scope. Затем запускает grants с bActivateOnEnter=true. Ошибка приводит к cleanup и существующему OnEnterFailed/ResourceFailure. Клиенты не выдают GAS grants; owning client подключает IMC/input policy. Exit/Abort/Unbind снимают только handles этого состояния. Перекрытие классов/input tags с другим активным scope (родительское состояние, оборудование) считается ошибкой, а не второй копией способности.
 
-## Где находится граф
+Refresh после possession восстанавливает ресурсы активного состояния. После UnPossess обычное состояние не выдаёт их повторно без Controller; Dead может получить ресурсы непосредственно при Enter без Controller. Cleanup старого Pawn не снимает ресурсы нового Avatar. При отмене способностей handles предварительно извлекаются из scope для защиты от повторного cleanup из callbacks.
 
-**В BP_NextgenoneCharacter (Pawn Actor), не в ActorComponent.** Исходники GCFSM проверены: Replicated MakeFSM требует Actor context и UGCFSMReplicationComponent на этом Actor; восстановление графа на proxy ищет entry point на Actor. Компонентный graph context без модификации плагина сюда не подходит.
+## Alive и Dead
 
-На Character добавлен native **CharacterStateMachine**, производный от UGCFSMReplicationComponent. Не добавлять второй обычный GCFSMReplicationComponent. Компонент запускает граф на сервере после готовности GAS и BeginPlay, обновляет локальные ресурсы по lifecycle, при EndPlay освобождает ресурсы и останавливает ticker через pause. Вызывать UGCFSM.Stop вручную для активной машины нельзя: в плагине это assert, поскольку Stop ожидает уже завершённый state.
+DA_CharacterState_Alive получает прежние игровые grants: Jump, Dash, Mantle, Interact, Punch с сохранёнными классами/тегами/уровнями. bActivateOnEnter=false: они ждут ввода. При выходе из Alive эти grants снимаются. Equipment Fire/Reload сохраняют прежний scope Combat; он выдаёт прямые FNGAbilityGrant без промежуточного AbilitySet.
 
-Используется штатная репликация GCFSM: сервер хранит актуальные GUID активных FSM; начальное состояние приходит через COND_InitialOnly, дальнейшие переходы — reliable multicast. Клиент не выбирает игровые переходы. Машина принадлежит Pawn и не останавливается при UnPossess. Simulated proxy не ожидает чужого Controller или LocalPlayer. Новый код не модифицирует GCFSM/ALS плагины.
+DA_CharacterState_Dead содержит NGDeathAbility, InputTag пустой, Level=1, **bActivateOnEnter=true**, bBlockGameplayInput=true. Отдельный NGCharacterDeathStateComponent удалён: смерть использует ту же выдачу и активацию, что любое другое состояние.
 
-## Минимальный Blueprint-сетап
+Поток: нулевой HP → запрос перехода FSM в Dead и блокировка действий → общий resource adapter выдаёт GA_Death, применяет NGDeadStateEffect (Infinite, тег State.Dead) → активирует GA_Death → HandleDeath → PresentationCue → обычный ALS RagdollStart. Alive.StateTag=State.Alive, Dead.StateTag=State.Dead. Прямой активации/GAS-события из HealthChanged нет. GA_Death проверяет принадлежность spec текущему scope/Avatar и наличие тега GE.
 
-1. На CharacterStateMachine задать MachineName, например **Character**, и DeathEvent, например **Character.Event.Death**. Тег добавить в существующий словарь Gameplay Tags.
-2. В Blueprint Pawn создать GCFSM graph с Start тем же именем **Character**. Машину запускает C++; не добавлять второй Launch из Event BeginPlay. На Start/вложенных машинах использовать Replicated по настройкам узлов GCFSM.
-3. Создать два Blueprint состояния на **UHFSMState**: Alive и Dead. Подключить Alive → Dead через событие с полным именем тега **Character.Event.Death**. Если граф стартует уже для мёртвого Pawn, стартовая ветка должна сразу выбирать Dead по IsDead.
-4. Создать два Data Assets класса **NGControlStateDefinition**. У обычного Alive можно оставить ресурсы пустыми: пять базовых способностей уже даёт CharacterDefinition. У Dead также оставить AbilitySets/Effects пустыми, bBlockGameplayInput=true. Это состояние должно работать и после отсоединения ASC.
-5. В Components каждого UHFSMState добавить **Character State Resources** и назначить соответствующий Definition. Не использовать UI-specific HFSMPlayerStateComponent/HFSMInputComponent в сетевых состояниях персонажа: они требуют LocalPlayer.
-6. Для ошибок входа настроить OnEnterFailed: серверный переход в безопасное состояние/лог. HFSM откатывает успешно вошедшие компоненты, но сам не выбирает новый transition после ошибки.
+Character больше не хранит bDead, bDeathAbilityActivated, bDeathRagdollStarted и методы протокола активации смерти. IsDead читает состояние его FSM, поэтому старый труп не зависит от ASC новой жизни. На текущем ASC State.Dead принадлежит эффекту Dead и снимается через его handle. GA_Death хранит исходный Avatar на время активации; cue отвергает чужой SourceObject и использует базовый AALSBaseCharacter. Способность принадлежит Dead до Exit/Unbind, её окончание не снимает grants.
 
-Базовые состояния переиспользуются разными Pawn Blueprint. В графе остаются только переходы; выдача/снятие ресурсов находится в C++. UI граф не переносится на Pawn и не зависит от его жизни.
+В этом пакете presentation немедленный: proxy восстанавливает cue из definition при входе в Dead/BeginPlay, даже без PlayerState. Отложенный montage в HandleDeath сам по себе не синхронизирует момент перехода в регдолл: для этого позже нужны отдельные фазы FSM, например Dying → Dead. Новые фазы здесь не добавлены.
 
-## Definition состояния
+GCFSM обрабатывает события через очередь. При раннем UnPossess серверный ASC сохраняется до готовности ресурсов перехода: выдача, эффекты, вызовы всех bActivateOnEnter. Общий CanReleaseAvatar/OnResourcesReady заменяет death-specific callbacks. StartLife нового Pawn ждёт в PendingLifePawn; затем старые handles снимаются до смены Avatar. Нет polling/timer. До BeginPlay используется BoundASC, даже если PlayerState уже отсоединён. Destroyed EndPlay снимает ожидание. Ненастроенный/остановленный граф или ошибочный auto-activate grant может оставить следующего Pawn в ожидании — fallback в обход FSM отсутствует.
 
-`GameplayFoundation/Public/Character/NGControlStateDefinition.h` не зависит от HFSM, UI или ALS:
+## Косметический регдолл
 
-- AbilitySets — временные способности/эффекты состояния.
-- Effects — дополнительные временные GE.
-- MappingContexts — Gameplay IMC/priority, подключаемые только owning client.
-- bBlockGameplayInput — блокировка всего Gameplay-ввода, совместно с UI policies; режим экрана/фокус это поле не меняет.
+Реплицируются состояние GCFSM и GAS-тег при привязанном ASC; отдельных death/phase флагов Pawn нет. Положение/скорость/поза тела не синхронизируются. Каждый клиент рассчитывает падение локально. Меш трупа отделяется от capsule; Actor остаётся у места смерти. Для dead Tick обходятся ALS pelvis RPC/remote correction, сохраняется ACharacter::Tick. ALS get-up мёртвого Pawn запрещён. Late join восстанавливает presentation из FSM, а не финальную позицию тела. Точный лут из тела, resurrection, custom-gravity corpse physics и оптимизация множества трупов не входят в пакет. ALS plugin/AnimBP не изменялись.
 
-Эффекты только Duration/Infinite со **StackingType=None**. Instant нельзя отменить; aggregated stacking может вернуть общий handle для разных scopes, и его удаление затронуло бы чужой эффект. Такие конфиги отклоняются. Одноразовое лечение/урон должно быть отдельным явным серверным действием/ability, не временным ресурсом.
+## Миграция и проверка
 
-Способности и input tags, уже доступные через CharacterDefinition, equipment или родительское состояние, повторно выдавать нельзя. Проверка предотвращает дубликаты. Для изменения доступности уже существующей способности использовать block/cancel tags и GE, а не вторую копию spec.
+Снимок исходных grants и бэкап ассетов: Saved/StateGrantMigration/snapshot.json и Before/. Старые ссылки очищены перед удалением native-типа. Старый setup commandlet теперь редактирует Alive definition и не восстанавливает удалённый DA_PlayerAbilities. Конфиги input/UI сохранены.
 
-## Input состояния
+C++ пакет собран NEXTGENONEEditor Win64 Development — PASS, UBT exit 0 (Saved/Logs/AgentBuild.log). Новые Abilities заполнены в обоих definition через MCP, InputConfig сохранён. Alive/Dead/Pawn Blueprint скомпилированы; ассеты сохранены и прочитаны обратно. Dead содержит только общий resource adapter. PIE, сетевые и игровые тесты агентом не запускались. Отдельного апрува ждут: повторный вход/выход Alive, отмена held input, откат ошибки Enter, Dead auto-activation, ранний UnPossess/новый Pawn, смерть до BeginPlay, late join/порядок репликации и сохранность здоровья новой жизни.
 
-В GameplayInputConfig добавлен **StateMappingContexts** — каталог IMC для временных состояний. Их actions участвуют в editor-валидации, но эти IMC не активируются базовым input-компонентом. IA → Native/GAS tag маршруты всех предполагаемых состояний перечисляются один раз в том же InputConfig. Definition активного состояния подключает нужные IMC из этого каталога.
+## IMC принадлежат состоянию — 2026-11-03
 
-Это не создаёт вторую обработку ввода. Один GameplayInputComponent обслуживает actions, а states управляют доступными mappings. Новое поведение камеры/movement всё ещё требует своего native-handler/адаптера; IMC сам не реализует свободную камеру или possession. Gameplay/UI IA и IMC остаются раздельными.
+IMC_NG_Character (priority 10) перенесён из DA_Input_Character.MappingContexts в DA_CharacterState_Alive.MappingContexts. MappingContexts и StateMappingContexts из InputConfig удалены; каталог-дубль не используется. IA→Native/GAS tag bindings по-прежнему регистрируются один раз Pawn input-компонентом. Alive приобретает lease IMC через существующий resource adapter/UPlayerInputSubsystem; Exit освобождает его. Dead не подключает gameplay IMC. UI FSM сохраняет отдельное владение UI IMC и policy. Вложенные состояния снимают только собственные handles; если родитель держит gameplay IMC, дочернее состояние не удаляет чужой lease.
 
-Состояние получает context/policy handles у существующего UPlayerInputSubsystem. На клиенте до получения possession ввод откладывается; lifecycle Refresh после OnRep_Controller, готовности ASC и SetupPlayerInputComponent применяет актуальные ресурсы без Tick/ожидающего таймера. При выходе или UnPossess собственные handles освобождаются. Вложенный UI сохраняет свою блокировку независимо от выхода игрового состояния.
+Изменены только два Data Assets и документация; C++ не менялся, новая сборка не требовалась. Ассеты сохранены и прочитаны обратно через MCP. Бэкап: Saved/StateInputMigration/20261103-192636/. Игровая проверка ввода/переходов не запускалась.
 
-## GAS lifecycle и старое тело
+### InputConfig без IMC — 2026-11-03
 
-На сервере NGCharacterStateResources выдаёт resources на текущий ASC Avatar. Снятие базовых и временных ресурсов происходит до замены ActorInfo. PlayerState.StartLife дополнительно освобождает ресурсы прежнего Avatar до переключения на новый. При UnPossess FSM тела сохраняется, а ресурсы ASC/локального input отсоединяются. Поздний cleanup со старым Avatar не удаляет effects нового Avatar; обход штатного lifecycle приводит к warning и не считается поддержанным сценарием.
+Завершение текущего пакета: офлайн NEXTGENONEEditor Win64 Development PASS (UBT exit 0). NGSetup -StateLifecycleOnly завершился exit 0, 0 errors / 11 предупреждений ALS/окружения; сохранил StateTag/Cue/DeadStateEffect, скомпилировал и сохранил Alive/Dead/Pawn Blueprint. InputConfig принудительно пересохранён с сохранением 13 native и 3 GAS маршрутов. Логи: Saved/Logs/AgentBuild.log и DeathLifecycleAssets.log. Бэкап: Saved/DeathLifecycleRefactor/20261103-200722/. Игровые/сетевые тесты не запускались.
 
-Смерть по-прежнему фиксируется существующим bDead на Pawn, не новым состоянием здоровья. OnRep_Dead/серверный death path уведомляет FSM через настроенный тег; owning/remote клиенты получают граф через GCFSM, а bDead остаётся независимым долговечным источником факта смерти.
-
-**Ragdoll и GA_Death в этот пакет не входят.** В ALS RagdollStart отключает replicate movement, а SetActorLocationDuringRagdoll получает pelvis target от IsLocallyControlled. После UnPossess этот путь нельзя объявлять серверной синхронизацией тела. Нужен отдельный ограниченный пакет server-authoritative corpse/ragdoll adapter. Dead-state этого каркаса не должен требовать ASC после его отсоединения; ability сама по себе не заменяет реплицируемое состояние тела.
-
-## Что подтверждено
-
-Полная сборка NEXTGENONEEditor Win64 Development — PASS. C++ классы/линковка подтверждены; Blueprint-граф пока не создан этим пакетом, его запуск и сеть не проверены. Не запускались PIE, два клиента, late join/relevancy, dormancy, UnPossess/respawn и rollback на реальных gameplay событиях. Эти проверки требуют отдельного апрува после авторинга графа и configs.
+InputConfig теперь содержит только NativeInputActions/AbilityInputActions и поиск IA по тегу. Структура FNGInputMappingContextEntry находится рядом с ControlStateDefinition (тот же модуль/UScript-путь, без redirects). Input adapter только подписывается на существующую UI/gameplay policy, не приобретает IMC leases. ValidateInputMappings на definition проверяет действия его IMC против маршрутов текущего Pawn при Enter; отсутствие маршрута вызывает ошибку входа и штатный rollback. Отдельная asset-валидация InputConfig не ищет IMC и продолжает проверять маршруты/типы/дубликаты. C++ сборка PASS; runtime-проверка переходов не выполнялась. Бэкап до очистки: Saved/InputConfigCleanup/20261103-193514/.

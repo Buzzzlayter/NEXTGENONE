@@ -1,44 +1,16 @@
 #include "HFSMState.h"
 
 #include "HFSMStateComponent.h"
+#include "HFSMLibrary.h"
 
-UHFSMStateComponent* UHFSMState::GetComponent(TSubclassOf<UHFSMStateComponent> ComponentClass) const
+APlayerController* UHFSMState::GetPlayerController() const
 {
-	const UClass* TargetClass = ComponentClass.Get();
-	if (!TargetClass)
-	{
-		return nullptr;
-	}
-
-	for (UHFSMStateComponent* Component : Components)
-	{
-		if (Component && Component->IsA(TargetClass))
-		{
-			return Component;
-		}
-	}
-	return nullptr;
+	return UHFSMLibrary::ResolvePlayerController(GetContextOwner());
 }
-
-TArray<UHFSMStateComponent*> UHFSMState::GetComponents(TSubclassOf<UHFSMStateComponent> ComponentClass) const
+ULocalPlayer* UHFSMState::GetLocalPlayer() const
 {
-	TArray<UHFSMStateComponent*> Output;
-	const UClass* TargetClass = ComponentClass.Get();
-	if (!TargetClass)
-	{
-		return Output;
-	}
-
-	for (UHFSMStateComponent* Component : Components)
-	{
-		if (Component && Component->IsA(TargetClass))
-		{
-			Output.Add(Component);
-		}
-	}
-	return Output;
+	return UHFSMLibrary::ResolveLocalPlayer(GetContextOwner());
 }
-
 
 UHFSMState* UHFSMState::GetRoot()
 {
@@ -52,13 +24,13 @@ UHFSMState* UHFSMState::GetParent() const
 	return Cast<UHFSMState>(ParentState);
 }
 
-TArray<UHFSMState*> UHFSMState::GetChildren()
+TArray<UHFSMState*> UHFSMState::GetChildren() const
 {
 	TArray<UGCFSM*> InternalFSMs;
 	GetChildFSMs(InternalFSMs);
 
 	TArray<UHFSMState*> Output;
-	for (UGCFSM* FSM : InternalFSMs)
+	for (const UGCFSM* FSM : InternalFSMs)
 	{
 		if (!FSM)
 		{
@@ -74,71 +46,62 @@ TArray<UHFSMState*> UHFSMState::GetChildren()
 	return Output;
 }
 
-TArray<UHFSMStateComponent*> UHFSMState::GetComponents()
-{
-	return Components;
-}
-
 void UHFSMState::Enter()
 {
-	bEnteredSuccessfully = false;
-	ActiveComponents.Reset();
+	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
+	BlueprintInputComponent = nullptr;
 	for (UHFSMStateComponent* Component : Components)
 	{
 		if (Component)
 		{
 			Component->Init(this);
-			if (!Component->Enter())
-			{
-				for (int32 Index = ActiveComponents.Num() - 1; Index >= 0; --Index)
-				{
-					ActiveComponents[Index]->AbortEnter();
-				}
-				ActiveComponents.Reset();
-				OnEnterFailed(Component);
-				return;
-			}
-			ActiveComponents.Add(Component);
+			Component->Enter();
 		}
 	}
 
-	bEnteredSuccessfully = true;
+	BlueprintInputComponent = UHFSMLibrary::BindBlueprintInput(this, GetContextOwner());
 	Super::Enter();
-	LaunchChildFSMs();
 }
 
 void UHFSMState::Tick(float deltaTime)
 {
-	if (!bEnteredSuccessfully)
-	{
-		return;
-	}
-	for (UHFSMStateComponent* Component : ActiveComponents)
+	for (UHFSMStateComponent* Component : Components)
 	{
 		if (Component && Component->IsTickEnabled())
 		{
 			Component->Tick(deltaTime);
 		}
 	}
-
 	Super::Tick(deltaTime);
 }
 
 void UHFSMState::Exit(FName event)
 {
-	for (int32 idx = ActiveComponents.Num() - 1; idx >= 0; --idx)
+	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
+	BlueprintInputComponent = nullptr;
+	for (int32 idx = Components.Num() - 1; idx >= 0; --idx)
 	{
-		if (UHFSMStateComponent* Component = ActiveComponents[idx])
+		if (UHFSMStateComponent* Component = Components[idx])
 		{
 			Component->Exit(event);
+			UHFSMLibrary::UnbindBlueprintInput(Component->BlueprintInputComponent);
+			Component->BlueprintInputComponent = nullptr;
 		}
 	}
-	ActiveComponents.Reset();
-	if (bEnteredSuccessfully)
-	{
-		bEnteredSuccessfully = false;
-		Super::Exit(event);
-	}
+	Super::Exit(event);
+}
+
+void UHFSMState::BeginDestroy()
+{
+	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
+	BlueprintInputComponent = nullptr;
+	for (auto* Component : Components)
+		if (IsValid(Component))
+		{
+			UHFSMLibrary::UnbindBlueprintInput(Component->BlueprintInputComponent);
+			Component->BlueprintInputComponent = nullptr;
+		}
+	Super::BeginDestroy();
 }
 
 bool UHFSMState::GetClosestComponentInHierarchyUp(

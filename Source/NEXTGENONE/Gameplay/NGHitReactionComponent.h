@@ -21,6 +21,7 @@ public:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Hit Reaction") FPhysicalAnimationData Drive;
 	UPROPERTY(BlueprintAssignable,Category="Hit Reaction") FNGBulletBodyImpact OnBulletBodyImpact;
 	void ApplyBulletImpact(const FHitResult& Hit,FVector Direction,float Impulse);
+	void ReleaseToRagdoll() { ReleaseBodies(true); }
 private:
 	struct FBodyReaction { FName Bone; float Remaining=0.f; float OriginalBlend=0.f; };
 	TArray<FBodyReaction> ActiveBodies;

@@ -6,6 +6,11 @@
 
 class UAbilitySystemComponent;
 class UNGCharacterStateResources;
+class UNGControlStateDefinition;
+struct FGameplayAbilitySpecHandle;
+
+DECLARE_MULTICAST_DELEGATE_TwoParams(FNGCharacterStateChanged, FGameplayTag, FGameplayTag);
+DECLARE_MULTICAST_DELEGATE_OneParam(FNGCharacterStateResourcesReady, AActor*);
 
 /** Actor-context GCFSM transport and lifecycle. Blueprint graph belongs to the Pawn, not this component. */
 UCLASS(ClassGroup=Gameplay, meta=(BlueprintSpawnableComponent))
@@ -20,12 +25,27 @@ public:
 	void RefreshResources();
 	void SuspendResources();
 	void NotifyDeath();
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Character FSM") void RequestStateTransition(FGameplayTag StateTag, FGameplayTag Event);
+	UFUNCTION(BlueprintPure, Category="Character FSM") bool HasStateTag(FGameplayTag StateTag) const;
+	bool CanReleaseAvatar() const;
+	void NotifyResourcesReady(UNGCharacterStateResources* Resources);
+	void RestorePresentation() const;
+	const UNGControlStateDefinition* GetAbilityStateDefinition(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
+	FNGCharacterStateChanged OnStateChanged;
+	FNGCharacterStateResourcesReady OnResourcesReady;
 	void RegisterResources(UNGCharacterStateResources* Resources);
 	void UnregisterResources(UNGCharacterStateResources* Resources);
+	UAbilitySystemComponent* GetReadyASC() const;
+	bool OwnsStateAbility(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 private:
 	bool StartIfReady();
+	void NotifyStateChanged();
+	FGameplayTag GetCurrentStateTag() const;
+	FGameplayTag RequestedStateTag;
+	FGameplayTag RequestedStateEvent;
+	FGameplayTag LastNotifiedStateTag;
 	bool bEnding = false;
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyASC;
 	TArray<TWeakObjectPtr<UNGCharacterStateResources>> ActiveResources;

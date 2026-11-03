@@ -3,7 +3,7 @@
 #include "Commandlets/Commandlet.h"
 #include "NGSetupCommandlet.generated.h"
 
-// Editor-only implementation; creates only /Game/GameplayFoundation test assets.
+
 UCLASS()
 class UNGSetupCommandlet : public UCommandlet
 {

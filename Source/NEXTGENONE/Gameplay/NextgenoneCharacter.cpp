@@ -4,7 +4,6 @@
 #include "NextgenonePlayerState.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "NGCombat.h"
-#include "NGMantleAbility.h"
 #include "NGInteraction.h"
 #include "NGAimComponent.h"
 #include "NGHitReactionComponent.h"
@@ -14,13 +13,12 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Net/UnrealNetwork.h"
+
 
 ANextgenoneCharacter::ANextgenoneCharacter(const FObjectInitializer& Init) : Super(Init)
 {
 	bReplicates = true;
 	Combat = CreateDefaultSubobject<UNGCombatComponent>(TEXT("Combat"));
-	MantleAdapter = CreateDefaultSubobject<UNGMantleAdapterComponent>(TEXT("MantleAdapter"));
 	Interaction = CreateDefaultSubobject<UNGInteractionComponent>(TEXT("Interaction"));
 	Aim = CreateDefaultSubobject<UNGAimComponent>(TEXT("Aim"));
 	HitReaction = CreateDefaultSubobject<UNGHitReactionComponent>(TEXT("HitReaction"));
@@ -34,12 +32,16 @@ ANextgenoneCharacter::ANextgenoneCharacter(const FObjectInitializer& Init) : Sup
 UAbilitySystemComponent* ANextgenoneCharacter::GetAbilitySystemComponent() const
 {
 	UAbilitySystemComponent* ASC = BoundASC.Get();
-	return !bDead && ASC && ASC->GetAvatarActor() == this ? ASC : nullptr;
+	return ASC && ASC->GetAvatarActor() == this ? ASC : nullptr;
+}
+bool ANextgenoneCharacter::IsDead() const
+{
+    return CharacterStateMachine && CharacterStateMachine->HasStateTag(TAG_NGDead);
 }
 float ANextgenoneCharacter::GetHealth() const
 {
 	const auto* PS = GetPlayerState<ANextgenonePlayerState>();
-	return !bDead && PS && PS->AbilitySystem->GetAvatarActor() == this ? PS->HealthSet->Health.GetCurrentValue() : 0.f;
+	return !IsDead() && PS && PS->AbilitySystem->GetAvatarActor() == this ? PS->HealthSet->Health.GetCurrentValue() : 0.f;
 }
 float ANextgenoneCharacter::GetMaxHealth() const
 {
@@ -49,7 +51,7 @@ float ANextgenoneCharacter::GetMaxHealth() const
 void ANextgenoneCharacter::TryInitializeGameplay()
 {
 	ANextgenonePlayerState* PS = GetPlayerState<ANextgenonePlayerState>();
-	if (!PS || bDead || (PS->GetPawn() && PS->GetPawn() != this)) return;
+	if (!PS || IsDead() || (PS->GetPawn() && PS->GetPawn() != this)) return;
 	auto* ASC = PS->AbilitySystem.Get();
 	// A delayed OnRep from an old Pawn must not steal a newer avatar.
 	if (!HasAuthority() && ASC->GetAvatarActor() && ASC->GetAvatarActor() != this)
@@ -69,7 +71,7 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 	FOnAttributeChangeData InitialHealth;
 	HealthChanged(InitialHealth);
 	CharacterStateMachine->NotifyGameplayReady(ASC);
-	if (bDead) CharacterStateMachine->NotifyDeath();
+
 	UE_LOG(LogTemp, Display, TEXT("NG_ASC_READY authority=%d pawn=%s owner=%s avatar=%s"), HasAuthority(), *GetName(), *GetNameSafe(ASC->GetOwnerActor()), *GetNameSafe(ASC->GetAvatarActor()));
 }
 void ANextgenoneCharacter::UnbindGameplay()
@@ -83,7 +85,6 @@ void ANextgenoneCharacter::UnbindGameplay()
 		if (ASC->GetAvatarActor() == this)
 		{
 			CharacterStateMachine->SuspendResources();
-			if (HasAuthority()) if (auto* PS = GetPlayerState<ANextgenonePlayerState>()) PS->ReleaseCharacterAbilities(this);
 			if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
 			ASC->CancelAllAbilities();
 			ASC->SetAvatarActor(nullptr);
@@ -119,7 +120,7 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 	if (!Combat) return;
 	const auto Equipment = Combat->GetEquipment();
 	const auto* Def = Equipment.Definition.Get();
-	const bool bArmed = !bDead && Equipment.bEquipped && Def;
+	const bool bArmed = !IsDead() && Equipment.bEquipped && Def;
 	SetOverlayState(bArmed ? Def->Overlay : EALSOverlayState::Default);
 	Super::AimAction_Implementation(bArmed && Combat->IsAiming());
 	if (!bArmed || GetMovementState() == EALSMovementState::Mantling || GetMovementState() == EALSMovementState::Ragdoll)
@@ -132,69 +133,97 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 }
 void ANextgenoneCharacter::Tick(float DeltaSeconds)
 {
+	if (IsDead())
+	{
+		// ALS's non-virtual RagdollUpdate trusts IsLocallyControlled/its client RPC.
+		// Death ragdolls are cosmetic local physics. Retain the engine/Blueprint actor tick
+		// without ALS's pelvis RPCs or remote-body correction.
+		ACharacter::Tick(DeltaSeconds);
+		return;
+	}
 	Super::Tick(DeltaSeconds);
 	if (!Combat) return;
 	const auto State = Combat->GetEquipment();
 	const auto* Def = State.Definition.Get();
 	// ALS callbacks may refresh a demo prop after mantle/ragdoll. Restore the selected item once, not each frame.
-	if (State.bEquipped && Def && !bDead && GetMovementState() != EALSMovementState::Mantling && GetMovementState() != EALSMovementState::Ragdoll)
+	if (State.bEquipped && Def && !IsDead() && GetMovementState() != EALSMovementState::Mantling && GetMovementState() != EALSMovementState::Ragdoll)
 		if (GetOverlayState() != Def->Overlay || SkeletalMesh->GetSkeletalMeshAsset() != Def->SkeletalMesh || StaticMesh->GetStaticMesh() != Def->Mesh)
 			ApplyCombatPresentation();
 }
+void ANextgenoneCharacter::RagdollStart()
+{
+	if (IsDead() && GetMovementState() == EALSMovementState::Ragdoll) return;
+	Super::RagdollStart();
+	if (IsDead())
+	{
+		if (HitReaction) HitReaction->ReleaseToRagdoll();
+		GetMesh()->bOnlyAllowAutonomousTickPose = false;
+		// The permanent cosmetic corpse is independent of capsule/possession movement.
+		GetMesh()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+	}
+}
+void ANextgenoneCharacter::RagdollEnd()
+{
+	// Includes late ALS multicast/get-up requests arriving after death.
+	if (!IsDead()) Super::RagdollEnd();
+}
 void ANextgenoneCharacter::HealthChanged(const FOnAttributeChangeData& Data)
 {
-	auto* ASC = BoundASC.Get();
-	if (!ASC || ASC->GetAvatarActor() != this || bDead) return;
-	if (HasAuthority() && GetHealth() <= 0.f)
-	{
-		bDead = true;
-		ASC->SetLooseGameplayTagCount(TAG_NGDead, 1, EGameplayTagReplicationState::TagOnly);
-		ASC->CancelAllAbilities();
-		GetCharacterMovement()->StopMovementImmediately();
-		GetCharacterMovement()->DisableMovement();
-		OnRep_Dead(); ForceNetUpdate();
-		UE_LOG(LogTemp, Display, TEXT("NG_DEATH pawn=%s"), *GetName());
-	}
-	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
+    auto* ASC = BoundASC.Get();
+    if (!ASC || ASC->GetAvatarActor() != this || IsDead()) return;
+    if (HasAuthority() && GetHealth() <= 0.f)
+    {
+        ASC->CancelAllAbilities();
+        CharacterStateMachine->NotifyDeath();
+    }
+    OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
 }
-void ANextgenoneCharacter::OnRep_Dead()
+void ANextgenoneCharacter::StateChanged(FGameplayTag Previous, FGameplayTag Current)
 {
-	if (bDead) CharacterStateMachine->NotifyDeath();
-	if (bDead && HasAuthority()) if (auto* PS = GetPlayerState<ANextgenonePlayerState>()) PS->ReleaseCharacterAbilities(this);
-	if (bDead && GameplayInput) GameplayInput->ShutdownInput();
-	if (bDead) GetCharacterMovement()->DisableMovement();
-	OnDeathChanged.Broadcast(bDead);
-	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
+    const bool bNowDead = IsDead();
+    if (bNowDead)
+    {
+        GameplayInput->ShutdownInput();
+        GetCharacterMovement()->DisableMovement();
+    }
+    if (Previous.MatchesTag(TAG_NGDead) != bNowDead) OnDeathChanged.Broadcast(bNowDead);
+    OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
 }
 void ANextgenoneCharacter::PossessedBy(AController* C) { Super::PossessedBy(C); TryInitializeGameplay(); }
 void ANextgenoneCharacter::UnPossessed()
 {
 	GameplayInput->ShutdownInput();
 	if (HasAuthority()) Combat->SetEquippedOnServer(false);
-	UnbindGameplay(); Super::UnPossessed();
+	if (!HasAuthority() || CharacterStateMachine->CanReleaseAvatar()) UnbindGameplay();
+	Super::UnPossessed();
 	CharacterStateMachine->RefreshResources();
 }
 void ANextgenoneCharacter::OnRep_PlayerState() { Super::OnRep_PlayerState(); TryInitializeGameplay(); }
 void ANextgenoneCharacter::OnRep_Controller() { Super::OnRep_Controller(); if (!IsLocallyControlled()) GameplayInput->ShutdownInput(); TryInitializeGameplay(); CharacterStateMachine->RefreshResources(); }
 void ANextgenoneCharacter::BeginPlay()
 {
-	Super::BeginPlay();
-	// Imported Blueprint defaults can override native constructor responses.
-	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-	TryInitializeGameplay();
-	if (bDead)
-	{
-		if (auto* PS = GetPlayerState<ANextgenonePlayerState>()) CharacterStateMachine->NotifyGameplayReady(PS->AbilitySystem);
-		CharacterStateMachine->NotifyDeath();
-	}
+    CharacterStateMachine->OnStateChanged.AddUObject(this, &ThisClass::StateChanged);
+    Super::BeginPlay();
+    GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+    TryInitializeGameplay();
+    if (auto* ASC = BoundASC.Get(); ASC && ASC->GetAvatarActor() == this) CharacterStateMachine->NotifyGameplayReady(ASC);
+    CharacterStateMachine->RestorePresentation();
 }
-void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason) { GameplayInput->ShutdownInput(); CharacterStateMachine->SuspendResources(); UnbindGameplay(); Super::EndPlay(Reason); }
+void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason)
+{
+	auto* ASC = BoundASC.Get();
+	auto* PS = ASC ? Cast<ANextgenonePlayerState>(ASC->GetOwnerActor()) : nullptr;
+	GameplayInput->ShutdownInput();
+	CharacterStateMachine->SuspendResources();
+	UnbindGameplay();
+	Super::EndPlay(Reason);
+	if (HasAuthority() && IsValid(PS) && Reason == EEndPlayReason::Destroyed) PS->ResumePendingLife(this);
+}
 
 void ANextgenoneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	if (!bDead) GameplayInput->InitializeInput(PlayerInputComponent);
+	if (!IsDead()) GameplayInput->InitializeInput(PlayerInputComponent);
 	else GameplayInput->ShutdownInput();
 	CharacterStateMachine->RefreshResources();
 }
-void ANextgenoneCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const { Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(ANextgenoneCharacter, bDead); }

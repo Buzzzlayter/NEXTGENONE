@@ -3,22 +3,19 @@
 #include "Engine/UserInterfaceSettings.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "Engine/LocalPlayer.h"
 #include "UnrealClient.h"
 
 
-bool UResolutionObserver::Enter()
+void UResolutionObserver::Enter()
 {
 	const ULocalPlayer* Player = GetLocalPlayer();
 	if (!ensureMsgf(Player && Player->ViewportClient, TEXT("Resolution observer has no owning player's viewport.")))
 	{
-		return false;
-	}
-	if (!Super::Enter())
-	{
-		return false;
+		return;
 	}
 	ViewportResizedHandle = FViewport::ViewportResizedEvent.AddUObject(this, &ThisClass::ResolutionChanged);
-	return true;
+	Super::Enter();
 }
 void UResolutionObserver::Exit(FName event)
 {

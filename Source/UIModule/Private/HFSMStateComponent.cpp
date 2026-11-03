@@ -1,5 +1,7 @@
 #include "HFSMStateComponent.h"
 #include "HFSMState.h"
+#include "HFSMLibrary.h"
+#include "Components/InputComponent.h"
 
 
 void UHFSMStateComponent::Init(UHFSMState* StateOwner)
@@ -8,19 +10,21 @@ void UHFSMStateComponent::Init(UHFSMState* StateOwner)
 	World = State ? State->GetWorld() : nullptr;
 }
 
-bool UHFSMStateComponent::Enter()
+void UHFSMStateComponent::Enter()
 {
+	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
+	BlueprintInputComponent = nullptr;
 	if (!ensureMsgf(IsValid(State) && IsValid(GetContextOwner()), TEXT("State component has no valid context owner.")))
 	{
-		return false;
+		return;
 	}
 	World = GetWorld();
 	if (!ensureMsgf(World, TEXT("State component has no world.")))
 	{
-		return false;
+		return;
 	}
+	BlueprintInputComponent = UHFSMLibrary::BindBlueprintInput(this, GetContextOwner());
 	OnEnter();
-	return true;
 }
 
 void UHFSMStateComponent::Tick(float DeltaTime)
@@ -30,12 +34,16 @@ void UHFSMStateComponent::Tick(float DeltaTime)
 
 void UHFSMStateComponent::Exit(FName Event)
 {
+	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
+	BlueprintInputComponent = nullptr;
 	OnExit(Event);
 }
 
-void UHFSMStateComponent::AbortEnter()
+void UHFSMStateComponent::BeginDestroy()
 {
-	Exit(NAME_None);
+	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
+	BlueprintInputComponent = nullptr;
+	Super::BeginDestroy();
 }
 
 bool UHFSMStateComponent::IsTickEnabled()
@@ -52,6 +60,11 @@ UObject* UHFSMStateComponent::GetContextOwner() const
 {
 	return IsValid(State) ? State->GetContextOwner() : nullptr;
 }
+
+APlayerController* UHFSMStateComponent::GetPlayerController() const
+{ return IsValid(State) ? State->GetPlayerController() : nullptr; }
+ULocalPlayer* UHFSMStateComponent::GetLocalPlayer() const
+{ return IsValid(State) ? State->GetLocalPlayer() : nullptr; }
 
 UWorld* UHFSMStateComponent::GetWorld() const
 {

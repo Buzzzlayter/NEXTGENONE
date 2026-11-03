@@ -15,13 +15,15 @@ class NEXTGENONE_API UNGCharacterStateResources : public UHFSMStateComponent
 	GENERATED_BODY()
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Resources") TObjectPtr<UNGControlStateDefinition> Definition;
-	virtual bool Enter() override;
+	virtual void Enter() override;
 	virtual void Exit(FName Event) override;
-	virtual void AbortEnter() override;
 	void RefreshResources();
 	void ReleaseResources();
+	bool OwnsAbility(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
+	bool IsEntryReady() const { return bEntered && bEntryReady; }
 private:
 	bool AcquireGASResources();
+	bool ActivateEntryAbilities();
 	void ReleaseLocalResources();
 	TWeakObjectPtr<APawn> Pawn;
 	TWeakObjectPtr<UAbilitySystemComponent> GrantedASC;
@@ -31,4 +33,6 @@ private:
 	FGuid PolicyHandle;
 	bool bEntered = false;
 	bool bGASAcquired = false;
+	bool bEntryActivationAttempted = false;
+	bool bEntryReady = false;
 };

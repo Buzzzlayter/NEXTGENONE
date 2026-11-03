@@ -9,6 +9,7 @@
 #include "NGAbilitySystem.generated.h"
 
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGDead);
+GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGAlive);
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputJump);
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputDash);
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputMantle);
@@ -78,6 +79,9 @@ struct GAMEPLAYFOUNDATION_API FNGAbilityGrant
 	UPROPERTY(EditAnywhere) TSubclassOf<UGameplayAbility> Ability;
 	UPROPERTY(EditAnywhere) FGameplayTag InputTag;
 	UPROPERTY(EditAnywhere, meta=(ClampMin="1")) int32 Level = 1;
+	/** Run after all state entry resources have been acquired. */
+	UPROPERTY(EditAnywhere) bool bActivateOnEnter = false;
+	FGameplayAbilitySpecHandle Give(UAbilitySystemComponent* ASC, UObject* Source) const;
 };
 
 USTRUCT()
@@ -88,14 +92,3 @@ struct GAMEPLAYFOUNDATION_API FNGGrantedHandles
 	UPROPERTY() TArray<FActiveGameplayEffectHandle> Effects;
 	void Remove(UAbilitySystemComponent* ASC);
 };
-
-UCLASS(BlueprintType)
-class GAMEPLAYFOUNDATION_API UNGAbilitySet : public UDataAsset
-{
-	GENERATED_BODY()
-public:
-	UPROPERTY(EditDefaultsOnly) TArray<FNGAbilityGrant> Abilities;
-	UPROPERTY(EditDefaultsOnly) TArray<TSubclassOf<UGameplayEffect>> Effects;
-	void Give(UAbilitySystemComponent* ASC, UObject* Source, FNGGrantedHandles& Out, bool bApplyInstantEffects = true) const;
-};
-

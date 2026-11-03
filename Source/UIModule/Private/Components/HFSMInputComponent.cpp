@@ -2,26 +2,25 @@
 #include "Engine/LocalPlayer.h"
 #include "Input/PlayerInputSubsystem.h"
 
-bool UHFSMInputComponent::Enter()
+void UHFSMInputComponent::Enter()
 {
-    if (!Super::Enter()) return false;
-    UPlayerInputSubsystem* Input = GetPlayerInputSubsystem();
-    if (!Input) { Super::Exit(NAME_None); return false; }
-    AppliedInputSubsystem = Input;
+    AppliedInputSubsystem = GetPlayerInputSubsystem();
     if (bSetupMappingContext)
     {
-        MappingHandle = Input->AcquireMappingContext(this, MappingContext, Priority, false);
-        if (!MappingHandle.IsValid()) { RestoreInput(); Super::Exit(NAME_None); return false; }
+        MappingHandle = AppliedInputSubsystem->AcquireMappingContext(this, MappingContext, Priority, false);
+        if (!MappingHandle.IsValid()) { RestoreInput(); return; }
     }
     FPlayerInputPolicy Policy;
     Policy.bSetInputMode = bSetupInputMode; Policy.InputMode = InputMode;
     Policy.bSetCursorMode = bSetupCursorMode; Policy.CursorMode = DefaultCursorMode;
     Policy.bBlockGameplay = bBlockGameplayInput || (bSetupInputMode && InputMode == EInputMode::UI);
-    PolicyHandle = Input->AcquireInputPolicy(this, Policy);
-    return true;
+    PolicyHandle = AppliedInputSubsystem->AcquireInputPolicy(this, Policy);
+    Super::Enter();
 }
-void UHFSMInputComponent::Exit(FName Event) { RestoreInput(); Super::Exit(Event); }
-void UHFSMInputComponent::AbortEnter() { RestoreInput(); Super::Exit(NAME_None); }
+void UHFSMInputComponent::Exit(FName Event)
+{
+    RestoreInput(); Super::Exit(Event);
+}
 void UHFSMInputComponent::RestoreInput()
 {
     if (UPlayerInputSubsystem* Input = AppliedInputSubsystem.Get())
