@@ -21,15 +21,13 @@ private:
 	UFUNCTION() void Equip();
 };
 
-/** Mount through the existing HFSM UIWidgetMounter; never changes input mode or adds itself to the viewport. */
+/** Inventory content. Its state component owns the window; the state owns input. */
 UCLASS(Blueprintable)
 class NEXTGENONE_API UNGInventoryPanel : public UUserWidget
 {
 	GENERATED_BODY()
 protected:
-	UPROPERTY(EditDefaultsOnly, Category="Input") TArray<TObjectPtr<class UInputAction>> CloseActions;
 	virtual TSharedRef<SWidget> RebuildWidget() override;
-	virtual FReply NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	UPROPERTY(meta=(BindWidgetOptional), BlueprintReadOnly) TObjectPtr<UVerticalBox> ItemsList;

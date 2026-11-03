@@ -2,7 +2,7 @@
 
 ## Заполнено через MCP — 2026-11-03
 
-DA_Input_Character теперь заполнен: 13 NativeInputActions, 3 AbilityInputActions, базовый IMC_NG_Character с приоритетом 10 и 35 mappings. Созданы 17 новых IA и 3 IMC в `/Game/Gameplay/Input/Configured`; существующие IA_Dash, IA_Mantle, IA_PickupWeapon переиспользованы без изменения. ALS plugin и старые IMC не менялись.
+DA_Input_Character теперь заполнен: 13 NativeInputActions, 3 AbilityInputActions, IMC_NG_Character с приоритетом 10 и 35 mappings, подключаемый только состоянием Alive. Созданы 17 новых IA и 3 IMC в `/Game/Gameplay/Input/Configured`; существующие IA_Dash, IA_Mantle, IA_PickupWeapon переиспользованы без изменения. ALS plugin и старые IMC не менялись.
 
 | Действие | Клавиатура/мышь | Геймпад, обозначения Xbox |
 |---|---|---|
@@ -32,24 +32,13 @@ FSMState_GameRuntime.HFSMInputComponent подключает отдельный 
 
 Нижние инструкции сохраняются как контракт для новых Pawn/configs; повторно создавать уже существующие ассеты не требуется.
 
-2026-11-02. Конфиги и общий GameplayInputComponent находятся в GameplayFoundation; ALS/Combat адаптер NGCharacterInputComponent — в NEXTGENONE/Gameplay/Input. Добавлены runtime-маршрутизация ввода и локальная координация UI/Gameplay через UPlayerInputSubsystem. Следующим пакетом PlayerState подключён к CharacterDefinition.AbilitySets как единственному источнику базовых способностей Pawn. Ассеты пользователь заполняет вручную. FSM персонажа ещё не подключена.
+2026-11-02. Конфиги и общий GameplayInputComponent находятся в GameplayFoundation; ALS/Combat адаптер NGCharacterInputComponent — в NEXTGENONE/Gameplay/Input. Добавлены runtime-маршрутизация ввода и локальная координация UI/Gameplay через UPlayerInputSubsystem. Теперь FSM подключена: grants персонажа берутся из ControlStateDefinition активного состояния, а CharacterDefinition отвечает за InputConfig.
 
-## Этап 3: выдача базовых Ability Sets
+## Способности принадлежат состояниям — 2026-11-03
 
-На сервере PlayerState.StartLife читает тот же GameplayInput.CharacterDefinition, который клиент использует для ввода. В нём нужно назначить существующий DA_PlayerAbilities. В сохранённом наборе уже есть GA_Jump, GA_Dash, GA_Mantle, GA_Interact и GA_Punch с актуальными input tags; скрытые C++-выдачи и default /Game-путь удалены.
+CharacterDefinition содержит только InputConfig. PlayerState.StartLife больше не выдаёт базовых способностей; UNGAbilitySet и DA_PlayerAbilities удалены. Jump/Dash/Mantle/Interact/Punch с прежними input tags находятся непосредственно в DA_CharacterState_Alive.Abilities (FNGAbilityGrant). Dead содержит NGDeathAbility с bActivateOnEnter=true и пустым InputTag. Назначать второй базовый набор не нужно.
 
-Без CharacterDefinition сервер пишет понятную ошибку и не завершает инициализацию GAS этого Pawn. После удаления fallback-выдачи удалены и неиспользуемые поля PlayerAbilitySet/DefaultPlayerAbilitySet/JumpAbility на PlayerState. Из Controller удалены старые AbilityMappingContext/DashInput/MantleInput/PickupInput. Настройки нужно назначать через CharacterDefinition/InputConfig; автоматического копирования прежних значений нет. Назначение нового Definition через RPC клиента отсутствует: сервер использует конфиг своего Pawn.
-
-Definition проверяет пустые/повторные sets, классы способностей, уровни и повторы валидных input tags между базовыми наборами. Применяет каждый set отдельно и собирает общий набор handles. SourceObject базовых ability specs — текущий Pawn. Владение ASC остаётся на PlayerState; второго ASC нет.
-
-- Повторная инициализация уже привязанного Pawn не выдаёт повторно наборы и не инициализирует здоровье заново.
-- Смерть, UnPossess/Unbind и EndPlay снимают базовые grants по handles. Снятие старого Pawn после новой выдачи не совпадает с текущим владельцем и ничего не снимает.
-- При смене Pawn старые grants и действия снимаются до InitAbilityActorInfo нового Avatar.
-- Для нового Pawn увеличивается LifeSerial и выполняется прежний init-health effect. Для повторного possession того же живого Pawn здоровье не сбрасывается.
-- Duration/Infinite эффекты базового набора снимаются с его scope и могут применяться при повторной привязке. Instant эффекты не откатываются при выходе и не применяются повторно при possession того же Pawn. Cooldowns, созданные самими abilities, и серверный fire limiter этим снятием не сбрасываются.
-- Смена Definition при уже активной привязке не является runtime hot-swap: для неё нужен явный lifecycle/будущая FSM. Текущий пакет не реализует произвольное переключение состояний.
-
-Equipment grants остаются у Combat; это отдельные handles. Настоящие постоянные grants игрока при необходимости должны иметь отдельный явный scope, а не попадать в CharacterDefinition.
+Состояние выдаёт grants/effects при Enter и снимает собственные handles при Exit/Unbind. Повторная инициализация Pawn не дублирует выдачу; новый Pawn получает init-health один раз, входы в Alive здоровье не сбрасывают. Equipment grants сохраняют отдельные handles Combat. Подробный контракт и сетап: CharacterStateMachine.md. IA→tag маршруты по-прежнему задаются один раз в InputConfig и могут обслуживать способности разных состояний.
 
 ## Этап 2: обязательный сетап перед игровым запуском
 
@@ -83,10 +72,10 @@ AbilityInputActions: существующие Input.Dash, Input.Mantle, Input.In
 
 - Создать **IMC_UI_Global** с Boolean IA открытия инвентаря и настроек. Назначить его на UHFSMInputComponent существующего GameRuntime, Gameplay IMC туда не помещать.
 - В Runtime Settings Navigation задать **OpenSettingsAction**.
-- В Inventory Window задать **ToggleAction**.
-- В WBP_InventoryPanel и WBP_GameSettings задать **CloseActions**. Действия закрытия должны быть mapped в UI contexts соответствующего экрана, включая Back на геймпаде. Это простые кнопки без chords/hold; native key routing в UIOnly сопоставляет physical key с активными UI mappings.
+- Inventory Window находится в состоянии инвентаря и наследует UUIWidgetMounterComponent: назначить **WidgetClass** (NGInventoryPanel Blueprint), **PlaceholderID**, **Layer** и **CloseEvent** (FName события перехода). Используется существующий layout; собственного viewport fallback нет. PanelClass/ZOrder заменены полями базового мounter. Убрать старый Inventory Window из Runtime. В компоненте нет ToggleAction, input policy или зависимости от проектного Controller.
+- Открытие/закрытие инвентаря настроить в графе состояния и HFSMInputComponent. Кнопка окна вызывает **RequestClose()** на NGInventoryPanel, input event состояния может вызывать **Close()** у NGInventoryStateComponent. Close отправляет CloseEvent; переход FSM вызывает Exit и демонтаж через базовый мounter. Exit/Abort не отправляют повторное событие. **CloseActions** остаётся настройкой WBP_GameSettings, из инвентаря это поле и обработка клавиш удалены.
 - В FSMState_GameSettings назначить IMC_UI_Menu (Back/Confirm/navigation при необходимости) на его HFSMInputComponent. UIOnly ввод получает сфокусированный widget; закрытие не зависит от gameplay callback.
-- UHFSMInputComponent теперь получает mapping/policy handles от UPlayerInputSubsystem. bBlockGameplayInput можно выставить явно; UIOnly также блокирует Gameplay. Inventory и Settings уже запрашивают полную блокировку, focus и Grid cursor policy самостоятельно.
+- UHFSMInputComponent получает mapping/policy handles от UPlayerInputSubsystem. Для инвентаря блокировку Gameplay, input mode, курсор и focus настраивает пользователь в состоянии; Inventory Window этим не управляет. UIOnly ввод обрабатывается сфокусированным Widget, а не Controller input stack; для IA событий состояния использовать подходящий GameAndUI policy.
 
 Никаких новых hardcoded клавиш для открытия/закрытия этих экранов нет. Кнопка Back/Cancel в настройках продолжает работать независимо от CloseActions. Старый hardcoded список клавиш удалён из настроек: текст можно заполнить в WBP_GameSettings.ControlsDescription. Автоматические подсказки по mappings/устройству и runtime remapping пока не реализованы.
 
@@ -109,7 +98,7 @@ GameplayInput снимает собственные binding handles и context h
 
 В DA_Input_Character:
 
-- **MappingContexts** — Gameplay IMC и их приоритеты. Каждый IMC указывается один раз. Существующий `IMC_Abilities` можно использовать; недостающие действия сначала добавить в IMC.
+- **ControlStateDefinition.MappingContexts** — единственный список gameplay IMC/приоритетов. Alive содержит IMC_NG_Character с приоритетом 10, Dead пустой. В InputConfig нет MappingContexts и StateMappingContexts: только NativeInputActions/AbilityInputActions.
 - **NativeInputActions** — движение, камера и команды существующих компонентов. Строка содержит IA и смысловой тег. Точный список новых native-тегов будет закреплён при реализации обработчиков на этапе 2; произвольный тег ещё не создаёт обработчик.
 - **AbilityInputActions** — IA и точный InputTag из существующего Ability Set. Например: Input.Dash, Input.Mantle, Input.Combat.Punch, Input.Interaction.Interact. Jump у текущего ALS-персонажа проходит через NativeInputActions, как указано в таблице выше.
 
@@ -133,7 +122,7 @@ UI IA/IMC не помещать в этот config. Их владелец — с
 
 ## Следующие этапы
 
-Каркас FSM и временных ресурсов реализован отдельным пакетом; пользовательский Blueprint-сетап и ограничения описаны в [CharacterStateMachine.md](CharacterStateMachine.md). Runtime/сеть пока не проверены. StateMappingContexts в InputConfig перечисляет дополнительные contexts без автоматической активации.
+Каркас FSM и временных ресурсов реализован отдельным пакетом; пользовательский Blueprint-сетап и ограничения описаны в [CharacterStateMachine.md](CharacterStateMachine.md). Runtime/сеть пока не проверены. Каталог контекстов из InputConfig удалён. Состояние подключает собственные IMC через UPlayerInputSubsystem и снимает leases при выходе; UI FSM управляет отдельными UI-контекстами.
 
 1. Готовые классы конфигурации и заполнение ассетов пользователем (этот пакет).
 2. Pawn input component, маршрутизация native/GAS, удаление MapKey/action-specific кода Controller реализованы в C++; runtime подтверждение и авторинг ассетов пользователем ещё требуются. Инвентарь блокирует Gameplay; UI остаётся независимым от Pawn. Серверные ограничения combat сохраняются.
@@ -141,3 +130,19 @@ UI IA/IMC не помещать в этот config. Их владелец — с
 4. Выделение модулей после стабилизации поведения, с Core Redirects.
 
 На этапах 2–3 нужны адресные read-only проверки GCFSM replication и ALS ragdoll без Controller до изменения их интеграции. Тестирование — только с отдельным явным апрувом и согласованным объёмом.
+
+Проверка соответствия IMC/IA выполняется при Enter resource adapter: для действий IMC состояния должны существовать Native/GAS маршруты в InputConfig текущего Pawn. InputConfig отдельно проверяет теги, ссылки, дубликаты и Boolean-тип GAS input. Не требуется, чтобы одно состояние содержало IMC для всех маршрутов Pawn или чтобы каждый ability tag имел прямую IA: native handlers могут активировать способности сами. Вложенные состояния могут использовать ввод родителя.
+
+## Blueprint input и контекст HFSM — 2026-11-03
+
+Текущий lifecycle: Enter/Exit компонентов возвращают void; общий отказ/rollback состояния и AbortEnter удалены. Проверки и частичная очистка принадлежат самому компоненту. Input component при неудаче mapping acquisition снимает только собственные handles. Остальные компоненты состояния продолжают Enter; старые OnEnterFailed/HasEnteredSuccessfully в Blueprint необходимо убрать. Привязки событий по-прежнему создаются однократно на Enter и снимаются на Exit/уничтожении.
+
+UHFSMPlayerStateComponent удалён. UHFSMState и UHFSMStateComponent предоставляют BlueprintPure GetPlayerController/GetLocalPlayer; компонент делегирует получение игрока своему State. Контекст разрешается через существующий HFSMLibrary по владельцу Pawn/Controller/HUD/Widget/LocalPlayer. GetFirstPlayerController не используется; World без владельца игрока не выбирает первого игрока. UI-компоненты, layout и inventory теперь наследуют общий UHFSMStateComponent. Получение контекста динамическое, без отдельного кэша игрока.
+
+В EventGraph Blueprint состояния или его компонента можно добавить обычный Enhanced Input Action event (Started/Triggered/Completed). При Enter UInputDelegateBinding подключает события класса и его родителей; Exit/Abort/rollback удаляют input scope. Для Blueprint без input bindings scope не создаётся. Привязка выполняется однократно на Enter, без флага bHasBlueprintInputEvents и без polling/refresh в Tick. Локальный контроллер должен быть готов при входе; после его появления или смены нужен повторный вход в состояние. На dedicated server и remote proxies локальные bindings не создаются.
+
+Каждый Blueprint-приёмник использует отдельный transient UEnhancedInputComponent в стеке своего Controller: это изолирует legacy OverrideParentBinding и Enhanced action-value bindings от других объектов. При выходе снимается только этот scope. Consume Input и порядок input stack определяют распространение событий между слоями; одинаковый action в разных слоях не гарантирует вызов всех обработчиков.
+
+IMC/клавиши назначаются прежним способом: UI — через HFSMInputComponent/UPlayerInputSubsystem, персонаж — через ControlStateDefinition. Новая привязка не добавляет IMC и не меняет UI/gameplay policy. В UIOnly события Controller input stack не заменяют обработку клавиш сфокусированным Widget.
+
+Полная NEXTGENONEEditor Development сборка PASS, UBT exit 0 (AgentBuild.log). Авторинг 13 связанных Blueprint — exit 0, 0 ошибок / 16 предупреждений (HFSMInputAssets.log); сохранены изменения шести FSM assets, остальные записи авторинга восстановлены из бэкапа. Среди предупреждений — существующие недействительные UIModule.Transition/Transition.Start в BP_Button; этот asset восстановлен без изменений из бэкапа. Бэкап/отчёт: Saved/HFSMInputMigration/20261103-214303/. Точный ClassRedirect HFSMPlayerStateComponent → HFSMStateComponent сохранён для старых ссылок. Никакие игровые/автоматические/сетевые тесты не запускались; исходники существующих тестов адаптированы к новой базовой иерархии, но не выполнялись.

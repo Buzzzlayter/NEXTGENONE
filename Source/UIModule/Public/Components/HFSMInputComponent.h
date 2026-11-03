@@ -1,9 +1,9 @@
-﻿
+
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/HFSMPlayerStateComponent.h"
+#include "HFSMStateComponent.h"
 #include "Input/InputData.h"
 #include "HFSMInputComponent.generated.h"
 
@@ -16,14 +16,13 @@ class UPlayerInputSubsystem;
 // ********************************************************************************************************************
 
 UCLASS(DisplayName = "InputComponent")
-class UIMODULE_API UHFSMInputComponent : public UHFSMPlayerStateComponent
+class UIMODULE_API UHFSMInputComponent : public UHFSMStateComponent
 {
 	GENERATED_BODY()
 
 public:
-	virtual bool Enter() override;
+	virtual void Enter() override;
 	virtual void Exit(FName Event) override;
-	virtual void AbortEnter() override;
 
 protected:
 	UPROPERTY(EditAnywhere, Category=Input)
@@ -42,11 +41,7 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = Input, meta = (EditCondition = "bSetupInputMode"))
 	EInputMode InputMode;
-
-	// Legacy serialized option. Policy transitions flush when the effective input mode changes.
-	UPROPERTY(meta = (DeprecatedProperty))
-	bool bFlushInput = false;
-
+	
 	UPROPERTY(EditDefaultsOnly, Category = Gamepad)
 	bool bSetupCursorMode = false;
 

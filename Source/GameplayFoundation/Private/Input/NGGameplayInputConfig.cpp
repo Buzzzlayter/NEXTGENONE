@@ -1,7 +1,6 @@
 #include "Input/NGGameplayInputConfig.h"
 
 #include "InputAction.h"
-#include "InputMappingContext.h"
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
 #endif
@@ -40,30 +39,6 @@ EDataValidationResult UNGGameplayInputConfig::IsDataValid(FDataValidationContext
 		bValid = false;
 	};
 
-	TSet<const UInputMappingContext*> Contexts;
-	TSet<const UInputAction*> MappedActions;
-	for (const FNGInputMappingContextEntry& Entry : MappingContexts)
-	{
-		if (!Entry.MappingContext)
-		{
-			Error(TEXT("MappingContexts contains an empty reference."));
-			continue;
-		}
-		if (Entry.Priority < 0) Error(TEXT("Mapping context priority must be non-negative."));
-		if (Contexts.Contains(Entry.MappingContext.Get()))
-			Error(FString::Printf(TEXT("Duplicate mapping context: %s."), *Entry.MappingContext->GetName()));
-		Contexts.Add(Entry.MappingContext.Get());
-		for (const FEnhancedActionKeyMapping& Mapping : Entry.MappingContext->GetMappings())
-			if (Mapping.Action) MappedActions.Add(Mapping.Action.Get());
-	}
-
-	for (const UInputMappingContext* StateContext : StateMappingContexts)
-	{
-		if (!StateContext || Contexts.Contains(StateContext)) { Error(TEXT("Null or duplicate StateMappingContext (including base contexts).")); continue; }
-		Contexts.Add(StateContext);
-		for (const FEnhancedActionKeyMapping& Mapping : StateContext->GetMappings())
-			if (Mapping.Action) MappedActions.Add(Mapping.Action.Get());
-	}
 	// One physical action has one route. Multiple device keys belong to that action's IMC mappings.
 	TSet<const UInputAction*> BoundActions;
 	TSet<FGameplayTag> BoundTags;
@@ -83,7 +58,6 @@ EDataValidationResult UNGGameplayInputConfig::IsDataValid(FDataValidationContext
 			}
 			if (BoundActions.Contains(Entry.InputAction.Get())) Error(Label + TEXT(": InputAction is already routed in this config."));
 			BoundActions.Add(Entry.InputAction.Get());
-			if (!MappedActions.Contains(Entry.InputAction.Get())) Error(Label + TEXT(": InputAction is missing from this config's mapping contexts."));
 			if (bAbility && Entry.InputAction->ValueType != EInputActionValueType::Boolean)
 				Error(Label + TEXT(": GAS pressed/released bindings require a Boolean action; analog movement/look uses native actions."));
 		}

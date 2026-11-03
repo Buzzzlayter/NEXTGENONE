@@ -319,7 +319,7 @@ ReleaseHealthPawn и ReleaseHealthBindings снимают только собс�
 |---|---|---|
 | Space | Прыжок через GAS | GA_Jump; физика прыжка — CharacterMovement |
 | Q | Деш вперёд по плоскости гравитации | GA_Dash: Speed=1600, Duration=0.18; GE_DashCooldown: 0.8 секунды |
-| V | Попытка залезания перед персонажем | GA_Mantle; Character.MantleAdapter.TraceSettings; BP_ALSMantleExecutor для ALS mantle assets |
+| V | Попытка залезания перед персонажем | GAS — GA_Mantle; ALS traces/curves/animations — BP_ALSMantleExecutor (актуализировано 2026-11-03) |
 | E | Подбор оружия под прицелом | GA_PickupWeapon.MaxDistance=250; BP_WeaponPickup.Definition |
 | ЛКМ | Один выстрел | GA_Fire; DA_TestWeapon |
 | F / U | Выдать/экипировать тестовое оружие / убрать | Существующий debug equip/unequip; E освобождена под pickup |
@@ -333,6 +333,8 @@ UNGDashAbility использует LocalPredicted и ApplyRootMotionConstantFor
 Cooldown — duration GameplayEffect на ASC PlayerState с тегом Cooldown.Movement.Dash. EndAbility, повторное нажатие и переэкипировка не снимают cooldown. State.Action.Dash и State.Action.Mantle блокируют конфликтующие действия, включая FireOnServer. Есть Blueprint hook OnDashStarted(Direction) и сетевой GameplayCue.Movement.Dash для будущего FX; готовый Niagara/монтаж в этом проходе не добавлен. OnDashStarted вызывается на predicting owner/server, а не на всех simulated proxies. Для сетевого FX использовать GameplayCue.
 
 ### Залезание
+
+Текущий контракт 2026-11-03: после сообщения пользователя о неработающем варианте самостоятельный Root Motion Source, traces и cue из абилки удалены. GA_Mantle — тонкая GAS-обёртка, один BP_ALSMantleExecutor : UALSMantleComponent на Pawn выполняет исходные проверки, движение, Timeline, montage и выбор assets. Проектный наследник содержит только lifecycle/network bridge; отдельный MantleAdapter не возвращён. Настройки находятся в component Blueprint, ALS plugin/AnimBP сохранены. Сборка PASS, authoring exit 0; runtime/сеть ещё не проверены. Подробности: [MantleAbility.md](../Gameplay/MantleAbility.md). Следующие абзацы описывают исторический вариант с отдельным адаптером.
 
 Новый UNGMantleAdapterComponent выполняет probes на authority: стенка, верхняя walkable поверхность, место под капсулу, скорость поверхности, наличие ALS correction curve. GA_Mantle — ServerOnly/ServerOnlyTermination. Commit выполняется после успешного probe и до начала движения. Один reliable multicast запускает существующий ALS timeline/MantleStart на сервере, владельце и proxies.
 
@@ -477,3 +479,26 @@ The Tab action was confirmed as IMC_Debug.DebugToggleHudAction. Runtime no longe
 The controller uses a project IMC_NextgenoneDebug copy with known ALS demo/debug actions removed; unrelated custom mappings are preserved and gameplay/ability mappings remain unchanged. Diagnostics are now a nested WBP_DebugSettings in the existing Settings screen/state: existing ALS debug view, traces, shapes and layer colors plus read-only current-character information. Switches apply immediately for the current development session and retain ALS's local static-flag semantics. Shipping hides this diagnostics section. No alternate health, weapon-selection or locomotion system was introduced; demo props, debug mesh swaps and slow motion are not gameplay settings.
 
 Offline C++ build PASS and asset commandlet exit 0 (0 errors / 13 existing ALS/environment warnings). No runtime tests executed. Details: Docs/Gameplay/SettingsAndDebugUI.md, latest update.
+## State-owned abilities and effects — 2026-11-03
+
+This supersedes the earlier base AbilitySet description. UNGAbilitySet and DA_PlayerAbilities are deleted. UNGCharacterDefinition now contains InputConfig only. PlayerState.StartLife owns ASC Owner/Avatar initialization and once-per-life health initialization, but grants no default character abilities.
+
+Each UNGControlStateDefinition contains Abilities (FNGAbilityGrant), Effects, MappingContexts and gameplay-input policy. The existing NGCharacterStateResources gives/removes state-owned specs/effects using handles. FNGAbilityGrant carries class, input tag, level and bActivateOnEnter. After acquiring all resources and registering the state scope, the adapter activates flagged grants; failed activation rolls back entry. Repeated scope refresh does not duplicate grants/entry activation. Temporary effects require Duration/Infinite and no aggregated stacking. Initialization health remains outside Alive entry so switching states does not heal.
+
+Alive directly owns Jump, Dash, Mantle, Interact and Punch with their previous input tags/levels. Dead directly owns NGDeathAbility with no InputTag and bActivateOnEnter=true. The dedicated NGCharacterDeathStateComponent is deleted; no special death GAS event or base grant is needed. Health requests the FSM transition. GA_Death only activates if its spec belongs to a currently registered state scope of the correct Avatar, with the Dead gameplay-effect tag present. State Exit/Unbind owns cleanup; ability completion does not clear other state grants.
+
+Existing equipment ownership remains in Combat: weapon definitions still choose Fire/Reload classes, now granted directly through FNGAbilityGrant without constructing an AbilitySet. The server fire-rate limiter remains on PlayerState and is not reset by state/equipment grant churn.
+
+Early UnPossess/ASC handoff uses generic state-resource readiness: the old binding survives the pending transition and resource entry, including all automatic activations. OnResourcesReady resumes PendingLifePawn; old handles are released before changing Avatar. ReadyASC resolves the retained ASC even after PlayerState is removed from the old Pawn. An unpossessed ordinary state does not reacquire grants through Refresh. Callbacks during cancellation use extracted handle arrays to avoid reentrant cleanup. A failed/stopped graph can leave handoff waiting; this is an authoring error, not a reason to bypass FSM.
+
+Pawn death identity comes from its replicated GCFSM state and ControlStateDefinition.StateTag; no Character bDead, bDeathAbilityActivated or ragdoll-phase flag remains. Dead's Infinite NGDeadStateEffect grants State.Dead on the currently attached ASC. The old corpse retains its FSM identity after that ASC moves to a new life. GA_Death executes the definition's PresentationCue; NGDeathRagdollCue uses the ALS base class and rejects a different source Avatar. Proxies restore the configured local cue on state entry/BeginPlay, including late relevance, without depending on the former PlayerState. Body motion/pose is local, without server anchor or physics correction. ALS plugin/AnimBP remain unchanged. Presentation is immediate; a future delayed death montage needs explicit FSM phases rather than another phase flag.
+
+Death lifecycle refactor verification: full offline NEXTGENONEEditor Win64 Development PASS, UBT exit 0 (Saved/Logs/AgentBuild.log). Targeted NGSetup -StateLifecycleOnly authoring exit 0, 0 errors / 11 ALS/environment warnings (Saved/Logs/DeathLifecycleAssets.log). Alive/Dead/Pawn Blueprints compiled and saved; InputConfig force-resaved retaining 13 native and 3 GAS routes. Alive: State.Alive, 5 abilities, 1 IMC; Dead: State.Dead, 1 ability, 1 effect, no IMC, native ragdoll cue. Backup: Saved/DeathLifecycleRefactor/20261103-200722/. Gameplay/network behavior still requires separate approval and verification.
+
+## Input routes separated from state IMC — 2026-11-03
+
+UNGGameplayInputConfig now contains only NativeInputActions/AbilityInputActions and tag lookup; MappingContexts and StateMappingContexts are removed. FNGInputMappingContextEntry lives with ControlStateDefinition, in the same GameplayFoundation script namespace (no redirect needed). Pawn input adapters only bind actions and observe the existing UI input policy, without IMC acquisition/release hooks or context handles. Control-state resources remain the sole gameplay IMC owner.
+
+ControlStateDefinition.ValidateInputMappings compares actions in this state's IMC against the actual Pawn's InputConfig at Enter. A missing Native/GAS route rejects entry through the existing failure/rollback path. InputConfig's independent editor validation still checks tags, references, duplicate routes and GAS Boolean types, but cannot validate a global IMC catalog. States need not map every route of a Pawn; native handlers and parent states can provide other activation paths. No extra InputConfig reference or duplicate catalog was added to state assets.
+
+Offline NEXTGENONEEditor build PASS, UBT exit 0. Reflected InputConfig no longer exposes either context array; authoring read-back retains 13 native and 3 ability routes, Alive IMC_NG_Character priority 10, Dead no gameplay IMC. No gameplay or multiplayer tests run.

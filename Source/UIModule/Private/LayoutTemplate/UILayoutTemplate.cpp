@@ -10,10 +10,8 @@
 
 ULayoutTemplatesSorter* GetLayoutSorter(UHFSMState* State)
 {
-	if (!State)
-	{
-		return nullptr;
-	}
+	if (!State) return nullptr;
+	
 	UHFSMStateComponent* Component = nullptr;
 	State->GetClosestComponentInHierarchyUp(ULayoutTemplatesSorter::StaticClass(), Component);
 	if (Component)
@@ -113,37 +111,37 @@ const TMap<FGameplayTag, UWidget*>& UUILayoutTemplate::GetPlaceholders()
 	return Placeholders;
 }
 
-bool UUILayoutTemplate::Enter()
+void UUILayoutTemplate::Enter()
 {
 	if (!ensureMsgf(Template, TEXT("Layout has no template class.")))
 	{
-		return false;
+		return;
 	}
 
 	UWorld* world = GetWorld();
 	if (!ensureMsgf(world, TEXT("Layout has no world.")))
 	{
-		return false;
+		return;
 	}
 
 	APlayerController* LocalPlayerController = GetPlayerController();
 	if (!ensureMsgf(IsValid(LocalPlayerController) && LocalPlayerController->GetLocalPlayer(),
 		TEXT("Layout requires an explicit local player context.")))
 	{
-		return false;
+		return;
 	}
 
 	TemplateWidget = CreateWidget<ULayoutWidget>(LocalPlayerController, Template);
 	if (!ensureMsgf(TemplateWidget, TEXT("Layout could not create its widget.")))
 	{
-		return false;
+		return;
 	}
 
 	if (!ensureMsgf(TemplateWidget->AddToPlayerScreen(static_cast<int32>(Layer)),
 		TEXT("Layout could not add its widget to the owning player's screen.")))
 	{
 		TemplateWidget = nullptr;
-		return false;
+		return;
 	}
 	TemplateWidget->DoFadeIn();
 	if (TemplateWidget->WidgetTree)
@@ -162,36 +160,12 @@ bool UUILayoutTemplate::Enter()
 			});
 	}
 
-	if (!Super::Enter())
-	{
-		TemplateWidget->RemoveFromParent();
-		TemplateWidget = nullptr;
-		Placeholders.Reset();
-		return false;
-	}
 	bIsTickEnabled = true;
 	
 	if (ULayoutTemplatesSorter* LayoutSorter = GetLayoutSorter(State))
 		LayoutSorter->AddLayout(this);
-	return true;
-}
+	Super::Enter();
 
-void UUILayoutTemplate::AbortEnter()
-{
-	if (ULayoutTemplatesSorter* LayoutSorter = GetLayoutSorter(State))
-	{
-		LayoutSorter->RemoveLayout(this);
-	}
-	DemountWidgetsImmediate(WidgetsAwaitingDemount);
-	WidgetsAwaitingDemount.Reset();
-	if (TemplateWidget)
-	{
-		TemplateWidget->RemoveFromParent();
-		TemplateWidget = nullptr;
-	}
-	Placeholders.Reset();
-	bIsTickEnabled = false;
-	Super::Exit(NAME_None);
 }
 
 void UUILayoutTemplate::Tick(float deltaTime)

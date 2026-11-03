@@ -4,6 +4,9 @@
 #include "HFSMStateComponent.generated.h"
 
 class UHFSMState;
+class UInputComponent;
+class APlayerController;
+class ULocalPlayer;
 
 UCLASS(Blueprintable, EditInlineNew)
 class UIMODULE_API UHFSMStateComponent : public UObject
@@ -13,12 +16,10 @@ class UIMODULE_API UHFSMStateComponent : public UObject
 public:
 	virtual void Init(UHFSMState* StateOwner);
 
-	// A failed entry must release its partial resources before returning false.
-	virtual bool Enter();
+	// Lifecycle hooks; each component validates and cleans up its own resources.
+	virtual void Enter();
 	virtual void Tick(float DeltaTime);
 	virtual void Exit(FName Event);
-	// Roll back a successful entry when another component fails to enter.
-	virtual void AbortEnter();
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void OnEnter();
@@ -34,11 +35,16 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "HFSM|Context")
 	UObject* GetContextOwner() const;
+	UFUNCTION(BlueprintPure, Category = "HFSM|Context")
+	APlayerController* GetPlayerController() const;
+	UFUNCTION(BlueprintPure, Category = "HFSM|Context")
+	ULocalPlayer* GetLocalPlayer() const;
 	
 	virtual UWorld* GetWorld() const override;
 	virtual bool IsTickEnabled();
 
 protected:
+	virtual void BeginDestroy() override;
 	UPROPERTY(EditAnywhere)
 	bool bIsTickEnabled = false;
 	
@@ -50,5 +56,9 @@ protected:
 	
 	UPROPERTY(Transient, BlueprintReadOnly)
 	UWorld* World;
+
+private:
+	friend class UHFSMState;
+	UPROPERTY(Transient) TObjectPtr<UInputComponent> BlueprintInputComponent;
 
 };

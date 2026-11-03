@@ -15,11 +15,10 @@ public:
 	UPROPERTY(EditAnywhere, Category="Input|Camera", meta=(ClampMin="0")) float StickPitchDegreesPerSecond = 120.f;
 protected:
 	virtual void HandleNativeInput_Implementation(FGameplayTag Tag, const FInputActionValue& Value, ETriggerEvent Phase) override;
-	virtual void AcquireInputContexts() override;
-	virtual void ReleaseInputContexts() override;
+	virtual void BindInputPolicy() override;
+	virtual void UnbindInputPolicy() override;
 private:
 	TWeakObjectPtr<UPlayerInputSubsystem> LocalInput;
-	TArray<FGuid> ContextHandles;
 	TSet<FGameplayTag> ActivatedNativeActions;
 	UFUNCTION() void GameplayBlocked(bool bBlocked);
 };

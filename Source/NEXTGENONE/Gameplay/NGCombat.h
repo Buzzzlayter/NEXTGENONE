@@ -134,7 +134,6 @@ private:
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) FNGEquipmentState Equipment;
 	UPROPERTY(ReplicatedUsing=OnRep_CurrentItem) TObjectPtr<UNGInventoryItemInstance> CurrentItem;
 	UPROPERTY(ReplicatedUsing=OnRep_Aiming) bool bAiming = false;
-	UPROPERTY() TObjectPtr<UNGAbilitySet> WeaponAbilities;
 	UPROPERTY() FNGGrantedHandles WeaponHandles;
 	TWeakObjectPtr<UNGInventoryItemInstance> BoundItem;
 	TWeakObjectPtr<UNGInventoryManagerComponent> BoundInventory;

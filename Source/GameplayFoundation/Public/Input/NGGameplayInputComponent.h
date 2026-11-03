@@ -7,18 +7,18 @@
 #include "InputTriggers.h"
 #include "NGGameplayInputComponent.generated.h"
 
-class UNGCharacterDefinition;
+class UNGGameplayInputConfig;
 class UNGAbilitySystemComponent;
 class UEnhancedInputComponent;
 class UInputComponent;
 
-/** Device-independent Pawn bindings. The project adapter supplies contexts, UI policy and native routes. */
+/** Device-independent Pawn bindings. The adapter observes UI policy; states own mapping contexts. */
 UCLASS(Blueprintable, ClassGroup=Input, meta=(BlueprintSpawnableComponent))
 class GAMEPLAYFOUNDATION_API UNGGameplayInputComponent : public UActorComponent
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input") TObjectPtr<UNGCharacterDefinition> CharacterDefinition;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input") TObjectPtr<UNGGameplayInputConfig> InputConfig;
 	UFUNCTION(BlueprintCallable, Category="Input") void InitializeInput(UInputComponent* Input);
 	UFUNCTION(BlueprintCallable, Category="Input") void ShutdownInput();
 	UFUNCTION(BlueprintCallable, Category="Input") void SetGameplayInputBlocked(bool bBlocked);
@@ -26,8 +26,8 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category="Input") void HandleNativeInput(FGameplayTag Tag, const FInputActionValue& Value, ETriggerEvent Phase);
 protected:
 	virtual void HandleNativeInput_Implementation(FGameplayTag Tag, const FInputActionValue& Value, ETriggerEvent Phase) {}
-	virtual void AcquireInputContexts() {}
-	virtual void ReleaseInputContexts() {}
+	virtual void BindInputPolicy() {}
+	virtual void UnbindInputPolicy() {}
 	UNGAbilitySystemComponent* GetInputASC() const;
 	void ReleaseHeldInput();
 private:
