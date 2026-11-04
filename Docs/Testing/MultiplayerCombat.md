@@ -67,10 +67,10 @@ Defaults основного проекта и пользовательские �
 - `Source/NEXTGENONE/NEXTGENONE.Build.cs`: GAS/ALS dependencies и условные editor dependencies.
 - Новые `Source/NEXTGENONE/Gameplay/NGAbilitySystem.h`, `NGAbilitySystem.cpp`.
 - Новые `Source/NEXTGENONE/Gameplay/NGCharacter.h`, `NGCharacter.cpp`.
-- Новые `Source/NEXTGENONE/Gameplay/NGCombat.h`, `NGCombat.cpp`.
+- Новые `Source/NEXTGENONE/Gameplay/Combat/NGCombat.h`, `NGCombat.cpp`.
 - Новые `Source/NEXTGENONE/Gameplay/NGPlayerController.h`, `NGPlayerController.cpp`.
-- Новые `Source/NEXTGENONE/Gameplay/NGTestGameMode.h`, `NGTestGameMode.cpp`.
-- Новые `Source/NEXTGENONE/Gameplay/NGSetupCommandlet.h`, `NGSetupCommandlet.cpp`.
+- Новые `Source/NEXTGENONE/Gameplay/GameModes/NGTestGameMode.h`, `NGTestGameMode.cpp`.
+- Новые `Source/NEXTGENONE/Gameplay/Editor/NGSetupCommandlet.h`, `NGSetupCommandlet.cpp`.
 - Новые `Content/GameplayFoundation/BP_NGCharacter.uasset`, `BP_NGController.uasset`, `Maps/CombatTest.umap`.
 - Новый `Tools/Testing/Run-NGCombatSmoke.ps1`.
 - Обновлён `Docs/Architecture/GameplayFoundation.md`, создан `Docs/Testing/MultiplayerCombat.md`.

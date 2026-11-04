@@ -1,40 +1,39 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
-#include "Components/Button.h"
-#include "NGInventoryManagerComponent.h"
+#include "Inventory/UIInventoryWidget.h"
+#include "Inventory/UIInventoryOperationInterface.h"
+#include "Inventory/NGInventoryManagerComponent.h"
 #include "NGInventoryPanel.generated.h"
 
-class UVerticalBox;
+class UNGCombatComponent;
+class UNGPlayerInventoryManagerComponent;
+struct FNGEquipmentState;
 
-UCLASS()
-class UNGInventoryItemButton : public UButton
+/** Project adapter for the reusable R5-style UI. Owns no input, layout, or inventory state. */
+UCLASS(Abstract, Blueprintable)
+class NEXTGENONE_API UNGInventoryPanel : public UUIInventoryWidget, public IUIInventoryOperationInterface
 {
 	GENERATED_BODY()
 public:
-	void InitializeItem(UNGInventoryItemInstance* InItem, APlayerController* InController,bool bInDrop=false);
-private:
-	TWeakObjectPtr<UNGInventoryItemInstance> Item;
-	TWeakObjectPtr<APlayerController> Controller;
-	bool bDrop=false;
-	UFUNCTION() void Equip();
-};
-
-/** Inventory content. Its state component owns the window; the state owns input. */
-UCLASS(Blueprintable)
-class NEXTGENONE_API UNGInventoryPanel : public UUserWidget
-{
-	GENERATED_BODY()
+	UNGInventoryPanel(const FObjectInitializer& Init);
+	void SetInventorySource(UNGInventoryManagerComponent* Source);
+	virtual bool RequestInventoryOperation_Implementation(const FUIInventorySlotData& SlotInfo, EUIInventoryOperation Operation, int32 Amount) override;
+	virtual bool MoveInventoryItem_Implementation(const FUIInventorySlotData& Source, const FUIInventorySlotData& Destination, int32 Amount) override;
 protected:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
-	UPROPERTY(meta=(BindWidgetOptional), BlueprintReadOnly) TObjectPtr<UVerticalBox> ItemsList;
+	UPROPERTY(EditDefaultsOnly, Category="Inventory") FText InventoryTitle = NSLOCTEXT("NEXTGENONE", "PlayerInventoryTitle", "Inventory");
+	/** Empty displays every slot. Use Inventory.Slot.Action for the five-cell action panel. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Inventory") FGameplayTag SlotFilter;
 private:
 	TWeakObjectPtr<UNGInventoryManagerComponent> Inventory;
+	TWeakObjectPtr<UNGCombatComponent> Combat;
+	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> PlayerInventory;
 	TArray<TWeakObjectPtr<UNGInventoryItemInstance>> ObservedItems;
 	UFUNCTION() void Refresh();
 	UFUNCTION() void Changed(FNGInventoryChangeMessage Change);
+	UFUNCTION() void EquipmentChanged(FNGEquipmentState Equipment);
+	UFUNCTION() void PawnChanged(APawn* OldPawn, APawn* NewPawn);
 	void UnbindItems();
 };

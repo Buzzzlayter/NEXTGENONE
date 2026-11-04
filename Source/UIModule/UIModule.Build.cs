@@ -8,6 +8,11 @@ public class UIModule : ModuleRules
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
         bEnableExceptions = true;
 
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.AddRange(new[] { "UnrealEd", "PropertyEditor" });
+        }
+
         PrivateIncludePaths.AddRange(
             new string[]
             {
@@ -35,8 +40,7 @@ public class UIModule : ModuleRules
                 "Slate",
                 "SlateCore",
                 "DeveloperSettings",
-                "DeveloperSettings", 
-                "StructUtils"
+                "DeveloperSettings",
             }
         );
     }

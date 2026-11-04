@@ -7,8 +7,7 @@ public class GameplayFoundation : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[]
         {
-            "Core", "CoreUObject", "Engine", "GameplayAbilities", "GameplayTags", "GameplayTasks", "EnhancedInput"
+            "Core", "CoreUObject", "Engine", "GameplayAbilities", "GameplayTags", "GameplayTasks", "EnhancedInput", "NetCore"
         });
-        PrivateDependencyModuleNames.AddRange(new[] { "NetCore" });
     }
 }

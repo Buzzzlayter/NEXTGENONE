@@ -6,13 +6,12 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "../NGCombat.h"
+#include "Gameplay/Combat/NGCombat.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputMove, "Input.Move");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookMouse, "Input.Look.Mouse");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookStick, "Input.Look.Stick");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputSprint, "Input.Sprint");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputAim, "Input.Aim");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputStance, "Input.Stance");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputWalk, "Input.Walk");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputRagdoll, "Input.Ragdoll");
@@ -23,7 +22,11 @@ UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLooking, "Input.Rotation.Looking");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputPrimary, "Input.Combat.Primary");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputEquip, "Input.Equipment.Equip");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputUnequip, "Input.Equipment.Unequip");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputSlot, "Input.Equipment.SelectSlot");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot1, "Input.ActionBar.Slot1");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot2, "Input.ActionBar.Slot2");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot3, "Input.ActionBar.Slot3");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot4, "Input.ActionBar.Slot4");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot5, "Input.ActionBar.Slot5");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputReload, "Input.Equipment.Reload");
 
 void UNGCharacterInputComponent::BindInputPolicy()
@@ -90,19 +93,14 @@ void UNGCharacterInputComponent::HandleNativeInput_Implementation(FGameplayTag T
 		else if (bReleased) Combat->StopPrimaryInput();
 		return;
 	}
-	if (Tag == TAG_InputAim && (bStarted || bReleased))
-	{
-		if (ALS) ALS->AimAction(bStarted);
-		else if (Combat) Combat->RequestAim(bStarted);
-		return;
-	}
-	if (Tag == TAG_NGInputJump && ALS && (bStarted || bReleased)) { ALS->JumpAction(bStarted); return; }
 	if (Tag == TAG_InputSprint && ALS && (bStarted || bReleased)) { ALS->SprintAction(bStarted); return; }
 	if (bStarted && Combat)
 	{
+		const FGameplayTag ActionSlots[] = {TAG_InputActionSlot1, TAG_InputActionSlot2, TAG_InputActionSlot3, TAG_InputActionSlot4, TAG_InputActionSlot5};
+		for (int32 Index = 0; Index < UE_ARRAY_COUNT(ActionSlots); ++Index)
+			if (Tag == ActionSlots[Index]) { Combat->StopPrimaryInput(); Combat->RequestSelectSlot(Index); return; }
 		if (Tag == TAG_InputEquip) { Combat->StopPrimaryInput(); Combat->RequestEquip(true); }
 		else if (Tag == TAG_InputUnequip) { Combat->StopPrimaryInput(); Combat->RequestEquip(false); }
-		else if (Tag == TAG_InputSlot) { Combat->StopPrimaryInput(); Combat->RequestSelectSlot(FMath::RoundToInt(Value.GetMagnitude()) - 1); }
 		else if (Tag == TAG_InputReload) Combat->RequestReload();
 	}
 	if (bStarted && ALS)

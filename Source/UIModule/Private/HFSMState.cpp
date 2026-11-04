@@ -32,11 +32,8 @@ TArray<UHFSMState*> UHFSMState::GetChildren() const
 	TArray<UHFSMState*> Output;
 	for (const UGCFSM* FSM : InternalFSMs)
 	{
-		if (!FSM)
-		{
-			continue;
-		}
-
+		if (!FSM) continue;
+		
 		if (UHFSMState* ChildState = Cast<UHFSMState>(FSM->GetActiveState()))
 		{
 			Output.Add(ChildState);

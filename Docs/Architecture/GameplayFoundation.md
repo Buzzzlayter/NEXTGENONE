@@ -400,7 +400,7 @@ CombatComponent добавляет read-only OnPunchStarted(Direction) и OnPunc
 
 Проверка этого прохода: полная UBT NEXTGENONEEditor Win64 Development PASS, без compiler diagnostics (Saved/Logs/NGPunchBuild.log). NGSetup -PunchOnly создал и скомпилировал два Blueprint и дополнил Ability Set: exit 0, 0 errors, 10 warnings окружения/ALS Python names (Saved/Logs/NGPunchAssets.log). Карта не загружалась, PIE/автотесты/сетевые тесты не запускались. Runtime, фактический knockback owning client и его коррекции, прерывание mantle/dash, работа настроенного montage и UI остаются непроверенными до апрува.
 
-Изменённые файлы: новые `Source/NEXTGENONE/Gameplay/NGPunchAbility.h/.cpp`, `Content/Gameplay/Abilities/GA_Punch.uasset`, `GE_PunchCooldown.uasset`; дополнен `DA_PlayerAbilities.uasset`. Изменены `NGAbilitySystem.h/.cpp`, `NGCombat.h/.cpp`, `NGDashAbility.cpp`, `NGJumpAbility.cpp`, `NGMantleAbility.cpp`, `NGWeaponPickup.cpp`, `NextgenonePlayerState.cpp`, `NextgenonePlayerController.cpp`, `NGSetupCommandlet.cpp` и эти архитектурные/тестовые документы. ALS plugin, AnimBP, WBP_HealthPanel и project defaults не изменялись.
+Изменённые файлы: новые `Source/NEXTGENONE/Gameplay/Abilities/NGPunchAbility.h/.cpp`, `Content/Gameplay/Abilities/GA_Punch.uasset`, `GE_PunchCooldown.uasset`; дополнен `DA_PlayerAbilities.uasset`. Изменены `NGAbilitySystem.h/.cpp`, `NGCombat.h/.cpp`, `NGDashAbility.cpp`, `NGJumpAbility.cpp`, `NGMantleAbility.cpp`, `NGWeaponPickup.cpp`, `NextgenonePlayerState.cpp`, `NextgenonePlayerController.cpp`, `NGSetupCommandlet.cpp` и эти архитектурные/тестовые документы. ALS plugin, AnimBP, WBP_HealthPanel и project defaults не изменялись.
 
 ## 20. Перенос Lyra inventory и пистолета/автомата — 2026-11-01
 

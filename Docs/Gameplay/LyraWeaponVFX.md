@@ -31,7 +31,7 @@ A future visual pass should check muzzle direction, shell scale, normal orientat
 
 ## Files
 
-New source: Source/NEXTGENONE/Gameplay/NGWeaponVFX.h/.cpp and NGWeaponVFXAssets.cpp.
+New source: Source/NEXTGENONE/Gameplay/Combat/NGWeaponVFX.h/.cpp and NGWeaponVFXAssets.cpp.
 Updated source: NGCombat.h/.cpp, NGBallisticProjectile.h/.cpp, NGSetupCommandlet.cpp; NEXTGENONE.Build.cs adds the required Niagara runtime dependency. NEXTGENONE.uproject explicitly enables Niagara. No NiagaraEditor framework dependency remains.
 
 Updated project assets: DA_Pistol, DA_Rifle, DA_Shotgun, DA_TestWeapon, BP_BallisticProjectile, GA_Fire and BP_NextgenoneCharacter. Backups are in Saved/RefactorBackup/WeaponVFX and Saved/RefactorBackup/Interaction. Imported asset list: Docs/Research/LyraWeaponVFXAssets.txt. Logs: Saved/Logs/NGWeaponVFXBuild.log and NGWeaponVFXAssets.log.

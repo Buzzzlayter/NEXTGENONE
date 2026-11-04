@@ -1,85 +1,137 @@
 #include "NGInventoryPanel.h"
-#include "NGInventoryItemInstance.h"
-#include "NGInventoryItemDefinition.h"
-#include "../NextgenoneCharacter.h"
-#include "../NextgenonePlayerState.h"
-#include "../NGCombat.h"
-#include "../NextgenonePlayerController.h"
-#include "Blueprint/WidgetTree.h"
-#include "Components/VerticalBox.h"
-#include "Components/ScrollBox.h"
-#include "Components/TextBlock.h"
-#include "Components/HorizontalBox.h"
+#include "Inventory/NGInventoryItemInstance.h"
+#include "Inventory/NGInventoryItemDefinition.h"
+#include "Gameplay/Combat/NGCombat.h"
+#include "NGPlayerInventoryManagerComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerState.h"
 
-void UNGInventoryItemButton::InitializeItem(UNGInventoryItemInstance* InItem, APlayerController* InController,bool bInDrop)
+UNGInventoryPanel::UNGInventoryPanel(const FObjectInitializer& Init) : Super(Init)
 {
-	Item = InItem; Controller = InController; bDrop=bInDrop;
-	OnClicked.AddDynamic(this, &ThisClass::Equip);
+	SlotFilter = TAG_NGSlotStorage;
 }
-void UNGInventoryItemButton::Equip()
-{
-	if (bDrop) { if (auto* PC=Cast<ANextgenonePlayerController>(Controller.Get())) PC->RequestDropItem(Item.Get(),0); return; }
-	if (auto* PC = Controller.Get()) if (auto* Pawn = Cast<ANextgenoneCharacter>(PC->GetPawn())) Pawn->Combat->RequestEquipItem(Item.Get());
-}
-TSharedRef<SWidget> UNGInventoryPanel::RebuildWidget()
-{
-	if (!WidgetTree) WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
-	if (!ItemsList) ItemsList = Cast<UVerticalBox>(WidgetTree->FindWidget(TEXT("ItemsList")));
-	if (!WidgetTree->RootWidget)
-	{
-		auto* Scroll = WidgetTree->ConstructWidget<UScrollBox>();
-		ItemsList = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("ItemsList"));
-		Scroll->AddChild(ItemsList); WidgetTree->RootWidget = Scroll;
-	}
-	return Super::RebuildWidget();
-}
+
 void UNGInventoryPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
-	SetIsFocusable(true);
-	const auto* PC = GetOwningPlayer();
-	const auto* PS = PC ? PC->GetPlayerState<ANextgenonePlayerState>() : nullptr;
-	if (PS)
+	if (auto* PC = GetOwningPlayer())
 	{
-		Inventory = PS->Inventory;
-		Inventory->OnInventoryChanged.AddUniqueDynamic(this, &ThisClass::Changed);
+		PC->OnPossessedPawnChanged.AddUniqueDynamic(this, &ThisClass::PawnChanged);
+		PawnChanged(nullptr, PC->GetPawn());
 	}
 	Refresh();
 }
+
+void UNGInventoryPanel::SetInventorySource(UNGInventoryManagerComponent* Source)
+{
+	UnbindItems();
+	if (Inventory.IsValid()) Inventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::Changed);
+	Inventory = Source;
+	if (Source) Source->OnInventoryChanged.AddUniqueDynamic(this, &ThisClass::Changed);
+	Refresh();
+}
+
+void UNGInventoryPanel::PawnChanged(APawn* OldPawn, APawn* NewPawn)
+{
+	if (Combat.IsValid()) Combat->OnEquipmentChanged.RemoveDynamic(this, &ThisClass::EquipmentChanged);
+	Combat = NewPawn ? NewPawn->FindComponentByClass<UNGCombatComponent>() : nullptr;
+	if (Combat.IsValid()) Combat->OnEquipmentChanged.AddUniqueDynamic(this, &ThisClass::EquipmentChanged);
+	const auto* PC = GetOwningPlayer();
+	const auto* Player = PC ? PC->GetPlayerState<APlayerState>() : nullptr;
+	PlayerInventory = Player ? Player->FindComponentByClass<UNGPlayerInventoryManagerComponent>() : nullptr;
+	Refresh();
+}
+
 void UNGInventoryPanel::UnbindItems()
 {
 	for (auto Item : ObservedItems) if (Item.IsValid()) Item->OnStatsChanged.RemoveDynamic(this, &ThisClass::Refresh);
 	ObservedItems.Reset();
 }
+
 void UNGInventoryPanel::NativeDestruct()
 {
 	UnbindItems();
 	if (Inventory.IsValid()) Inventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::Changed);
-	Inventory.Reset(); Super::NativeDestruct();
+	if (Combat.IsValid()) Combat->OnEquipmentChanged.RemoveDynamic(this, &ThisClass::EquipmentChanged);
+	if (auto* PC = GetOwningPlayer()) PC->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	Inventory.Reset(); Combat.Reset(); PlayerInventory.Reset();
+	SetInventoryData(InventoryTitle, {}, nullptr);
+	Super::NativeDestruct();
 }
+
 void UNGInventoryPanel::Changed(FNGInventoryChangeMessage Change) { Refresh(); }
+void UNGInventoryPanel::EquipmentChanged(FNGEquipmentState Equipment) { Refresh(); }
+
 void UNGInventoryPanel::Refresh()
 {
-	if (!ItemsList) return;
-	UnbindItems(); ItemsList->ClearChildren();
-	if (!Inventory.IsValid()) return;
-	for (auto* Item : Inventory->GetAllItems())
+	UnbindItems();
+	TArray<FUIInventorySlotData> Slots;
+	if (Inventory.IsValid())
 	{
-		if (!Item || !Item->GetItemDef()) continue;
-		const auto* Def = GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef());
-		auto* Row=WidgetTree->ConstructWidget<UHorizontalBox>();
-		auto* Label = WidgetTree->ConstructWidget<UTextBlock>();
-		FString Text=FString::Printf(TEXT("%s x%d"),*Def->DisplayName.ToString(),Inventory->GetCount(Item));
-		if (Def->Weapon) Text+=FString::Printf(TEXT("    [%d / %d]"),Item->GetStatTagStackCount(TAG_NGMagazineAmmo),Inventory->GetTotalItemCountByDefinition(Def->Weapon->AmmoItemClass.LoadSynchronous()));
-		Label->SetText(FText::FromString(Text));
-		if (Def->Weapon)
+		const auto* PC = GetOwningPlayer();
+		const auto* PS = PC ? PC->GetPlayerState<APlayerState>() : nullptr;
+		const bool bOwnInventory = PS && (Inventory->GetOwner() == PS || Inventory->GetOwner() == PC->GetPawn());
+		for (int32 Index = 0; Index < Inventory->GetSlotCount(); ++Index)
 		{
-			auto* Button=WidgetTree->ConstructWidget<UNGInventoryItemButton>(); Button->InitializeItem(Item,GetOwningPlayer()); Button->AddChild(Label); Row->AddChild(Button);
+			const FGameplayTag Tag = Inventory->GetSlotTag(Index);
+			if (SlotFilter.IsValid() && !Tag.MatchesTag(SlotFilter)) continue;
+			auto& SlotInfo = Slots.AddDefaulted_GetRef();
+			SlotInfo.Inventory = Inventory.Get(); SlotInfo.SlotIndex = Index; SlotInfo.SlotTag = Tag;
+			auto* Item = Inventory->GetItemAtSlot(Index);
+			if (!IsValid(Item) || !Item->GetItemDef()) continue;
+			const auto* Def = GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef());
+			SlotInfo.Item = Item; SlotInfo.Name = Def->DisplayName; SlotInfo.Icon = Def->Icon; SlotInfo.ItemTags = Def->ItemTags;
+			SlotInfo.Count = Inventory->GetCount(Item); SlotInfo.StackLimit = Def->MaxStackSize;
+			SlotInfo.StatStacks = Item->CaptureState(SlotInfo.Count).StatStacks;
+			SlotInfo.bEquipped = Combat.IsValid() && Combat->GetEquipment().bEquipped && Combat->GetEquippedItem() == Item;
+			if (bOwnInventory)
+			{
+				SlotInfo.AvailableOperations.Add(EUIInventoryOperation::Drop);
+				if (Tag.MatchesTag(TAG_NGSlotAction) && Combat.IsValid() && UNGCombatComponent::GetWeaponDefinition(Def))
+					SlotInfo.AvailableOperations.Add(EUIInventoryOperation::PrimaryAction);
+			}
+			Item->OnStatsChanged.AddUniqueDynamic(this, &ThisClass::Refresh);
+			ObservedItems.Add(Item);
 		}
-		else Row->AddChild(Label);
-		auto* Drop=WidgetTree->ConstructWidget<UNGInventoryItemButton>(); Drop->InitializeItem(Item,GetOwningPlayer(),true);
-		auto* DropLabel=WidgetTree->ConstructWidget<UTextBlock>(); DropLabel->SetText(NSLOCTEXT("NEXTGENONE","DropItem","Выбросить"));
-		Drop->AddChild(DropLabel); Row->AddChild(Drop); ItemsList->AddChild(Row);
-		Item->OnStatsChanged.AddUniqueDynamic(this, &ThisClass::Refresh); ObservedItems.Add(Item);
 	}
+	SetInventoryData(InventoryTitle, Slots, this);
+}
+
+bool UNGInventoryPanel::RequestInventoryOperation_Implementation(const FUIInventorySlotData& SlotInfo, EUIInventoryOperation Operation, int32 Amount)
+{
+	auto* PC = GetOwningPlayer();
+	const auto* PS = PC ? PC->GetPlayerState<APlayerState>() : nullptr;
+	auto* Item = Cast<UNGInventoryItemInstance>(SlotInfo.Item.Get());
+	// UI snapshots are untrusted: resolve ownership/count again, then use existing server-validated requests.
+	if (!PS || !Inventory.IsValid() || (Inventory->GetOwner() != PS && Inventory->GetOwner() != PC->GetPawn())
+		|| SlotInfo.Inventory != Inventory.Get() || Inventory->GetItemAtSlot(SlotInfo.SlotIndex) != Item || !Inventory->Contains(Item) || Amount < 0 || Amount > Inventory->GetCount(Item)) return false;
+	if (Operation == EUIInventoryOperation::PrimaryAction)
+	{
+		if (!Combat.IsValid() || Combat->GetOwner() != PC->GetPawn() || !Item->GetItemDef()
+			|| !UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef()))) return false;
+		Combat->RequestEquipItem(Item);
+		return true;
+	}
+	if (Operation == EUIInventoryOperation::Drop)
+		if (auto* Transport = PlayerInventory.Get())
+		{
+			Transport->RequestDropItem(Item, Amount);
+			return true;
+		}
+	return false;
+}
+
+bool UNGInventoryPanel::MoveInventoryItem_Implementation(const FUIInventorySlotData& Source, const FUIInventorySlotData& Destination, int32 Amount)
+{
+	auto* Transport = PlayerInventory.Get();
+	auto* SourceInventory = Cast<UNGInventoryManagerComponent>(Source.Inventory.Get());
+	auto* TargetInventory = Cast<UNGInventoryManagerComponent>(Destination.Inventory.Get());
+	auto* Item = Cast<UNGInventoryItemInstance>(Source.Item.Get());
+	auto* ExpectedTarget = Cast<UNGInventoryItemInstance>(Destination.Item.Get());
+	if (!Transport || !IsValid(SourceInventory) || !IsValid(TargetInventory) || TargetInventory != Inventory.Get()
+		|| !IsValid(Item) || SourceInventory->GetItemAtSlot(Source.SlotIndex) != Item || Amount < 0 || Amount > SourceInventory->GetCount(Item)
+		|| TargetInventory->GetItemAtSlot(Destination.SlotIndex) != ExpectedTarget) return false;
+	Transport->RequestInventoryTransfer(SourceInventory, Item, Source.SlotIndex, TargetInventory, Destination.SlotIndex, ExpectedTarget, Amount);
+	return true;
 }
