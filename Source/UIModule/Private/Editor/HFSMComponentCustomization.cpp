@@ -95,7 +95,8 @@ namespace
 			if (!CommonClass) return;
 			for (TFieldIterator<FProperty> Field(CommonClass); Field; ++Field)
 			{
-				if (!Field->HasAnyPropertyFlags(CPF_Edit) || Field->HasAnyPropertyFlags(CPF_Deprecated)) continue;
+				if (!Field->HasAnyPropertyFlags(CPF_Edit)
+					|| Field->HasAnyPropertyFlags(CPF_Deprecated | CPF_DisableEditOnInstance)) continue;
 				Children.AddExternalObjectProperty(Components, Field->GetFName(), FAddPropertyParams().AllowChildren(true));
 			}
 		}

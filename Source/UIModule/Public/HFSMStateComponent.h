@@ -45,7 +45,7 @@ public:
 
 protected:
 	virtual void BeginDestroy() override;
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditDefaultsOnly)
 	bool bIsTickEnabled = false;
 	
 	UPROPERTY(BlueprintReadOnly)
