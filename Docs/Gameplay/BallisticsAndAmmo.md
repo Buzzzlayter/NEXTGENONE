@@ -35,3 +35,20 @@ New: Gameplay/NGBallisticProjectile.h/.cpp, NGConnectionSubsystem.h/.cpp, NGConn
 Updated: Gameplay/NGCombat.h/.cpp, NextgenonePlayerState.h, NextgenonePlayerController.h/.cpp, NGSettingsPanel.h/.cpp, NGSetupCommandlet.cpp, Inventory/NGInventoryPanel.cpp; Config/DefaultEngine.ini; architecture, multiplayer testing and LyraPort docs.
 
 New project assets: Gameplay/Weapons/BP_BallisticProjectile, DA_Shotgun; Gameplay/Inventory/ID_Shotgun, ID_Ammo_Pistol, ID_Ammo_Rifle, ID_Ammo_Shotgun; Gameplay/UI/WBP_ServerConnection. Updated existing weapon definitions, Pistol/Rifle item fragments, Character, settings/inventory UI and fire/reload abilities. Added 11 selected Lyra Shotgun assets plus three SoundWaves (see manifest). Main map and project GameMode defaults were not switched.
+# Прицеливание от камеры (2026-11-04)
+
+Уточнение по Lyra: `LyraGameplayAbility_RangedWeapon.cpp` использует клиентский TargetData и проектирование начала луча вперёд к плоскости Pawn (`GetTargetingTransform`). В просмотренной локальной версии `OnTargetDataReadyCallback` содержит `bIsTargetDataValid=true`; готовой строгой серверной валидации там нет. Мы сохраняем собственный серверный trace и физический снаряд.
+
+`NGAimComponent.GetTargetingOrigin` теперь одинаково используется локальным прицеливанием и серверным выстрелом: переносит начало вдоль того же луча вперёд до Pawn, сохраняя экранное направление. Валидация камеры дополнительно делает sphere sweep с origin/radius/channel исходного `AALSBaseCharacter.GetThirdPersonTraceParams`; исходный eye-to-camera trace также сохранён. ALS plugin и Camera AnimBP не изменены. Это проверка столкновений и границ доверия, а не точное серверное восстановление камеры: pivot/rotation lag и offsets исходной камеры зависят от AnimBP-кривых, плечо в исходном ALS локальное. Произвольная камера внутри разрешённого объёма всё ещё возможна. Для более строгой политики нужен общий серверно-доступный профиль камеры с синхронизированным выбором режима/плеча, а не запуск Camera AnimBP на dedicated server.
+
+Новые sweep-проверки могут отклонять выстрел у вплотную прижатой к стене камеры; сетевой допуск и реальные параметры необходимо проверить отдельно. Сборка и тесты не запускались.
+
+Выстрел игрока проходит через `Combat.RequestFire` (штатный Input.Combat.Primary уже вызывает его). `NGAimComponent.GetViewRay` даёт луч центра камеры, тот же источник используется для локального прицеливания. Клиент отправляет серверу origin/direction и revision экипировки, не Actor/попадание/урон.
+
+Сервер проверяет текущий ASC Avatar, смерть, экипировку, конечность/нормализацию луча, расстояние origin от глаз, угол относительно ControlRotation и отсутствие стены между глазами и origin. Лимиты на AimComponent: MaxViewOriginDistance=600 см, MaxViewAngleDifference=35 градусов; для нестандартных камер их нужно настроить в Blueprint. Это ограничение доверия клиенту, не полная защита от подмены камеры внутри допустимой области.
+
+После проверки сервер синхронно активирует существующую ServerOnly GA_Fire. Луч хранится только на время этой активации и потребляется одним FireOnServer. Для удалённого игрока прямая активация GA_Fire без свежего запроса не стреляет; Blueprint не должен добавлять задержку до FireOnServer. Для AI и локального authority оставлен расчёт текущего луча без сетевого запроса.
+
+Сервер трассирует камеру, выбирает первую точку фокуса и направляет снаряд из существующего серверного якоря к ней. Позиция якоря пока прежняя (от капсулы, не socket ствола). Проверка препятствия до якоря сохранена, дальнейшие столкновения вычисляет снаряд. Цель позади якоря отклоняется. Разброс/гравитация остаются; идеального совпадения попадания с точкой на любых расстояниях нет. Rate limit по PlayerState не сбрасывается при активации/смене оружия.
+
+UMG-плейсхолдер точки должен быть в центре игровой области. Сетевые задержки, смена плеча, ADS, стены у камеры/ствола и split-screen ещё не проверены. Сборку выполняет пользователь; агент не запускал сборку или игровые тесты.

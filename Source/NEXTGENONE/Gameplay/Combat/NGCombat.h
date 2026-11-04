@@ -129,6 +129,9 @@ public:
 	// Shared damage entry point rejects stale Pawn/ASC pairings, including corpses.
 	static bool ApplyDamageToPawn(class ANextgenoneCharacter* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit = nullptr);
 private:
+	UFUNCTION(Server, Reliable) void ServerRequestFire(FVector_NetQuantize ViewOrigin, FVector_NetQuantizeNormal ViewDirection, int32 EquipmentRevision);
+	// Only valid during synchronous activation of GA_Fire; never reused by a later shot.
+	TOptional<FTransform> RequestedShotView;
 	void ContinuePrimaryInput();
 	FTimerHandle PrimaryInputTimer;
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) FNGEquipmentState Equipment;

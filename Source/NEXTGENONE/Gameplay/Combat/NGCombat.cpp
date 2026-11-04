@@ -15,6 +15,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/ScopeExit.h"
 #include "Gameplay/Combat/NGWeaponVFX.h"
+#include "Gameplay/Combat/NGAimComponent.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGFireInput, "Input.Combat.Fire");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDamageAmount, "Data.Damage");
@@ -233,9 +234,23 @@ void UNGCombatComponent::ContinuePrimaryInput()
 void UNGCombatComponent::RequestFire()
 {
 	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
-	auto* ASC = Pawn ? Pawn->GetAbilitySystemComponent() : nullptr;
-	if (!ASC || Pawn->IsDead()) return;
-	if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->TryActivateAbilityByInputTag(TAG_NGFireInput);
+	if (!Pawn || !Pawn->IsLocallyControlled() || Pawn->IsDead()) return;
+	const auto* Aim = Pawn->FindComponentByClass<UNGAimComponent>();
+	FVector Origin, Direction;
+	if (!Aim || !Aim->GetViewRay(Origin, Direction)) return;
+	if (Pawn->HasAuthority()) ServerRequestFire_Implementation(Origin, Direction, Equipment.Revision);
+	else ServerRequestFire(Origin, Direction, Equipment.Revision);
+}
+void UNGCombatComponent::ServerRequestFire_Implementation(FVector_NetQuantize ViewOrigin, FVector_NetQuantizeNormal ViewDirection, int32 EquipmentRevision)
+{
+	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	auto* ASC = Pawn ? Cast<UNGAbilitySystemComponent>(Pawn->GetAbilitySystemComponent()) : nullptr;
+	const auto* Aim = Pawn ? Pawn->FindComponentByClass<UNGAimComponent>() : nullptr;
+	if (!ASC || ASC->GetAvatarActor() != Pawn || Pawn->IsDead() || !Equipment.bEquipped
+		|| EquipmentRevision != Equipment.Revision || !Aim || !Aim->ValidateShotView(ViewOrigin, ViewDirection)) return;
+	TGuardValue<TOptional<FTransform>> ViewScope(RequestedShotView,
+		TOptional<FTransform>(FTransform(FVector(ViewDirection).Rotation(), ViewOrigin)));
+	ASC->TryActivateAbilityByInputTag(TAG_NGFireInput);
 }
 bool UNGCombatComponent::FireOnServer()
 {
@@ -248,20 +263,36 @@ bool UNGCombatComponent::FireOnServer()
 	const double Now = GetWorld()->GetTimeSeconds();
 	if (Now < PS->NextAllowedFireTime || !FMath::IsFinite(Def->FireInterval) || !FMath::IsFinite(Def->Damage) || !FMath::IsFinite(Def->Range) || Def->Damage <= 0 || Def->Range <= 0) return false;
 	if (!Def->ProjectileClass || !FMath::IsFinite(Def->MuzzleSpeed) || Def->MuzzleSpeed<100.f || !FMath::IsFinite(Def->GravityScale) || !FMath::IsFinite(Def->LinearDrag) || !FMath::IsFinite(Def->SpreadDegrees)) return false;
-	PS->NextAllowedFireTime = Now + FMath::Max(0.05f, Def->FireInterval);
-	FVector Eye; FRotator Aim; Pawn->GetActorEyesViewPoint(Eye, Aim);
-	Aim = Pawn->GetController()->GetControlRotation();
+	FVector Eye, ViewDirection;
+	if (RequestedShotView.IsSet())
+	{
+		Eye = RequestedShotView->GetLocation();
+		ViewDirection = RequestedShotView->GetRotation().GetForwardVector();
+		RequestedShotView.Reset();
+	}
+	else
+	{
+		// Remote players must supply a fresh view with their shot request.
+		if (Pawn->IsPlayerControlled() && !Pawn->IsLocallyControlled()) return false;
+		const auto* Aim = Pawn->FindComponentByClass<UNGAimComponent>();
+		if (!Aim || !Aim->GetViewRay(Eye, ViewDirection) || !Aim->ValidateShotView(Eye, ViewDirection)) return false;
+	}
+	const auto* AimComponent = Pawn->FindComponentByClass<UNGAimComponent>();
+	if (!AimComponent) return false;
+	Eye = AimComponent->GetTargetingOrigin(Eye, ViewDirection);
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(NGWeapon), false, Pawn);
 	TArray<AActor*> Attached; Pawn->GetAttachedActors(Attached); Params.AddIgnoredActors(Attached);
 	FHitResult EyeHit;
-	const FVector AimEnd = Eye + Aim.Vector() * FMath::Min(Def->Range, 100000.f);
+	const FVector AimEnd = Eye + ViewDirection * FMath::Min(Def->Range, 100000.f);
 	// Capsule hits for this slice. A server anchor avoids animation tick dependence.
 	GetWorld()->LineTraceSingleByChannel(EyeHit, Eye, AimEnd, ECC_Visibility, Params);
 	const FVector Up=-Pawn->GetCharacterMovement()->GetGravityDirection();
 	const FVector Start = Pawn->GetActorLocation() + Up*45.f + Pawn->GetActorForwardVector() * 30.f;
 	const FVector End = EyeHit.bBlockingHit ? EyeHit.ImpactPoint : AimEnd;
+	if (FVector::DotProduct(End - Start, ViewDirection) <= UE_SMALL_NUMBER) return false;
 	FHitResult Obstruction;
 	if (GetWorld()->LineTraceSingleByChannel(Obstruction,Pawn->GetActorLocation(),Start,ECC_Visibility,Params)) return false;
+	PS->NextAllowedFireTime = Now + FMath::Max(0.05f, Def->FireInterval);
 	TArray<ANGBallisticProjectile*> Projectiles;
 	const int32 Count=FMath::Clamp(Def->PelletsPerShot,1,16);
 	for (int32 I=0;I<Count;++I)

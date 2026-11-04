@@ -7,6 +7,8 @@ public class NEXTGENONE : ModuleRules
 	public NEXTGENONE(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+		// Project headers use module-relative includes (Gameplay/...).
+		PublicIncludePaths.Add(ModuleDirectory);
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "UMG", "InputCore", "EnhancedInput", "GameplayAbilities", "GameplayTags", "GameplayTasks", "NetCore", "ALSV4_CPP", "GameplayFoundation" });
 		if (Target.bBuildEditor)

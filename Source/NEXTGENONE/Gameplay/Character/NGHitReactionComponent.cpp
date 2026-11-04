@@ -5,6 +5,21 @@
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "Engine/SkeletalMesh.h"
+
+namespace
+{
+	bool HasPhysicalAnimationPose(USkeletalMeshComponent* Mesh)
+	{
+		if (!Mesh || !Mesh->GetSkeletalMeshAsset()) return false;
+		const int32 BoneCount = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton().GetNum();
+		// This accessor completes parallel evaluation and returns the pose buffers to the mesh.
+		// Read the editable component buffer afterwards: completing evaluation can swap it.
+		const int32 LocalCount = Mesh->GetBoneSpaceTransformsView().Num();
+		const int32 ComponentCount = Mesh->GetEditableComponentSpaceTransforms().Num();
+		return BoneCount > 0 && LocalCount >= BoneCount && ComponentCount >= BoneCount;
+	}
+}
 
 UNGHitReactionComponent::UNGHitReactionComponent()
 {
@@ -59,6 +74,8 @@ void UNGHitReactionComponent::MulticastImpact_Implementation(FName Bone,FVector_
 	{
 		ReleaseBodies(true); Mesh->AddImpulseAtLocation(ImpulseVector,Point,Bone); OnBulletBodyImpact.Broadcast(Bone,Point,ImpulseVector); return;
 	}
+	// Damage is handled independently; never start drives against an unavailable animation pose.
+	if (!HasPhysicalAnimationPose(Mesh)) return;
 	if (!GetSkeletalMesh()) SetSkeletalMeshComponent(Mesh);
 	FName Root=Bone;
 	// Never simulate root/pelvis: the movement capsule must remain authoritative under ALS.
@@ -88,8 +105,11 @@ void UNGHitReactionComponent::MulticastImpact_Implementation(FName Bone,FVector_
 void UNGHitReactionComponent::TickComponent(float Delta,ELevelTick Tick,FActorComponentTickFunction* ThisTick)
 {
 	if (IsRagdoll() && !ActiveBodies.IsEmpty()) ReleaseBodies(true);
-	Super::TickComponent(Delta,Tick,ThisTick);
 	auto* Mesh=GetSkeletalMesh(); if (!Mesh || ActiveBodies.IsEmpty()) return;
+	// UE's physical-animation update indexes local/component transforms by skeleton bone index.
+	// These buffers can be temporarily empty while animation/physics owns them during a transition.
+	if (HasPhysicalAnimationPose(Mesh)) Super::TickComponent(Delta,Tick,ThisTick);
+	// Recovery must continue even when drives cannot update this frame.
 	const float Duration=FMath::IsFinite(RecoveryTime) ? FMath::Clamp(RecoveryTime,.05f,2.f) : .35f;
 	for (int32 I=ActiveBodies.Num()-1;I>=0;--I)
 	{

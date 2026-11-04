@@ -46,3 +46,13 @@ Weapon hit validation still uses the existing server-authoritative eye/muzzle tr
 
 Changed source: NGAimComponent.h/.cpp (new), NextgenoneCharacter.h/.cpp, NGInteraction.h/.cpp, NGInteractionPrompt.h/.cpp. No new UI asset or ALS/AnimBP change is required. Gameplay/visual/network checks await separate user approval; compilation is reported separately.
 Build/asset result for this change: NEXTGENONEEditor Win64 Development PASS, UBT exit 0 without compiler diagnostics. NGSetup -AimOnly exit 0, 0 errors / 14 ALS/environment warnings. Saved Character defaults report MaxDistance=350, CaptureRadius=45 and Aim present; prompt native tick=1. Logs: Saved/Logs/NGAimBuild.log and NGAimAssets.log. NGSetupCommandlet.cpp was also updated for this targeted asset refresh; Character, WBP_InteractionPrompt and GA_Interact assets were compiled/saved with backups. No gameplay tests run.
+# Компактные виджеты (2026-11-04)
+
+`UNGInteractionPromptMounter` удалён. Используйте два обычных `UUIWidgetMounterComponent` в UI FSM, каждый со своим WidgetClass и PlaceholderID:
+
+- Blueprint от `UNGInteractionPrompt`: TextBlock `InteractionText` (Is Variable). Текст и видимость обновляются по `OnFocusChanged` компонента интеракции Pawn. AvailableFormat/UnavailableFormat используют `{0}` для текста предмета; клавиша не зашита в C++.
+- Blueprint от `UNGReticleWidget`: Image `AimDot` (Is Variable). Цвет и видимость берутся из `UNGAimComponent`, оформление и размер задаются в UMG. Старый ReticleSize компонента больше не управляет размером этого виджета.
+
+Компактный корень: SizeBox/контейнер по содержимому; Canvas на весь экран не требуется. Положение и выравнивание задаёт layout/placeholder. В старом Blueprint подсказки удалить AimDot и полноэкранный Canvas, если они были созданы вручную. Старый специализированный мounter убрать из состояния и заменить обычным. C++ не создаёт дерево виджетов и не добавляет их во viewport.
+
+Blueprint настраивает пользователь. Сборка и игровые проверки этого изменения агентом не запускались.
