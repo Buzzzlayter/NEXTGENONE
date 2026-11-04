@@ -6,7 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "../NGCombat.h"
+#include "Gameplay/Combat/NGCombat.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputMove, "Input.Move");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookMouse, "Input.Look.Mouse");

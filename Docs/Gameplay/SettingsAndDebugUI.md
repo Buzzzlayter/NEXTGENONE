@@ -25,8 +25,8 @@ NEXTGENONEEditor Win64 Development was compiled with the editor closed. NGSetup 
 Limitations: no key remapping, individual audio buses or display-confirmation countdown; Apply confirms the chosen video mode immediately. Native WidgetTree fields are generated at runtime: an authored replacement must preserve the named controls or override the screen. In the editor, resolution changes may affect standalone/editor windows differently from packaged play. No runtime success claim is made before approved tests.
 ## Files and delivered build
 
-New source: Source/NEXTGENONE/Gameplay/NGSettingsPanel.h/.cpp, NGDebugState.h/.cpp, NGSettingsAssets.cpp.
-Changed source: Source/NEXTGENONE/Gameplay/NextgenonePlayerController.h/.cpp and NGSetupCommandlet.cpp.
+New source: Source/NEXTGENONE/Gameplay/UI/NGSettingsPanel.h/.cpp, NGDebugState.h/.cpp, NGSettingsAssets.cpp.
+Changed source: Source/NEXTGENONE/Gameplay/Player/NextgenonePlayerController.h/.cpp and NGSetupCommandlet.cpp.
 New assets: Content/Gameplay/UI/WBP_GameSettings.uasset and BP_NGDebugComponent.uasset.
 Changed assets: Content/Blueprints/BP_NextgenoneCharacter.uasset, BP_NextgenoneHUD.uasset; Content/Blueprints/States/FSMState_GameSettings.uasset and FSMState_GameRuntime.uasset.
 Docs: this file, Docs/Architecture/GameplayFoundation.md, Docs/Testing/MultiplayerCombat.md.

@@ -24,7 +24,7 @@ ANGBallisticProjectile при первом серверном столкнове
 
 ## Файлы
 
-Новые: Source/NEXTGENONE/Gameplay/NGHitReactionComponent.h/.cpp.
+Новые: Source/NEXTGENONE/Gameplay/Character/NGHitReactionComponent.h/.cpp.
 Изменены: NextgenoneCharacter.h/.cpp, NGCombat.h/.cpp, NGBallisticProjectile.h/.cpp, NGSetupCommandlet.cpp. Ассеты обновляются адресно через NGSetup -BodyImpactOnly с резервными копиями; оригинальный ALS plugin/AnimBP не редактируются.
 
 PIE, игровые и сетевые тесты не запускались. Визуальная сила импульса, восстановление рук/ног/головы, одновременные дробины, ALS ragdoll/mantle, смерть/respawn, dedicated-server hit registration и задержки остаются непроверенными до отдельного апрува.

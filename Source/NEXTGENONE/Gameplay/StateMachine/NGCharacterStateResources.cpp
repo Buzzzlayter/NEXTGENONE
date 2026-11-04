@@ -28,7 +28,7 @@ void UNGCharacterStateResources::Enter()
 	if (!Pawn.IsValid() || !Definition || !Definition->ValidateResources(Error))
 	{ UE_LOG(LogTemp, Error, TEXT("Character state resources: invalid Pawn/Definition. %s"), *Error); return; }
 	const auto* GameplayInput = Pawn->FindComponentByClass<UNGGameplayInputComponent>();
-	const auto* InputConfig = GameplayInput->InputConfig.Get();
+	const auto* InputConfig = GameplayInput ? GameplayInput->InputConfig.Get() : nullptr;
 	if (!Definition->ValidateInputMappings(InputConfig, Error))
 	{ UE_LOG(LogTemp, Error, TEXT("Character state input: %s"), *Error); return; }
 	bEntered = true;

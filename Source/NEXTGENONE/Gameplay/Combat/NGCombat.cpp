@@ -1,0 +1,418 @@
+#include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Player/NextgenonePlayerState.h"
+#include "Gameplay/Character/NextgenoneCharacter.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "DrawDebugHelpers.h"
+#include "NativeGameplayTags.h"
+#include "Net/UnrealNetwork.h"
+#include "Gameplay/Inventory/NGInventoryManagerComponent.h"
+#include "Gameplay/Inventory/NGInventoryItemDefinition.h"
+#include "Gameplay/Inventory/NGInventoryItemInstance.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "Gameplay/Combat/NGBallisticProjectile.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/ScopeExit.h"
+#include "Gameplay/Combat/NGWeaponVFX.h"
+
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGFireInput, "Input.Combat.Fire");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDamageAmount, "Data.Damage");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGReloadInput, "Input.Combat.Reload");
+
+UNGWeaponDefinition::UNGWeaponDefinition()
+{
+	ProjectileClass=ANGBallisticProjectile::StaticClass();
+	FireAbilityClass = TSoftClassPtr<UGameplayAbility>(FSoftObjectPath(TEXT("/Game/Gameplay/Abilities/GA_Fire.GA_Fire_C")));
+	InventoryItemClass = TSoftClassPtr<UNGInventoryItemDefinition>(FSoftObjectPath(TEXT("/Game/Gameplay/Inventory/ID_TestWeapon.ID_TestWeapon_C")));
+	ReloadAbilityClass = TSoftClassPtr<UGameplayAbility>(FSoftObjectPath(TEXT("/Game/Gameplay/Abilities/GA_Reload.GA_Reload_C")));
+}
+bool UNGCombatComponent::TryPickupOnServer(UNGWeaponDefinition* Definition)
+{
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	auto* PS = Pawn ? Pawn->GetPlayerState<ANextgenonePlayerState>() : nullptr;
+	if (!PS || !GetOwner()->HasAuthority() || !Definition) return false;
+	UClass* ItemClass = Definition->InventoryItemClass.LoadSynchronous();
+	if (!ItemClass || GetDefault<UNGInventoryItemDefinition>(ItemClass)->Weapon != Definition) return false;
+	auto* Item = PS->Inventory->AddItemDefinition(ItemClass, 1);
+	if (!Item) return false;
+	// A pickup adds to the bag; it only auto-equips when hands are empty.
+	if (!Equipment.bEquipped) EquipInventoryItemOnServer(Item);
+	return true;
+}
+
+UNGCombatComponent::UNGCombatComponent()
+{
+	SetIsReplicatedByDefault(true);
+	StarterItems.Add(TSoftClassPtr<UNGInventoryItemDefinition>(FSoftObjectPath(TEXT("/Game/Gameplay/Inventory/ID_Pistol.ID_Pistol_C"))));
+	StarterItems.Add(TSoftClassPtr<UNGInventoryItemDefinition>(FSoftObjectPath(TEXT("/Game/Gameplay/Inventory/ID_Rifle.ID_Rifle_C"))));
+	StarterItems.Add(TSoftClassPtr<UNGInventoryItemDefinition>(FSoftObjectPath(TEXT("/Game/Gameplay/Inventory/ID_Shotgun.ID_Shotgun_C"))));
+}
+void UNGCombatComponent::BindInventory()
+{
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	auto* PS = Pawn ? Pawn->GetPlayerState<ANextgenonePlayerState>() : nullptr;
+	if (!PS || BoundInventory == PS->Inventory) return;
+	if (BoundInventory.IsValid()) BoundInventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::InventoryChanged);
+	BoundInventory = PS->Inventory;
+	PS->Inventory->OnInventoryChanged.AddDynamic(this, &ThisClass::InventoryChanged);
+	if (Pawn->HasAuthority() && !PS->bStarterInventoryGranted)
+	{
+		PS->bStarterInventoryGranted=true;
+		for (auto& SoftClass:StarterItems) if (UClass* ItemClass=SoftClass.LoadSynchronous())
+		{
+			if (!PS->Inventory->FindFirstItemStackByDefinition(ItemClass)) PS->Inventory->AddItemDefinition(ItemClass,1);
+			const auto* Weapon=GetDefault<UNGInventoryItemDefinition>(ItemClass)->Weapon.Get();
+			if (Weapon) if (UClass* Ammo=Weapon->AmmoItemClass.LoadSynchronous())
+				if (!PS->Inventory->FindFirstItemStackByDefinition(Ammo) && Weapon->InitialReserveAmmo>0) PS->Inventory->AddItemDefinition(Ammo,FMath::Min(Weapon->InitialReserveAmmo,GetDefault<UNGInventoryItemDefinition>(Ammo)->MaxStackSize));
+		}
+	}
+}
+void UNGCombatComponent::InventoryChanged(FNGInventoryChangeMessage Change)
+{
+	if (GetOwner()->HasAuthority() && Change.Instance == CurrentItem && Change.NewCount == 0)
+	{
+		SetEquippedOnServer(false); CurrentItem = nullptr; OnRep_CurrentItem();
+	}
+	OnRep_Ammo();
+}
+int32 UNGCombatComponent::GetMagazineAmmo() const { return CurrentItem ? CurrentItem->GetStatTagStackCount(TAG_NGMagazineAmmo) : 0; }
+int32 UNGCombatComponent::GetReserveAmmo() const
+{
+	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); const auto* PS=Pawn ? Pawn->GetPlayerState<ANextgenonePlayerState>() : nullptr;
+	const auto* Def=Equipment.Definition.Get(); UClass* Ammo=Def ? Def->AmmoItemClass.LoadSynchronous() : nullptr;
+	return PS && Ammo ? PS->Inventory->GetTotalItemCountByDefinition(Ammo) : 0;
+}
+void UNGCombatComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner())) Pawn->OnDeathChanged.AddDynamic(this, &ThisClass::HandleDeath);
+	OnRep_Equipment();
+}
+void UNGCombatComponent::EndPlay(const EEndPlayReason::Type Reason)
+{
+	StopPrimaryInput();
+	if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner())) Pawn->OnDeathChanged.RemoveDynamic(this, &ThisClass::HandleDeath);
+	WeaponHandles.Remove(GrantedASC.Get());
+	if (BoundItem.IsValid()) BoundItem->OnStatsChanged.RemoveDynamic(this, &ThisClass::OnRep_Ammo);
+	if (BoundInventory.IsValid()) BoundInventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::InventoryChanged);
+	Super::EndPlay(Reason);
+}
+void UNGCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(UNGCombatComponent, Equipment);
+	DOREPLIFETIME_CONDITION(UNGCombatComponent, CurrentItem, COND_OwnerOnly);
+	DOREPLIFETIME(UNGCombatComponent, bAiming);
+}
+void UNGCombatComponent::RequestEquip(bool bEquip)
+{
+	const auto* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
+	if (Pawn->HasAuthority()) SetEquippedOnServer(bEquip); else ServerSetEquipped(bEquip);
+}
+void UNGCombatComponent::ServerSetEquipped_Implementation(bool bEquip) { SetEquippedOnServer(bEquip); }
+void UNGCombatComponent::SetEquippedOnServer(bool bEquip)
+{
+	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	if (!Pawn || !Pawn->HasAuthority() || Equipment.bEquipped == bEquip) return;
+	auto* ASC = Pawn->GetAbilitySystemComponent();
+	if (bEquip && (!ASC || Pawn->IsDead() || !Pawn->GetController())) return;
+	BindInventory();
+	if (bEquip && !CurrentItem)
+	{
+		const auto* PS = Pawn->GetPlayerState<ANextgenonePlayerState>();
+		UClass* ItemClass = TestWeapon ? TestWeapon->InventoryItemClass.LoadSynchronous() : nullptr;
+		if (!PS || !ItemClass) return;
+		CurrentItem = PS->Inventory->FindFirstItemStackByDefinition(ItemClass);
+		if (!CurrentItem) CurrentItem = PS->Inventory->AddItemDefinition(ItemClass, 1);
+	}
+	const auto* ItemDef = CurrentItem ? GetDefault<UNGInventoryItemDefinition>(CurrentItem->GetItemDef()) : nullptr;
+	if (bEquip && (!ItemDef || !ItemDef->Weapon || !BoundInventory->Contains(CurrentItem))) return;
+	WeaponHandles.Remove(GrantedASC.Get()); GrantedASC.Reset();
+	bAiming = false; OnRep_Aiming();
+	Equipment.bEquipped = bEquip; ++Equipment.Revision;
+	if (bEquip)
+	{
+		Equipment.Definition = ItemDef->Weapon;
+		FNGAbilityGrant Grant; Grant.Ability = Equipment.Definition->FireAbilityClass.LoadSynchronous();
+		if (!Grant.Ability) Grant.Ability = UNGFireAbility::StaticClass();
+		Grant.InputTag = TAG_NGFireInput;
+		WeaponHandles.Abilities.Add(Grant.Give(ASC, this));
+		Grant.Ability = Equipment.Definition->ReloadAbilityClass.LoadSynchronous();
+		if (!Grant.Ability) Grant.Ability = UNGReloadAbility::StaticClass();
+		Grant.InputTag = TAG_NGReloadInput;
+		WeaponHandles.Abilities.Add(Grant.Give(ASC, this));
+		GrantedASC = ASC;
+	}
+	OnRep_CurrentItem(); OnRep_Equipment(); OnRep_Ammo(); Pawn->ForceNetUpdate();
+}
+bool UNGCombatComponent::EquipInventoryItemOnServer(UNGInventoryItemInstance* Item)
+{
+	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	BindInventory();
+	if (!Pawn || !Pawn->HasAuthority() || Pawn->IsDead() || !Pawn->GetAbilitySystemComponent() || !BoundInventory.IsValid() || !BoundInventory->Contains(Item)) return false;
+	const auto* Def = GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef());
+	if (!Def || !Def->Weapon) return false;
+	if (Equipment.bEquipped && CurrentItem == Item) return true;
+	SetEquippedOnServer(false); CurrentItem = Item; SetEquippedOnServer(true);
+	return Equipment.bEquipped && CurrentItem == Item;
+}
+void UNGCombatComponent::RequestSelectSlot(int32 Index)
+{
+	const auto* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
+	if (Pawn->HasAuthority()) ServerSelectSlot_Implementation(Index); else ServerSelectSlot(Index);
+}
+void UNGCombatComponent::ServerSelectSlot_Implementation(int32 Index)
+{
+	BindInventory();
+	if (!BoundInventory.IsValid()) return;
+	if (Index<0 || Index>15) return;
+	int32 WeaponIndex=0;
+	for (auto* Item:BoundInventory->GetAllItems()) if (Item && GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef())->Weapon)
+		if (WeaponIndex++==Index) { EquipInventoryItemOnServer(Item); return; }
+}
+void UNGCombatComponent::RequestEquipItem(UNGInventoryItemInstance* Item)
+{
+	const auto* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
+	if (Pawn->HasAuthority()) EquipInventoryItemOnServer(Item); else ServerEquipItem(Item);
+}
+void UNGCombatComponent::ServerEquipItem_Implementation(UNGInventoryItemInstance* Item) { EquipInventoryItemOnServer(Item); }
+void UNGCombatComponent::RequestAim(bool bValue)
+{
+	const auto* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
+	if (Pawn->HasAuthority()) ServerSetAiming_Implementation(bValue); else ServerSetAiming(bValue);
+}
+void UNGCombatComponent::ServerSetAiming_Implementation(bool bValue)
+{
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	bAiming = bValue && Pawn && !Pawn->IsDead() && Pawn->GetAbilitySystemComponent() && Equipment.bEquipped;
+	OnRep_Aiming(); GetOwner()->ForceNetUpdate();
+}
+void UNGCombatComponent::OnRep_Aiming()
+{
+	if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner())) Pawn->ApplyCombatPresentation();
+	OnAimChanged.Broadcast(bAiming);
+}
+void UNGCombatComponent::OnRep_CurrentItem()
+{
+	if (BoundItem.IsValid()) BoundItem->OnStatsChanged.RemoveDynamic(this, &ThisClass::OnRep_Ammo);
+	BoundItem = CurrentItem;
+	if (CurrentItem) CurrentItem->OnStatsChanged.AddDynamic(this, &ThisClass::OnRep_Ammo);
+	OnRep_Ammo();
+}
+void UNGCombatComponent::HandleDeath(bool bDead) { if (bDead) { StopPrimaryInput(); if (GetOwner()->HasAuthority()) SetEquippedOnServer(false); } }
+
+void UNGCombatComponent::StartPrimaryInput()
+{
+	StopPrimaryInput();
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	if (!Pawn || !Pawn->IsLocallyControlled() || Pawn->IsDead()) return;
+	if (!Equipment.bEquipped)
+	{
+		if (auto* ASC = Cast<UNGAbilitySystemComponent>(Pawn->GetAbilitySystemComponent())) ASC->TryActivateAbilityByInputTag(TAG_NGInputPunch);
+		return;
+	}
+	RequestFire();
+	if (Equipment.Definition && Equipment.Definition->bAutomatic && FMath::IsFinite(Equipment.Definition->FireInterval))
+		GetWorld()->GetTimerManager().SetTimer(PrimaryInputTimer, this, &ThisClass::ContinuePrimaryInput, FMath::Max(.05f, Equipment.Definition->FireInterval), true);
+}
+
+void UNGCombatComponent::StopPrimaryInput() { if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(PrimaryInputTimer); }
+
+void UNGCombatComponent::ContinuePrimaryInput()
+{
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	if (!Pawn || !Pawn->IsLocallyControlled() || Pawn->IsDead() || !Equipment.bEquipped || !Equipment.Definition || !Equipment.Definition->bAutomatic)
+	{ StopPrimaryInput(); return; }
+	RequestFire();
+}
+void UNGCombatComponent::RequestFire()
+{
+	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	auto* ASC = Pawn ? Pawn->GetAbilitySystemComponent() : nullptr;
+	if (!ASC || Pawn->IsDead()) return;
+	if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->TryActivateAbilityByInputTag(TAG_NGFireInput);
+}
+bool UNGCombatComponent::FireOnServer()
+{
+	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	auto* ASC = Pawn ? Pawn->GetAbilitySystemComponent() : nullptr;
+	auto* PS = Pawn ? Pawn->GetPlayerState<ANextgenonePlayerState>() : nullptr;
+	const auto* Def = Equipment.Definition.Get();
+	if (!Pawn || !Pawn->HasAuthority() || !ASC || !PS || !Def || !Equipment.bEquipped || Pawn->IsDead() || Pawn->GetHealth() <= 0 || !Pawn->GetController() || GetMagazineAmmo() <= 0 || !PS->Inventory->Contains(CurrentItem)) return false;
+	if (ASC->HasMatchingGameplayTag(TAG_NGDashActive) || ASC->HasMatchingGameplayTag(TAG_NGMantleActive) || ASC->HasMatchingGameplayTag(TAG_NGPunchActive) || ASC->HasMatchingGameplayTag(TAG_NGReloadActive)) return false;
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now < PS->NextAllowedFireTime || !FMath::IsFinite(Def->FireInterval) || !FMath::IsFinite(Def->Damage) || !FMath::IsFinite(Def->Range) || Def->Damage <= 0 || Def->Range <= 0) return false;
+	if (!Def->ProjectileClass || !FMath::IsFinite(Def->MuzzleSpeed) || Def->MuzzleSpeed<100.f || !FMath::IsFinite(Def->GravityScale) || !FMath::IsFinite(Def->LinearDrag) || !FMath::IsFinite(Def->SpreadDegrees)) return false;
+	PS->NextAllowedFireTime = Now + FMath::Max(0.05f, Def->FireInterval);
+	FVector Eye; FRotator Aim; Pawn->GetActorEyesViewPoint(Eye, Aim);
+	Aim = Pawn->GetController()->GetControlRotation();
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(NGWeapon), false, Pawn);
+	TArray<AActor*> Attached; Pawn->GetAttachedActors(Attached); Params.AddIgnoredActors(Attached);
+	FHitResult EyeHit;
+	const FVector AimEnd = Eye + Aim.Vector() * FMath::Min(Def->Range, 100000.f);
+	// Capsule hits for this slice. A server anchor avoids animation tick dependence.
+	GetWorld()->LineTraceSingleByChannel(EyeHit, Eye, AimEnd, ECC_Visibility, Params);
+	const FVector Up=-Pawn->GetCharacterMovement()->GetGravityDirection();
+	const FVector Start = Pawn->GetActorLocation() + Up*45.f + Pawn->GetActorForwardVector() * 30.f;
+	const FVector End = EyeHit.bBlockingHit ? EyeHit.ImpactPoint : AimEnd;
+	FHitResult Obstruction;
+	if (GetWorld()->LineTraceSingleByChannel(Obstruction,Pawn->GetActorLocation(),Start,ECC_Visibility,Params)) return false;
+	TArray<ANGBallisticProjectile*> Projectiles;
+	const int32 Count=FMath::Clamp(Def->PelletsPerShot,1,16);
+	for (int32 I=0;I<Count;++I)
+	{
+		const FVector Direction=FMath::VRandCone((End-Start).GetSafeNormal(),FMath::DegreesToRadians(FMath::Clamp(Def->SpreadDegrees,0.f,20.f)));
+		const FTransform Transform(Direction.Rotation(),Start);
+		auto* Projectile=GetWorld()->SpawnActorDeferred<ANGBallisticProjectile>(Def->ProjectileClass,Transform,Pawn,Pawn,ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Projectile) { for (auto* Spawned:Projectiles) Spawned->Destroy(); return false; }
+		Projectile->Initialize(Pawn,this,Direction*FMath::Clamp(Def->MuzzleSpeed,100.f,200000.f),-Up*FMath::Abs(GetWorld()->GetGravityZ())*FMath::Clamp(Def->GravityScale,0.f,10.f),FMath::Clamp(Def->LinearDrag,0.f,2.f),FMath::Clamp(Def->Damage,1.f,10000.f),FMath::Clamp(Def->Range,100.f,100000.f),ShotSerial+1,Def->BodyImpactImpulse);
+		Projectile->SetWeaponEffects(Equipment.Definition);
+		Projectiles.Add(Projectile);
+	}
+	CurrentItem->RemoveStatTagStack(TAG_NGMagazineAmmo, 1); ++ShotSerial;
+	for (auto* Projectile:Projectiles) Projectile->FinishSpawning(Projectile->GetActorTransform());
+	MulticastShot(Start,End,false,ShotSerial,Equipment.Definition);
+	OnRep_Ammo(); Pawn->ForceNetUpdate();
+	UE_LOG(LogTemp, Verbose, TEXT("NG_BALLISTIC_SHOT pawn=%s ammo=%d pellets=%d"), *Pawn->GetName(),GetMagazineAmmo(),Count);
+	return true;
+}
+bool UNGCombatComponent::ApplyDamageToPawn(ANextgenoneCharacter* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit)
+{
+	if (!Target || !Target->HasAuthority() || Target->IsDead() || !Source || !Source->IsOwnerActorAuthoritative() || !FMath::IsFinite(Damage) || Damage <= 0) return false;
+	auto* TargetASC = Target->GetAbilitySystemComponent();
+	if (!TargetASC || TargetASC->GetAvatarActor() != Target) return false;
+	auto Context = Source->MakeEffectContext(); Context.AddSourceObject(Target);
+	if (Hit) Context.AddHitResult(*Hit);
+	auto Spec = Source->MakeOutgoingSpec(UNGDamageEffect::StaticClass(), 1.f, Context);
+	if (!Spec.IsValid()) return false;
+	Spec.Data->SetSetByCallerMagnitude(TAG_NGDamageAmount, Damage);
+	Source->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
+	return true;
+}
+void UNGCombatComponent::OnRep_Equipment()
+{
+	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	if (Pawn) Pawn->ApplyCombatPresentation();
+	OnEquipmentChanged.Broadcast(Equipment);
+}
+void UNGCombatComponent::OnRep_Ammo() { OnAmmoChanged.Broadcast(GetMagazineAmmo()); }
+void UNGCombatComponent::MulticastShot_Implementation(FVector_NetQuantize Start, FVector_NetQuantize End, bool bHit, int32 ShotId,UNGWeaponDefinition* ShotWeapon)
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+	if (const auto* Def = ShotWeapon) if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner()))
+	{
+		if (Def->WeaponFireAnimation && Pawn->SkeletalMesh->GetSkeletalMeshAsset()) Pawn->SkeletalMesh->PlayAnimation(Def->WeaponFireAnimation, false);
+		if (Def->CharacterFireMontage) Pawn->PlayAnimMontage(Def->CharacterFireMontage);
+		if (Def->FireSound) UGameplayStatics::PlaySoundAtLocation(this,Def->FireSound,Start);
+		NGWeaponVFX::Shot(Pawn,Def,Start,(FVector(End)-FVector(Start)).GetSafeNormal());
+	}
+	OnShotCosmetic.Broadcast(Start, End, bHit, ShotId);
+	if (FParse::Param(FCommandLine::Get(), TEXT("NGCombatSmoke")))
+		UE_LOG(LogTemp, Display, TEXT("NG_COSMETIC pawn=%s shot=%d hit=%d"), *GetOwner()->GetName(), ShotId, bHit);
+}
+void UNGCombatComponent::MulticastProjectileImpact_Implementation(FVector_NetQuantize Point,FVector_NetQuantizeNormal Normal,int32 ShotId,UNGWeaponDefinition* ShotWeapon,bool bCharacter)
+{
+	if (GetNetMode()!=NM_DedicatedServer) { NGWeaponVFX::Impact(this,ShotWeapon,Point,Normal,bCharacter); OnProjectileImpact.Broadcast(Point,Normal,ShotId); }
+}
+UNGFireAbility::UNGFireAbility()
+{
+	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;
+	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
+	ActivationBlockedTags.AddTag(TAG_NGDead);
+	ActivationBlockedTags.AddTag(TAG_NGDashActive);
+	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
+	ActivationBlockedTags.AddTag(TAG_NGPunchActive);
+	ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+}
+void UNGCombatComponent::RequestReload()
+{
+	if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner()))
+		if (auto* ASC = Cast<UNGAbilitySystemComponent>(Pawn->GetAbilitySystemComponent())) ASC->TryActivateAbilityByInputTag(TAG_NGReloadInput);
+}
+bool UNGCombatComponent::CompleteReloadOnServer(UNGInventoryItemInstance* Item)
+{
+	if (bCompletingReload) return false;
+	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
+	const auto* Def = Equipment.Definition.Get();
+	if (!Pawn || !Pawn->HasAuthority() || Pawn->IsDead() || !Pawn->GetController() || !Pawn->GetAbilitySystemComponent()
+		|| !Equipment.bEquipped || !Def || CurrentItem != Item || !BoundInventory.IsValid() || !BoundInventory->Contains(Item)) return false;
+	const int32 Amount = FMath::Min(FMath::Max(0, Def->MagazineCapacity - GetMagazineAmmo()), GetReserveAmmo());
+	if (Amount <= 0) return false;
+	UClass* Ammo=Def->AmmoItemClass.LoadSynchronous(); if (!Ammo) return false;
+	bCompletingReload=true; ON_SCOPE_EXIT { bCompletingReload=false; };
+	TArray<TTuple<UNGInventoryItemInstance*,int32,int32>> Changes;
+	int32 Remaining=Amount;
+	for (auto* Stack:BoundInventory->GetAllItems()) if (Stack->GetItemDef()==Ammo && Remaining>0)
+	{
+		const int32 Old=BoundInventory->GetCount(Stack),Take=FMath::Min(Old,Remaining);
+		if (!BoundInventory->RemoveQuantity(Stack,Take,false)) return false;
+		Changes.Emplace(Stack,Old,Old-Take); Remaining-=Take;
+	}
+	if (Remaining!=0) return false;
+	Item->AddStatTagStack(TAG_NGMagazineAmmo, Amount);
+	for (const auto& Change:Changes) BoundInventory->NotifyItemChange(Change.Get<0>(),Change.Get<1>(),Change.Get<2>());
+	return true;
+}
+void UNGCombatComponent::MulticastReload_Implementation()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+	if (const auto* Def = Equipment.Definition.Get()) if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner()))
+	{
+		if (Def->WeaponReloadAnimation && Pawn->SkeletalMesh->GetSkeletalMeshAsset()) Pawn->SkeletalMesh->PlayAnimation(Def->WeaponReloadAnimation, false);
+		if (Def->CharacterReloadMontage) Pawn->PlayAnimMontage(Def->CharacterReloadMontage);
+	}
+}
+UNGReloadAbility::UNGReloadAbility()
+{
+	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;
+	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
+	ActivationBlockedTags.AddTag(TAG_NGDead); ActivationBlockedTags.AddTag(TAG_NGPunchActive);
+	ActivationBlockedTags.AddTag(TAG_NGMantleActive); ActivationBlockedTags.AddTag(TAG_NGDashActive); ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+	ActivationOwnedTags.AddTag(TAG_NGReloadActive);
+}
+void UNGReloadAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
+{
+	auto* Combat = Cast<UNGCombatComponent>(GetSourceObject(Handle, Info));
+	const auto* Def = Combat ? Combat->GetEquipment().Definition.Get() : nullptr;
+	if (!Info || !Info->IsNetAuthority() || !Combat || Combat->GetOwner() != Info->AvatarActor.Get() || !Combat->GetEquipment().bEquipped
+		|| !Def || !FMath::IsFinite(Def->ReloadDuration) || Combat->GetMagazineAmmo() >= Def->MagazineCapacity || Combat->GetReserveAmmo() <= 0 || !CommitAbility(Handle, Info, Activation))
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	ReloadCombat = Combat; ReloadItem = Combat->GetEquippedItem();
+	Combat->MulticastReload();
+	auto* Task = UAbilityTask_WaitDelay::WaitDelay(this, FMath::Clamp(Def->ReloadDuration, .1f, 10.f));
+	Task->OnFinish.AddDynamic(this, &ThisClass::FinishReload); Task->ReadyForActivation();
+}
+void UNGReloadAbility::FinishReload()
+{
+	bool bReloaded = false;
+	if (auto* Combat = ReloadCombat.Get())
+		if (CurrentActorInfo && Combat->GetOwner() == CurrentActorInfo->AvatarActor.Get()) bReloaded = Combat->CompleteReloadOnServer(ReloadItem.Get());
+	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bReloaded);
+}
+void UNGReloadAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bCancelled)
+{
+	ReloadCombat.Reset(); ReloadItem.Reset(); Super::EndAbility(Handle, Info, Activation, bReplicateEnd, bCancelled);
+}
+void UNGCombatComponent::MulticastPunchStarted_Implementation(FVector_NetQuantizeNormal Direction, UAnimMontage* Montage)
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+	if (Montage) if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner())) Pawn->PlayAnimMontage(Montage);
+	OnPunchStarted.Broadcast(Direction);
+}
+void UNGCombatComponent::MulticastPunchHit_Implementation(ANextgenoneCharacter* Target, FVector_NetQuantize ImpactPoint)
+{
+	if (GetNetMode() != NM_DedicatedServer) OnPunchHit.Broadcast(Target, ImpactPoint);
+}
+void UNGFireAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, const FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
+{
+	auto* Combat = Cast<UNGCombatComponent>(GetSourceObject(Handle, Info));
+	if (Info && Info->IsNetAuthority() && Combat && Combat->GetOwner() == Info->AvatarActor.Get()) Combat->FireOnServer();
+	EndAbility(Handle, Info, Activation, true, false);
+}
