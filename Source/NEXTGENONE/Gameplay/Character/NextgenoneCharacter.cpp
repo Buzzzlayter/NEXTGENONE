@@ -36,19 +36,20 @@ bool ANextgenoneCharacter::IsDead() const
 }
 float ANextgenoneCharacter::GetHealth() const
 {
-	const auto* PS = GetPlayerState<ANextgenonePlayerState>();
-	return !IsDead() && PS && PS->AbilitySystem->GetAvatarActor() == this ? PS->HealthSet->Health.GetCurrentValue() : 0.f;
+	const auto* ASC = GetAbilitySystemComponent();
+	return !IsDead() && ASC ? ASC->GetNumericAttribute(UNGHealthSet::GetHealthAttribute()) : 0.f;
 }
 float ANextgenoneCharacter::GetMaxHealth() const
 {
-	const auto* PS = GetPlayerState<ANextgenonePlayerState>();
-	return PS ? PS->HealthSet->MaxHealth.GetCurrentValue() : 100.f;
+	const auto* ASC = GetAbilitySystemComponent();
+	return ASC ? ASC->GetNumericAttribute(UNGHealthSet::GetMaxHealthAttribute()) : 0.f;
 }
 void ANextgenoneCharacter::TryInitializeGameplay()
 {
 	ANextgenonePlayerState* PS = GetPlayerState<ANextgenonePlayerState>();
 	if (!PS || IsDead() || (PS->GetPawn() && PS->GetPawn() != this)) return;
-	auto* ASC = PS->AbilitySystem.Get();
+	auto* ASC = PS->GetAbilitySystemComponent();
+	if (!ASC) return;
 	// A delayed OnRep from an old Pawn must not steal a newer avatar.
 	if (!HasAuthority() && ASC->GetAvatarActor() && ASC->GetAvatarActor() != this)
 	{
@@ -61,6 +62,7 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 	else ASC->InitAbilityActorInfo(PS, this);
 	BoundASC = ASC;
 	Combat->BindAbilitySystem(ASC);
+	Interaction->BindAbilitySystem(ASC);
 	Combat->BindInventory();
 	HealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
 	MaxHealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
@@ -87,6 +89,7 @@ void ANextgenoneCharacter::UnbindGameplay()
 	}
 	BoundASC.Reset();
 	Combat->BindAbilitySystem(nullptr);
+	Interaction->BindAbilitySystem(nullptr);
 }
 void ANextgenoneCharacter::ApplyCombatPresentation()
 {

@@ -4,7 +4,7 @@
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
-#include "Gameplay/Inventory/NGInventoryManagerComponent.h"
+#include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
 #include "NextgenonePlayerState.generated.h"
 
 class ANextgenoneCharacter;
@@ -16,20 +16,14 @@ class NEXTGENONE_API ANextgenonePlayerState : public APlayerState, public IAbili
 public:
 	ANextgenonePlayerState();
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override { return AbilitySystem; }
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="GAS") TObjectPtr<UNGAbilitySystemComponent> AbilitySystem;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="GAS") TObjectPtr<UNGHealthSet> HealthSet;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Inventory") TObjectPtr<UNGInventoryManagerComponent> Inventory;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Inventory") TObjectPtr<UNGPlayerInventoryManagerComponent> Inventory;
 	// Server-only life boundary; repeated possession/binds never heal or grant twice.
 	bool StartLife(ANextgenoneCharacter* Pawn);
 	void ResumePendingLife(ANextgenoneCharacter* PreviousPawn);
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
-	// Player-wide cooldown survives ability cancellation, equip and Pawn replacement.
-	double NextAllowedFireTime = 0.0;
-	double NextAllowedInteractionTime = 0.0;
-	double NextAllowedDropTime = 0.0;
-	uint32 LifeSerial = 0;
-	bool bStarterInventoryGranted=false;
 private:
+	UPROPERTY(VisibleAnywhere, Category="GAS") TObjectPtr<UNGAbilitySystemComponent> AbilitySystem;
+	UPROPERTY(VisibleAnywhere, Category="GAS") TObjectPtr<UNGHealthSet> HealthSet;
 	TWeakObjectPtr<ANextgenoneCharacter> InitializedPawn;
 	TWeakObjectPtr<ANextgenoneCharacter> PendingLifePawn;
 	bool bChangingLife = false;

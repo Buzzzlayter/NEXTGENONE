@@ -1,5 +1,5 @@
 #include "Gameplay/UI/NGSettingsPanel.h"
-#include "Gameplay/Player/NextgenonePlayerController.h"
+#include "GameFramework/PlayerController.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/VerticalBox.h"
@@ -123,7 +123,7 @@ UNGSettingsScreenMounter::UNGSettingsScreenMounter() { WidgetClass=UNGSettingsPa
 void UNGSettingsScreenMounter::Enter()
 {
 	Super::Enter();
-	auto* PC=Cast<ANextgenonePlayerController>(GetPlayerController()); auto* Panel=Cast<UNGSettingsPanel>(GetWidget());
+	auto* PC=GetPlayerController(); auto* Panel=Cast<UNGSettingsPanel>(GetWidget());
 	if (!PC || !Panel) { Super::Exit(NAME_None); return; }
 	auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
 	if (!Input) { Super::Exit(NAME_None); return; }
@@ -131,7 +131,6 @@ void UNGSettingsScreenMounter::Enter()
 	FPlayerInputPolicy Policy; Policy.InputMode = EInputMode::UI; Policy.bBlockGameplay = true;
 	Policy.bSetCursorMode = true; Policy.CursorMode = EGamepadCursorMode::Grid;
 	PolicyHandle = Input->AcquireInputPolicy(this, Policy);
-	PC->bSettingsUIOpen = true;
 	Panel->OnBack.AddUniqueDynamic(this,&ThisClass::Back); Panel->SetUserFocus(PC);
 	Input->SetWidgetToFocus(Panel);
 }
@@ -144,6 +143,5 @@ void UNGSettingsScreenMounter::Release()
 	if (auto* Panel=Cast<UNGSettingsPanel>(GetWidget())) Panel->OnBack.RemoveDynamic(this,&ThisClass::Back);
 	if (auto* Input = AppliedInput.Get()) Input->ReleaseInputPolicy(PolicyHandle);
 	PolicyHandle.Invalidate(); AppliedInput.Reset();
-	if (auto* PC=Cast<ANextgenonePlayerController>(GetPlayerController())) PC->bSettingsUIOpen=false;
 }
 void UNGSettingsScreenMounter::Exit(FName Event) { Release(); Super::Exit(Event); }

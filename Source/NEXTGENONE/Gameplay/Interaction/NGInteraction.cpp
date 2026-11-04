@@ -1,13 +1,14 @@
 #include "Gameplay/Interaction/NGInteraction.h"
+#include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Interaction/NGItemPickup.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Player/NextgenonePlayerState.h"
-#include "Gameplay/Player/NextgenonePlayerController.h"
-#include "Gameplay/Inventory/NGInventoryManagerComponent.h"
-#include "Gameplay/Inventory/NGInventoryItemDefinition.h"
+#include "Input/PlayerInputSubsystem.h"
+#include "Inventory/NGInventoryManagerComponent.h"
+#include "Inventory/NGInventoryItemDefinition.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -15,12 +16,27 @@
 #include "Misc/ScopeExit.h"
 #include "Engine/World.h"
 
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionBlocked, "State.Interaction.Blocked");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionAbility, "Ability.Type.Interaction");
+
+namespace
+{
+    FGameplayTagContainer DefaultInteractionInterruptions()
+    {
+        FGameplayTagContainer Tags;
+        Tags.AddTag(TAG_NGInteractionBlocked); Tags.AddTag(TAG_NGDead);
+        Tags.AddTag(TAG_NGDashActive); Tags.AddTag(TAG_NGMantleActive);
+        Tags.AddTag(TAG_NGPunchActive); Tags.AddTag(TAG_NGReloadActive);
+        return Tags;
+    }
+}
+
 bool UNGInteractionSubsystem::IsCurrentInteractor(const ANextgenoneCharacter* Pawn,bool bAuthority) const
 {
-	if (!IsValid(Pawn) || Pawn->GetWorld()!=GetWorld() || (bAuthority && !Pawn->HasAuthority()) || Pawn->IsDead() || !Pawn->GetController() || Pawn->GetController()->GetPawn()!=Pawn) return false;
+	if (!IsValid(Pawn) || (Pawn->Interaction && Pawn->Interaction->IsInteractionBlocked()) || Pawn->GetWorld()!=GetWorld() || (bAuthority && !Pawn->HasAuthority()) || Pawn->IsDead() || !Pawn->GetController() || Pawn->GetController()->GetPawn()!=Pawn) return false;
 	const auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
 	const auto* ASC=Pawn->GetAbilitySystemComponent();
-	return PS && ASC && ASC==PS->AbilitySystem && ASC->GetAvatarActor()==Pawn && Pawn->GetHealth()>0.f;
+	return PS && ASC && ASC==PS->GetAbilitySystemComponent() && ASC->GetAvatarActor()==Pawn && Pawn->GetHealth()>0.f;
 }
 AActor* UNGInteractionSubsystem::FindTarget(ANextgenoneCharacter* Pawn,float MaxDistance,float CaptureRadius) const
 {
@@ -101,7 +117,7 @@ bool UNGInteractionSubsystem::TakePickup(ANGItemPickup* Pickup,ANextgenoneCharac
 	Pickup->ConsumeForTransfer();
 	PS->Inventory->NotifyItemChange(Item,0,State.Count);
 	const auto* Def=GetDefault<UNGInventoryItemDefinition>(State.ItemClass);
-	if (bAutoEquip && Def->Weapon && !Pawn->Combat->GetEquipment().bEquipped) Pawn->Combat->EquipInventoryItemOnServer(Item);
+	if (bAutoEquip && UNGCombatComponent::GetWeaponDefinition(Def) && !Pawn->Combat->GetEquipment().bEquipped) Pawn->Combat->EquipInventoryItemOnServer(Item);
 	return true;
 }
 ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* Pawn,UNGInventoryItemInstance* Item,int32 Count)
@@ -140,14 +156,70 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 }
 UNGInteractionComponent::UNGInteractionComponent()
 {
+	InterruptingTags = DefaultInteractionInterruptions();
 	SetIsReplicatedByDefault(true); PrimaryComponentTick.bCanEverTick=true; PrimaryComponentTick.TickInterval=.1f;
+}
+void UNGInteractionComponent::BindAbilitySystem(UAbilitySystemComponent* ASC)
+{
+    if (BoundASC.Get() == ASC) return;
+    if (auto* Previous = BoundASC.Get())
+        for (const auto& Pair : TagHandles)
+            Previous->RegisterGameplayTagEvent(Pair.Key).Remove(Pair.Value);
+    TagHandles.Reset();
+    BoundASC = ASC;
+    if (!ASC) { EndInteraction(); return; }
+    for (const auto& Tag : InterruptingTags)
+        TagHandles.Add(Tag, ASC->RegisterGameplayTagEvent(Tag).AddUObject(this, &ThisClass::BlockingTagChanged));
+    if (IsInteractionBlocked()) EndInteraction();
+}
+
+bool UNGInteractionComponent::IsInteractionBlocked() const
+{
+    const auto* ASC = BoundASC.Get();
+    return ASC && ASC->GetAvatarActor() == GetOwner() && ASC->HasAnyMatchingGameplayTags(InterruptingTags);
+}
+
+void UNGInteractionComponent::BlockingTagChanged(FGameplayTag Tag, int32 Count)
+{
+    if (Count > 0 && IsInteractionBlocked()) EndInteraction();
+}
+
+void UNGInteractionComponent::EndInteraction()
+{
+    if (bEndingInteraction) return;
+    TGuardValue<bool> Guard(bEndingInteraction, true);
+    const auto Previous = Context;
+    Context = {}; // Clear first: cancellation and session cleanup may re-enter gameplay code.
+    if (auto* ASC = BoundASC.Get(); ASC && ASC->GetAvatarActor() == GetOwner() && GetOwner()->HasAuthority())
+    {
+        FGameplayTagContainer AbilityTags; AbilityTags.AddTag(TAG_NGInteractionAbility);
+        ASC->CancelAbilities(&AbilityTags);
+    }
+    if (Previous.Type.IsValid())
+    {
+        OnContextChanged.Broadcast();
+        OnInteractionEnded.Broadcast(Previous.Source.Get());
+    }
+}
+
+void UNGInteractionComponent::SetConfirmedContext(FGameplayTag Type, AActor* Target, UObject* Source)
+{
+    Context.Type = Type; Context.Target = Target; Context.Source = Source;
+    if (IsInteractionBlocked()) { EndInteraction(); return; }
+    OnContextChanged.Broadcast();
+}
+void UNGInteractionComponent::ClearContext(UObject* ExpectedSource)
+{
+    if (Context.Source.Get() != ExpectedSource) return;
+    Context = {};
+    OnContextChanged.Broadcast();
 }
 void UNGInteractionComponent::TickComponent(float Delta,ELevelTick Tick,FActorComponentTickFunction* ThisTick)
 {
 	Super::TickComponent(Delta,Tick,ThisTick);
 	auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner());
-	const auto* PC=Pawn ? Cast<ANextgenonePlayerController>(Pawn->GetController()) : nullptr;
-	if (!Pawn || !Pawn->IsLocallyControlled() || (PC && (PC->bInventoryUIOpen || PC->bSettingsUIOpen))) { UpdateFocus(nullptr); return; }
+	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
+	if (!Pawn || !Pawn->IsLocallyControlled() || (Input && Input->IsGameplayInputBlocked())) { UpdateFocus(nullptr); return; }
 	auto* System=GetWorld()->GetSubsystem<UNGInteractionSubsystem>(); UpdateFocus(System ? System->FindTarget(Pawn,MaxDistance,CaptureRadius) : nullptr);
 }
 void UNGInteractionComponent::UpdateFocus(AActor* Target)
@@ -164,11 +236,11 @@ void UNGInteractionComponent::UpdateFocus(AActor* Target)
 	FocusedPrompt=Prompt; bFocusedAvailable=bAvailable;
 	if (bChanged) OnFocusChanged.Broadcast(Target,Prompt,bAvailable);
 }
-void UNGInteractionComponent::EndPlay(EEndPlayReason::Type Reason) { UpdateFocus(nullptr); Super::EndPlay(Reason); }
+void UNGInteractionComponent::EndPlay(EEndPlayReason::Type Reason) { EndInteraction(); BindAbilitySystem(nullptr); UpdateFocus(nullptr); Super::EndPlay(Reason); }
 void UNGInteractionComponent::RequestInteract()
 {
 	auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
-	const auto* PC=Cast<ANextgenonePlayerController>(Pawn->GetController()); if (PC && (PC->bInventoryUIOpen || PC->bSettingsUIOpen)) return;
+	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this); if (Input && Input->IsGameplayInputBlocked()) return;
 	auto* System=GetWorld()->GetSubsystem<UNGInteractionSubsystem>(); AActor* Target=System ? System->FindTarget(Pawn,MaxDistance,CaptureRadius) : nullptr;
 	if (!Target) { OnInteractionResult.Broadcast(false); return; }
 	if (Pawn->HasAuthority()) ServerRequestInteract_Implementation(Pawn,Target); else ServerRequestInteract(Pawn,Target);
@@ -177,20 +249,29 @@ void UNGInteractionComponent::ServerRequestInteract_Implementation(ANextgenoneCh
 {
 	auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); auto* System=GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
 	if (Pawn!=ExpectedPawn || !System || !System->IsCurrentInteractor(Pawn)) return;
-	auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>(); const double Now=GetWorld()->GetTimeSeconds();
-	if (Now<PS->NextAllowedInteractionTime) return; PS->NextAllowedInteractionTime=Now+.15;
+	auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
+	auto* ASC = PS ? Cast<UNGPlayerAbilitySystemComponent>(PS->GetAbilitySystemComponent()) : nullptr;
+	if (!ASC || !ASC->TryCommitInteraction(Pawn, .15f)) return;
 	FGameplayEventData Event; Event.EventTag=TAG_NGInteractEvent; Event.Instigator=Pawn; Event.Target=ProposedTarget;
-	PS->AbilitySystem->HandleGameplayEvent(TAG_NGInteractEvent,&Event);
+	ASC->HandleGameplayEvent(TAG_NGInteractEvent,&Event);
 }
 void UNGInteractionComponent::ClientInteractionResult_Implementation(bool bSuccess) { OnInteractionResult.Broadcast(bSuccess); }
 UNGInteractionAbility::UNGInteractionAbility()
 {
+	FGameplayTagContainer InteractionAssetTags; InteractionAssetTags.AddTag(TAG_NGInteractionAbility); SetAssetTags(InteractionAssetTags);
 	InstancingPolicy=EGameplayAbilityInstancingPolicy::InstancedPerActor; NetExecutionPolicy=EGameplayAbilityNetExecutionPolicy::ServerOnly;
 	NetSecurityPolicy=EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
-	ActivationBlockedTags.AddTag(TAG_NGDead); ActivationBlockedTags.AddTag(TAG_NGDashActive); ActivationBlockedTags.AddTag(TAG_NGMantleActive);
-	ActivationBlockedTags.AddTag(TAG_NGPunchActive); ActivationBlockedTags.AddTag(TAG_NGReloadActive);
 	FAbilityTriggerData Trigger; Trigger.TriggerTag=TAG_NGInteractEvent; Trigger.TriggerSource=EGameplayAbilityTriggerSource::GameplayEvent; AbilityTriggers.Add(Trigger);
 }
+bool UNGInteractionAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+    const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const
+{
+    if (!Info || !Super::CanActivateAbility(Handle, Info, SourceTags, TargetTags, RelevantTags)) return false;
+    const auto* Avatar = Info->AvatarActor.Get();
+    const auto* Interaction = Avatar ? Avatar->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+    return Interaction && !Interaction->IsInteractionBlocked();
+}
+
 void UNGInteractionAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle,const FGameplayAbilityActorInfo* Info,FGameplayAbilityActivationInfo Activation,const FGameplayEventData* Event)
 {
 	auto* Pawn=Info ? Cast<ANextgenoneCharacter>(Info->AvatarActor.Get()) : nullptr;

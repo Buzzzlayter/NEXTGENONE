@@ -4,7 +4,7 @@
 #pragma once
 
 #include "GameplayTagContainer.h"
-#include "NGInventoryItemDefinition.h"
+#include "Inventory/NGInventoryItemDefinition.h"
 
 #include "NGInventoryFragment_SetStats.generated.h"
 
@@ -13,7 +13,7 @@ class UObject;
 struct FGameplayTag;
 
 UCLASS()
-class UNGInventoryFragment_SetStats : public UNGInventoryItemFragment
+class GAMEPLAYFOUNDATION_API UNGInventoryFragment_SetStats : public UNGInventoryItemFragment
 {
 	GENERATED_BODY()
 

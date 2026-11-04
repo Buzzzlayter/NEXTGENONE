@@ -107,6 +107,7 @@ public:
 	UFUNCTION(BlueprintCallable) void RequestEquipItem(UNGInventoryItemInstance* Item);
 	UFUNCTION(BlueprintCallable) void RequestReload();
 	bool EquipInventoryItemOnServer(UNGInventoryItemInstance* Item);
+	static UNGWeaponDefinition* GetWeaponDefinition(const UNGInventoryItemDefinition* ItemDefinition);
 	bool CompleteReloadOnServer(UNGInventoryItemInstance* Item);
 	void BindInventory();
 	void BindAbilitySystem(UAbilitySystemComponent* ASC);

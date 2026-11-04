@@ -9,7 +9,11 @@ ANextgenonePlayerState::ANextgenonePlayerState()
     AbilitySystem->SetIsReplicated(true);
     AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
     HealthSet = CreateDefaultSubobject<UNGHealthSet>(TEXT("HealthSet"));
-    Inventory = CreateDefaultSubobject<UNGInventoryManagerComponent>(TEXT("Inventory"));
+    Inventory = CreateDefaultSubobject<UNGPlayerInventoryManagerComponent>(TEXT("Inventory"));
+    // One player container: 20 storage cells and 5 tagged action cells.
+    Inventory->InitializeSlots(25, TAG_NGSlotStorage);
+    for (int32 Index = 20; Index < 25; ++Index)
+        Inventory->SetSlotDefinition(Index, TAG_NGSlotAction);
     SetNetUpdateFrequency(30.f);
 }
 
@@ -35,7 +39,7 @@ bool ANextgenonePlayerState::StartLife(ANextgenoneCharacter* Pawn)
     AbilitySystem->ClearAbilityInput();
     AbilitySystem->CancelAllAbilities();
     const bool bNewLife = InitializedPawn != Pawn;
-    if (bNewLife) { InitializedPawn = Pawn; ++LifeSerial; }
+    if (bNewLife) InitializedPawn = Pawn;
     AbilitySystem->InitAbilityActorInfo(this, Pawn);
     Pawn->CharacterStateMachine->OnResourcesReady.AddUObject(this, &ThisClass::StateResourcesReady);
     if (bNewLife)

@@ -18,7 +18,7 @@
 
 Для собственного Actor реализовать интерфейс **NGInteractable**: GetInteractionPrompt, CanInteract, Interact, SetInteractionFocus. Включить Replicates и Block для trace channel **Interaction**. CanInteract оставлять проверкой без побочных эффектов; Interact изменяет состояние только на сервере и повторно проверяет доступность. Focus — локальное оформление. CustomDepth сам по себе не создаёт обводку: нужен соответствующий материал/постпроцесс.
 
-Старый BP_WeaponPickup сохранён как совместимый адаптер. Новые предметы создавать через универсальный BP_ItemPickup. Код и ассеты подготовлены; игровые и сетевые проверки ожидают отдельного апрува.
+`BP_WeaponPickup`, `ANGWeaponPickup`, `GA_PickupWeapon` и `UNGPickupWeaponAbility` удалены. Для оружия и остальных предметов используется универсальный `BP_ItemPickup` с ItemClass и общая `GA_Interact`/`UNGInteractionAbility`. IA_PickupWeapon пока используется существующими DA_Input_Character и IMC_NG_Character; это input asset, не отдельная способность. Старый input-тег остаётся совместимым маршрутом общей интеракции до перенастройки ассетов. Сборка и игровые проверки удаления не выполнялись.
 ## Файлы реализации
 
 Новые C++: `Gameplay/NGInteraction.h/.cpp`, `Gameplay/NGItemPickup.h/.cpp`, `Gameplay/NGInteractionPrompt.h/.cpp` (все внутри Source/NEXTGENONE).

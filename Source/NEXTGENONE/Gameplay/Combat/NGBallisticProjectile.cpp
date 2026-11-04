@@ -1,7 +1,8 @@
 #include "Gameplay/Combat/NGBallisticProjectile.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
-#include "Gameplay/Player/NextgenonePlayerState.h"
+#include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
+#include "GameFramework/PlayerState.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
 #include "Gameplay/Combat/NGWeaponVFX.h"
 #include "NiagaraComponent.h"
@@ -28,7 +29,7 @@ ANGBallisticProjectile::ANGBallisticProjectile()
 void ANGBallisticProjectile::Initialize(ANextgenoneCharacter* Shooter,UNGCombatComponent* Combat,FVector Velocity,FVector InGravity,float InDrag,float InDamage,float Range,int32 Shot,float ImpactImpulse)
 {
 	SourcePawn=Shooter; SourceASC=Shooter->GetAbilitySystemComponent(); SourceCombat=Combat;
-	if (auto* PS=Shooter->GetPlayerState<ANextgenonePlayerState>()) SourceLife=PS->LifeSerial;
+	if (auto* ASC=Cast<UNGPlayerAbilitySystemComponent>(SourceASC.Get())) SourceLife=ASC->GetAvatarGeneration();
 	InitialVelocity=Velocity; Gravity=InGravity; Drag=InDrag; Damage=InDamage; MaxRange=Range; ShotId=Shot;
 	BodyImpulse=FMath::IsFinite(ImpactImpulse) ? FMath::Clamp(ImpactImpulse,0.f,10000.f) : 0.f;
 	Collision->IgnoreActorWhenMoving(Shooter,true); TArray<AActor*> Attached; Shooter->GetAttachedActors(Attached); for (auto* Actor:Attached) Collision->IgnoreActorWhenMoving(Actor,true);
@@ -66,8 +67,10 @@ void ANGBallisticProjectile::OnStopped(const FHitResult& Hit)
 {
 	if (!HasAuthority() || bImpacted) return;
 	bImpacted=true; OnRep_Impact();
-	const auto* Shooter=SourcePawn.Get(); const auto* PS=Shooter ? Shooter->GetPlayerState<ANextgenonePlayerState>() : nullptr;
-	if (PS && PS->LifeSerial==SourceLife && SourceASC.IsValid()) if (auto* Target=Cast<ANextgenoneCharacter>(Hit.GetActor()))
+	const auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(SourceASC.Get());
+	const auto* Shooter = SourcePawn.Get();
+	if (Shooter && ASC && Shooter->GetPlayerState() == ASC->GetOwnerActor()
+		&& ASC->GetAvatarGeneration()==SourceLife) if (auto* Target=Cast<ANextgenoneCharacter>(Hit.GetActor()))
 	{
 		if (UNGCombatComponent::ApplyDamageToPawn(Target,SourceASC.Get(),Damage,&Hit) && Target->HitReaction)
 		{

@@ -1,5 +1,11 @@
 # GameplayFoundation runtime module
 
+## Актуализация: универсальный инвентарь, 2026-11-04
+
+Ядро инвентаря перенесено в GameplayFoundation/Public и Private/Inventory (10 файлов): ItemDefinition/фрагменты, ItemInstance, ManagerComponent, stat stacks. Обратных зависимостей на NEXTGENONE/ALS/UI нет. NetCore стал public dependency. Связь с WeaponDefinition заменена общим Equipment-фрагментом с UDataAsset; приведение типа выполняется только проектным Combat. Для загрузки старых assets оставлены скрытое Weapon_DEPRECATED/PostLoad и 12 точечных Class/StructRedirects. Пересохранение/проверка assets не выполнялись, redirects не удалять.
+
+Контейнер использует стабильные SlotIndex и правила SlotTag/AcceptedItems. Нативный профиль игрока — 20 Storage + 5 Action в одном контейнере; коробка использует тот же компонент, будущие сумки — отдельные экземпляры. Общие UI slot/list/window и интерфейс операций находятся в UIModule, backend-адаптер NGInventoryPanel и Actor NGInventoryBox — в NEXTGENONE. Подробный контракт, сетевой доступ и ограничения: [InventoryContainers.md](../Gameplay/InventoryContainers.md). Сборка и игровые проверки нового пакета не запускались. Более ранние разделы ниже описывают предыдущие этапы.
+
 2026-11-02. Общий модуль выделен; следующим пакетом добавлена новая обработка input. FSM персонажа подключена; актуальный контракт в Docs/Gameplay/CharacterStateMachine.md.
 
 ## Границы

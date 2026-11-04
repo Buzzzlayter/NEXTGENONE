@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "NGGameplayTagStack.h"
+#include "Inventory/NGGameplayTagStack.h"
 #include "Templates/SubclassOf.h"
 
 #include "NGInventoryItemInstance.generated.h"
@@ -17,19 +17,19 @@ struct FGameplayTag;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNGItemStatsChanged);
 
 USTRUCT(BlueprintType)
-struct FNGItemState
+struct GAMEPLAYFOUNDATION_API FNGItemState
 {
 	GENERATED_BODY()
-	UPROPERTY(BlueprintReadOnly) TSubclassOf<UNGInventoryItemDefinition> ItemClass;
-	UPROPERTY(BlueprintReadOnly) int32 Count = 1;
-	UPROPERTY(BlueprintReadOnly) TMap<FGameplayTag, int32> StatStacks;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TSubclassOf<UNGInventoryItemDefinition> ItemClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Count = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TMap<FGameplayTag, int32> StatStacks;
 };
 
 /**
  * UNGInventoryItemInstance
  */
 UCLASS(BlueprintType)
-class UNGInventoryItemInstance : public UObject
+class GAMEPLAYFOUNDATION_API UNGInventoryItemInstance : public UObject
 {
 	GENERATED_BODY()
 

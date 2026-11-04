@@ -139,6 +139,26 @@ bool UNGCharacterStateMachineComponent::OwnsStateAbility(const UAbilitySystemCom
 	return false;
 }
 
+bool UNGCharacterStateMachineComponent::IsGameplayReady(FGameplayTag RequiredState) const
+{
+	if (bEnding || RequestedStateTag.IsValid() || !GetReadyASC() || ActiveResources.IsEmpty()) return false;
+	bool bHasRequiredState = !RequiredState.IsValid();
+	for (const auto& Resource : ActiveResources)
+	{
+		if (!Resource.IsValid() || !Resource->Definition || !Resource->IsEntryReady()) return false;
+		// State replication and owner-only ability specs can arrive in either order.
+		for (const auto& Grant : Resource->Definition->Abilities)
+		{
+			bool bFound = false;
+			for (const auto& Spec : GetReadyASC()->GetActivatableAbilities())
+				if (Spec.Ability && Spec.Ability->GetClass() == Grant.Ability.Get()) { bFound = true; break; }
+			if (!bFound) return false;
+		}
+		bHasRequiredState |= Resource->Definition->StateTag.MatchesTag(RequiredState);
+	}
+	return bHasRequiredState;
+}
+
 void UNGCharacterStateMachineComponent::RefreshResources()
 {
 	if (bEnding) return;

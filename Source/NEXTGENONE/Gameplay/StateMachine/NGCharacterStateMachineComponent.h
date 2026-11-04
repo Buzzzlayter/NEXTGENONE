@@ -36,6 +36,8 @@ public:
 	void RegisterResources(UNGCharacterStateResources* Resources);
 	void UnregisterResources(UNGCharacterStateResources* Resources);
 	UAbilitySystemComponent* GetReadyASC() const;
+	/** Local snapshot: a real entered state, all its resource adapters ready, current Avatar. */
+	bool IsGameplayReady(FGameplayTag RequiredState) const;
 	bool OwnsStateAbility(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;

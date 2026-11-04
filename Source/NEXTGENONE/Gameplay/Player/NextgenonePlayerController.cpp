@@ -3,11 +3,10 @@
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/GameModes/NGTestGameMode.h"
 #include "EngineUtils.h"
-#include "Gameplay/Player/NextgenonePlayerState.h"
-#include "Gameplay/Interaction/NGInteraction.h"
 #include "Gameplay/UI/NGSettingsPanel.h"
 #include "Input/NGGameplayInputComponent.h"
 #include "Components/ALSDebugComponent.h"
+#include "GameFramework/PlayerState.h"
 
 void ANextgenonePlayerController::BeginPlay() { Super::BeginPlay(); if (IsLocalController()) GetDefault<UNGInputPreferences>()->ApplyAudio(GetWorld()); }
 void ANextgenonePlayerController::AddYawInput(float Value) { Super::AddYawInput(Value*GetDefault<UNGInputPreferences>()->LookSensitivity); }
@@ -40,29 +39,6 @@ void ANextgenonePlayerController::OnRep_Pawn()
 {
     APlayerController::OnRep_Pawn();
     RefreshPawnPresentation();
-}
-void ANextgenonePlayerController::ToggleInventoryUI()
-{
-    if (const auto* PS = GetPlayerState<ANextgenonePlayerState>())
-    {
-        InventoryUIRequested.Broadcast(PS->Inventory);
-        OnInventoryRequested(PS->Inventory);
-    }
-}
-void ANextgenonePlayerController::RequestDropItem(UNGInventoryItemInstance* Item,int32 Count)
-{
-	if (!IsLocalController() && !HasAuthority()) return;
-	auto* Expected=Cast<ANextgenoneCharacter>(GetPawn());
-	if (HasAuthority()) ServerDropItem_Implementation(Expected,Item,Count); else ServerDropItem(Expected,Item,Count);
-}
-void ANextgenonePlayerController::ServerDropItem_Implementation(ANextgenoneCharacter* ExpectedPawn,UNGInventoryItemInstance* Item,int32 Count)
-{
-	if (!ExpectedPawn || GetPawn()!=ExpectedPawn) return;
-	auto* System=GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
-	auto* PS=GetPlayerState<ANextgenonePlayerState>();
-	if (!System || !System->IsCurrentInteractor(ExpectedPawn) || !PS) return;
-	const double Now=GetWorld()->GetTimeSeconds(); if (Now<PS->NextAllowedDropTime) return;
-	PS->NextAllowedDropTime=Now+.15; System->DropInventoryItem(ExpectedPawn,Item,Count);
 }
 void ANextgenonePlayerController::ClientSmoke_Implementation(int32 Command)
 {

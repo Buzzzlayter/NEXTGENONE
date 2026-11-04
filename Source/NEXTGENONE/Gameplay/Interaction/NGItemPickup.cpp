@@ -1,6 +1,6 @@
 #include "Gameplay/Interaction/NGItemPickup.h"
-#include "Gameplay/Inventory/NGInventoryItemDefinition.h"
-#include "Gameplay/Inventory/NGInventoryManagerComponent.h"
+#include "Inventory/NGInventoryItemDefinition.h"
+#include "Inventory/NGInventoryManagerComponent.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Player/NextgenonePlayerState.h"
 #include "Gameplay/Combat/NGCombat.h"
@@ -34,7 +34,7 @@ void ANGItemPickup::OnRep_Payload()
 	const auto* Def=ItemClass ? GetDefault<UNGInventoryItemDefinition>(ItemClass) : nullptr;
 	UStaticMesh* Static=Def ? Def->PickupMesh.Get() : nullptr;
 	USkeletalMesh* Skel=Def ? Def->PickupSkeletalMesh.Get() : nullptr;
-	if (Def && Def->Weapon && !Static && !Skel) { Static=Def->Weapon->Mesh; Skel=Def->Weapon->SkeletalMesh; }
+	if (const auto* Weapon=UNGCombatComponent::GetWeaponDefinition(Def); Weapon && !Static && !Skel) { Static=Weapon->Mesh; Skel=Weapon->SkeletalMesh; }
 	FTransform Visual=Def ? Def->PickupTransform : FTransform::Identity;
 	if (!Static && !Skel) { Static=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")); Visual.SetScale3D(Visual.GetScale3D()*.3f); }
 	Mesh->SetStaticMesh(Static); SkeletalMesh->SetSkeletalMeshAsset(Static ? nullptr : Skel);
@@ -56,7 +56,7 @@ bool ANGItemPickup::CanInteract_Implementation(ANextgenoneCharacter* Interactor)
 	const auto* PS=Interactor->GetPlayerState<ANextgenonePlayerState>();
 	if (!PS) return false;
 	if (HasAuthority()) return PS->Inventory->CanAddItemDefinition(ItemClass,StackCount);
-	return PS->Inventory->GetAllItems().Num()<PS->Inventory->MaxEntries && StackCount<=GetDefault<UNGInventoryItemDefinition>(ItemClass)->MaxStackSize;
+	return PS->Inventory->GetAllItems().Num()<PS->Inventory->GetSlotCount() && StackCount<=GetDefault<UNGInventoryItemDefinition>(ItemClass)->MaxStackSize;
 }
 bool ANGItemPickup::Interact_Implementation(ANextgenoneCharacter* Interactor)
 {

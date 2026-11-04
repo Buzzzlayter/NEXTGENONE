@@ -3,7 +3,7 @@
 
 #include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
 #include "Gameplay/Combat/NGCombat.h"
-#include "Gameplay/Inventory/NGInventoryItemInstance.h"
+#include "Inventory/NGInventoryItemInstance.h"
 
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
@@ -14,7 +14,6 @@
 UNGGameplayAbilityFromEquipment::UNGGameplayAbilityFromEquipment(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	// Lyra's original parent provided this default; keep it when using our existing GAS base.
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 }
 

@@ -1,6 +1,7 @@
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
-#include "Gameplay/Player/NextgenonePlayerController.h"
+#include "GameFramework/PlayerController.h"
+#include "Input/PlayerInputSubsystem.h"
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/GameViewportClient.h"
@@ -69,8 +70,9 @@ FVector UNGAimComponent::GetTargetingOrigin(const FVector& ViewOrigin, const FVe
 }
 bool UNGAimComponent::ShouldShowReticle() const
 {
-	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); const auto* PC=Pawn ? Cast<ANextgenonePlayerController>(Pawn->GetController()) : nullptr;
-	return bShowReticle && PC && PC->IsLocalController() && PC->GetPawn()==Pawn && !Pawn->IsDead() && !PC->bInventoryUIOpen && !PC->bSettingsUIOpen;
+	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); const auto* PC=Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
+	return bShowReticle && PC && PC->IsLocalController() && PC->GetPawn()==Pawn && !Pawn->IsDead() && !(Input && Input->IsGameplayInputBlocked());
 }
 FLinearColor UNGAimComponent::GetReticleColor() const
 {

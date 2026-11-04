@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "GameFramework/Actor.h"
 #include "AbilitySystem/NGAbilitySystem.h"
+#include "Gameplay/Interaction/NGInteractionContext.h"
 #include "NGInteraction.generated.h"
 
 class ANextgenoneCharacter;
@@ -13,6 +14,8 @@ class ANGItemPickup;
 class UNGInventoryItemInstance;
 class UStaticMeshComponent;
 inline constexpr ECollisionChannel NGInteractionChannel=ECC_GameTraceChannel1;
+NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInteractionBlocked);
+NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInteractionAbility);
 
 UINTERFACE(BlueprintType)
 class NEXTGENONE_API UNGInteractable : public UInterface { GENERATED_BODY() };
@@ -57,6 +60,15 @@ class NEXTGENONE_API UNGInteractionComponent : public UActorComponent
 	GENERATED_BODY()
 public:
 	UNGInteractionComponent();
+	const FNGInteractionContext& GetContext() const { return Context; }
+	void SetConfirmedContext(FGameplayTag Type, AActor* Target, UObject* Source);
+	void ClearContext(UObject* ExpectedSource);
+	void EndInteraction();
+	void BindAbilitySystem(UAbilitySystemComponent* ASC);
+	bool IsInteractionBlocked() const;
+	FNGInteractionContextChanged OnContextChanged;
+	FNGInteractionEnded OnInteractionEnded;
+	UPROPERTY(EditDefaultsOnly, Category="Interaction|GAS") FGameplayTagContainer InterruptingTags;
 	virtual void TickComponent(float Delta, ELevelTick Tick, FActorComponentTickFunction* ThisTick) override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Interaction", meta=(ClampMin="50",ClampMax="500")) float MaxDistance=350.f;
@@ -69,7 +81,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Interaction") void RequestInteract();
 	UFUNCTION(Server, Reliable) void ServerRequestInteract(ANextgenoneCharacter* ExpectedPawn,AActor* ProposedTarget);
 	UFUNCTION(Client, Reliable) void ClientInteractionResult(bool bSuccess);
+
 private:
+	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
+	TMap<FGameplayTag, FDelegateHandle> TagHandles;
+	bool bEndingInteraction = false;
+	void BlockingTagChanged(FGameplayTag Tag, int32 Count);
+	FNGInteractionContext Context;
 	TWeakObjectPtr<AActor> FocusedActor;
 	FText FocusedPrompt;
 	bool bFocusedAvailable=false;
@@ -82,6 +100,9 @@ class NEXTGENONE_API UNGInteractionAbility : public UGameplayAbility
 	GENERATED_BODY()
 public:
 	UNGInteractionAbility();
+	virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+		const FGameplayTagContainer* SourceTags=nullptr, const FGameplayTagContainer* TargetTags=nullptr,
+		FGameplayTagContainer* RelevantTags=nullptr) const override;
 	// Kept for existing assets; current Characters use Interaction.MaxDistance as the single range setting.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Interaction", meta=(DeprecatedProperty,DeprecationMessage="Configure Character.Interaction.MaxDistance")) float MaxDistance=350.f;
 	virtual void ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

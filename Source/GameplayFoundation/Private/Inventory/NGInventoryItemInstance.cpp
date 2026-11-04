@@ -1,12 +1,12 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 // Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
 
-#include "NGInventoryItemInstance.h"
+#include "Inventory/NGInventoryItemInstance.h"
 
-#include "NGInventoryItemDefinition.h"
+#include "Inventory/NGInventoryItemDefinition.h"
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/Actor.h"
-#include "NGInventoryManagerComponent.h"
+#include "Inventory/NGInventoryManagerComponent.h"
 
 
 
@@ -75,10 +75,16 @@ void UNGInventoryItemInstance::SetItemDef(TSubclassOf<UNGInventoryItemDefinition
 void UNGInventoryItemInstance::OnRep_ItemDef()
 {
 	OnStatsChanged.Broadcast();
-	if (auto* Owner = GetTypedOuter<AActor>()) if (auto* Manager = Owner->FindComponentByClass<UNGInventoryManagerComponent>())
+	if (auto* Owner = GetTypedOuter<AActor>())
 	{
-		FNGInventoryChangeMessage Change; Change.InventoryOwner = Manager; Change.Instance = this; Change.NewCount = Manager->GetCount(this);
-		Manager->OnInventoryChanged.Broadcast(Change);
+		TArray<UNGInventoryManagerComponent*> Managers;
+		Owner->GetComponents(Managers);
+		for (auto* Manager : Managers) if (Manager->Contains(this))
+		{
+			FNGInventoryChangeMessage Change; Change.InventoryOwner = Manager; Change.Instance = this;
+			Change.NewCount = Manager->GetCount(this); Change.SlotIndex = Manager->GetSlotIndex(this);
+			Manager->OnInventoryChanged.Broadcast(Change);
+		}
 	}
 }
 

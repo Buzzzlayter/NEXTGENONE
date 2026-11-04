@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 // Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
 
-#include "NGGameplayTagStack.h"
+#include "Inventory/NGGameplayTagStack.h"
 
 #include "UObject/Stack.h"
 

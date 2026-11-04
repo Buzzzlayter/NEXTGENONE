@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Gameplay/Interaction/NGInteraction.h"
-#include "Gameplay/Inventory/NGInventoryItemInstance.h"
+#include "Inventory/NGInventoryItemInstance.h"
 #include "NGItemPickup.generated.h"
 
 class USphereComponent;
