@@ -11,7 +11,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "UObject/ConstructorHelpers.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 
@@ -24,9 +23,6 @@ ANextgenoneCharacter::ANextgenoneCharacter(const FObjectInitializer& Init) : Sup
 	HitReaction = CreateDefaultSubobject<UNGHitReactionComponent>(TEXT("HitReaction"));
 	GameplayInput = CreateDefaultSubobject<UNGCharacterInputComponent>(TEXT("GameplayInput"));
 	CharacterStateMachine = CreateDefaultSubobject<UNGCharacterStateMachineComponent>(TEXT("CharacterStateMachine"));
-	Combat->TestWeapon = CreateDefaultSubobject<UNGWeaponDefinition>(TEXT("TestWeapon"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	Combat->TestWeapon->Mesh = Cube.Object;
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 UAbilitySystemComponent* ANextgenoneCharacter::GetAbilitySystemComponent() const
@@ -64,6 +60,7 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 	if (HasAuthority()) { if (!PS->StartLife(this)) return; }
 	else ASC->InitAbilityActorInfo(PS, this);
 	BoundASC = ASC;
+	Combat->BindAbilitySystem(ASC);
 	Combat->BindInventory();
 	HealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
 	MaxHealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
@@ -76,8 +73,6 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 }
 void ANextgenoneCharacter::UnbindGameplay()
 {
-	bJumpInputHeld = false;
-	bAimInputHeld = false;
 	if (auto* ASC = BoundASC.Get())
 	{
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).Remove(HealthHandle);
@@ -91,29 +86,7 @@ void ANextgenoneCharacter::UnbindGameplay()
 		}
 	}
 	BoundASC.Reset();
-}
-void ANextgenoneCharacter::JumpAction_Implementation(bool bValue)
-{
-	if (bValue && Controller && Controller->IsMoveInputIgnored()) return;
-	if (bJumpInputHeld == bValue) return;
-	bJumpInputHeld = bValue;
-	auto* ASC = Cast<UNGAbilitySystemComponent>(GetAbilitySystemComponent());
-	if (!ASC || !IsLocallyControlled()) return;
-	if (!bValue) { ASC->AbilityInputTagReleased(TAG_NGInputJump); return; }
-	// Explicit mantle is now Input.Mantle; automatic falling catches use the same server ability.
-	// Preserve ALS stand-up/get-up shortcuts without calling its direct Jump path.
-	if (GetMovementAction() == EALSMovementAction::None)
-	{
-		if (GetMovementState() == EALSMovementState::Ragdoll) { ReplicatedRagdollEnd(); return; }
-		if (GetMovementState() == EALSMovementState::Grounded && GetStance() == EALSStance::Crouching) { UnCrouch(); return; }
-	}
-	ASC->AbilityInputTagPressed(TAG_NGInputJump);
-}
-void ANextgenoneCharacter::AimAction_Implementation(bool bValue)
-{
-	if (bAimInputHeld == bValue) return;
-	bAimInputHeld = bValue;
-	if (IsLocallyControlled()) Combat->RequestAim(bValue);
+	Combat->BindAbilitySystem(nullptr);
 }
 void ANextgenoneCharacter::ApplyCombatPresentation()
 {
@@ -121,7 +94,13 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 	const auto Equipment = Combat->GetEquipment();
 	const auto* Def = Equipment.Definition.Get();
 	const bool bArmed = !IsDead() && Equipment.bEquipped && Def;
-	SetOverlayState(bArmed ? Def->Overlay : EALSOverlayState::Default);
+	const auto DesiredOverlay = bArmed ? Def->Overlay : EALSOverlayState::Default;
+	if (GetOverlayState() != DesiredOverlay)
+	{
+		// The overlay callback restores our item after ALS updates its demo held object.
+		SetOverlayState(DesiredOverlay);
+		if (bArmed) return;
+	}
 	Super::AimAction_Implementation(bArmed && Combat->IsAiming());
 	if (!bArmed || GetMovementState() == EALSMovementState::Mantling || GetMovementState() == EALSMovementState::Ragdoll)
 	{ ClearHeldObject(); return; }
@@ -130,6 +109,11 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 	HeldObjectRoot->SetRelativeScale3D(Def->VisualTransform.GetScale3D());
 	StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+void ANextgenoneCharacter::OnOverlayStateChanged(EALSOverlayState PreviousState)
+{
+	Super::OnOverlayStateChanged(PreviousState);
+	if (Combat && Combat->GetEquipment().bEquipped) ApplyCombatPresentation();
 }
 void ANextgenoneCharacter::Tick(float DeltaSeconds)
 {
@@ -142,13 +126,6 @@ void ANextgenoneCharacter::Tick(float DeltaSeconds)
 		return;
 	}
 	Super::Tick(DeltaSeconds);
-	if (!Combat) return;
-	const auto State = Combat->GetEquipment();
-	const auto* Def = State.Definition.Get();
-	// ALS callbacks may refresh a demo prop after mantle/ragdoll. Restore the selected item once, not each frame.
-	if (State.bEquipped && Def && !IsDead() && GetMovementState() != EALSMovementState::Mantling && GetMovementState() != EALSMovementState::Ragdoll)
-		if (GetOverlayState() != Def->Overlay || SkeletalMesh->GetSkeletalMeshAsset() != Def->SkeletalMesh || StaticMesh->GetStaticMesh() != Def->Mesh)
-			ApplyCombatPresentation();
 }
 void ANextgenoneCharacter::RagdollStart()
 {
@@ -156,16 +133,23 @@ void ANextgenoneCharacter::RagdollStart()
 	Super::RagdollStart();
 	if (IsDead())
 	{
-		if (HitReaction) HitReaction->ReleaseToRagdoll();
 		GetMesh()->bOnlyAllowAutonomousTickPose = false;
+		// Cosmetic ragdolls differ on each machine and cannot be authoritative movement obstacles.
+		GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		GetMesh()->CanCharacterStepUpOn = ECB_No;
 		// The permanent cosmetic corpse is independent of capsule/possession movement.
 		GetMesh()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		if (HitReaction) HitReaction->ReleaseToRagdoll();
 	}
 }
 void ANextgenoneCharacter::RagdollEnd()
 {
 	// Includes late ALS multicast/get-up requests arriving after death.
-	if (!IsDead()) Super::RagdollEnd();
+	if (!IsDead())
+	{
+		Super::RagdollEnd();
+		ApplyCombatPresentation();
+	}
 }
 void ANextgenoneCharacter::HealthChanged(const FOnAttributeChangeData& Data)
 {
@@ -208,6 +192,7 @@ void ANextgenoneCharacter::BeginPlay()
     TryInitializeGameplay();
     if (auto* ASC = BoundASC.Get(); ASC && ASC->GetAvatarActor() == this) CharacterStateMachine->NotifyGameplayReady(ASC);
     CharacterStateMachine->RestorePresentation();
+	ApplyCombatPresentation();
 }
 void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {

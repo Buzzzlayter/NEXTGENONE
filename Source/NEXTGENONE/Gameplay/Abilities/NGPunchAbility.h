@@ -27,6 +27,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Punch", meta=(ClampMin="10", ClampMax="50")) float HitRadius = 28.f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Punch", meta=(ClampMin="0", ClampMax="0.4")) float Windup = .12f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Punch", meta=(ClampMin="0", ClampMax="2000")) float KnockbackSpeed = 650.f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Punch", meta=(ClampMin="0", ClampMax="10000")) float BodyImpactImpulse = 2200.f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Punch", meta=(ClampMin="0", ClampMax="600")) float KnockbackLift = 140.f;
 	virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		const FGameplayTagContainer* SourceTags=nullptr, const FGameplayTagContainer* TargetTags=nullptr,

@@ -2,6 +2,20 @@
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
+#include "GameFramework/Controller.h"
+
+namespace
+{
+	bool CanHandleJumpInput(const ANextgenoneCharacter* Pawn, const FGameplayAbilityActorInfo* Info)
+	{
+		if (!Pawn || !Info || Pawn->IsDead() || Pawn->GetAbilitySystemComponent() != Info->AbilitySystemComponent.Get()
+			|| !Pawn->GetController() || Pawn->GetController()->IsMoveInputIgnored()
+			|| Pawn->GetMovementAction() != EALSMovementAction::None) return false;
+		if (Pawn->GetMovementState() == EALSMovementState::Ragdoll) return true;
+		return Pawn->GetMovementState() == EALSMovementState::Grounded
+			&& (Pawn->GetStance() == EALSStance::Crouching || (Pawn->GetStance() == EALSStance::Standing && Pawn->CanJump()));
+	}
+}
 
 UNGJumpAbility::UNGJumpAbility()
 {
@@ -18,18 +32,28 @@ bool UNGJumpAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 {
 	if (!Info || !Super::CanActivateAbility(Handle, Info, SourceTags, TargetTags, RelevantTags)) return false;
 	const auto* Pawn = Cast<ANextgenoneCharacter>(Info->AvatarActor.Get());
-	return Pawn && !Pawn->IsDead() && Pawn->GetAbilitySystemComponent() == Info->AbilitySystemComponent.Get()
-		&& Pawn->GetMovementAction() == EALSMovementAction::None
-		&& Pawn->GetMovementState() == EALSMovementState::Grounded
-		&& Pawn->GetStance() == EALSStance::Standing && Pawn->CanJump();
+	return CanHandleJumpInput(Pawn, Info);
 }
 void UNGJumpAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 	const FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
 {
 	auto* Pawn = Info ? Cast<ANextgenoneCharacter>(Info->AvatarActor.Get()) : nullptr;
-	if (!Pawn || !CommitAbility(Handle, Info, Activation))
+	if (!CanHandleJumpInput(Pawn, Info) || !CommitAbility(Handle, Info, Activation))
 	{
 		EndAbility(Handle, Info, Activation, true, true);
+		return;
+	}
+	if (Pawn->GetMovementState() == EALSMovementState::Ragdoll)
+	{
+		// GAS validates on the server; ALS distributes get-up once, without a second client RPC.
+		if (Info->IsNetAuthority()) Pawn->ReplicatedRagdollEnd();
+		EndAbility(Handle, Info, Activation, true, false);
+		return;
+	}
+	if (Pawn->GetStance() == EALSStance::Crouching)
+	{
+		Pawn->UnCrouch();
+		EndAbility(Handle, Info, Activation, true, false);
 		return;
 	}
 	JumpPawn = Pawn;
@@ -46,9 +70,11 @@ void UNGJumpAbility::OnInputReleased(float TimeHeld)
 void UNGJumpAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 	const FGameplayAbilityActivationInfo Activation, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (!IsEndAbilityValid(Handle, Info)) return;
 	// Never resolve a new avatar here: this ability may be ending during respawn.
+	const bool bWasJumping = JumpPawn.IsValid();
 	if (auto* Pawn = JumpPawn.Get()) Pawn->StopJumping();
 	JumpPawn.Reset();
 	Super::EndAbility(Handle, Info, Activation, bReplicateEndAbility, bWasCancelled);
-	OnJumpStopped(bWasCancelled);
+	if (bWasJumping) OnJumpStopped(bWasCancelled);
 }

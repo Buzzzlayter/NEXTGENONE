@@ -6,6 +6,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "Gameplay/Character/NextgenoneCharacter.h"
 
 UNGALSMantleExecutor::UNGALSMantleExecutor()
 {
@@ -23,9 +24,18 @@ void UNGALSMantleExecutor::BeginPlay()
 		MantleTimeline->RegisterComponent();
 	}
 	Super::BeginPlay();
+	// Preserve ALS completion, then restore the equipment visual on every network role.
+	FOnTimelineEvent TimelineFinished;
+	TimelineFinished.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(UNGALSMantleExecutor, MantleTimelineFinished));
+	MantleTimeline->SetTimelineFinishedFunc(TimelineFinished);
 	// The component still executes ALS, but initiation must pass through a granted GAS ability.
 	if (auto* Pawn = Cast<AALSBaseCharacter>(GetOwner()))
 		Pawn->JumpPressedDelegate.RemoveDynamic(this, &UALSMantleComponent::OnOwnerJumpInput);
+}
+void UNGALSMantleExecutor::MantleTimelineFinished()
+{
+	MantleEnd();
+	if (auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner())) Pawn->ApplyCombatPresentation();
 }
 bool UNGALSMantleExecutor::CanStart()
 {
@@ -82,6 +92,7 @@ void UNGALSMantleExecutor::MulticastAbilityCancel_Implementation()
 	if (!Pawn->GetController() || (ASC && ASC->HasMatchingGameplayTag(TAG_NGDead))) Pawn->GetCharacterMovement()->DisableMovement();
 	else Pawn->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 	SetComponentTickEnabled(true);
+	if (auto* Character = Cast<ANextgenoneCharacter>(Pawn)) Character->ApplyCombatPresentation();
 }
 void UNGALSMantleExecutor::CancelFromAbility()
 {

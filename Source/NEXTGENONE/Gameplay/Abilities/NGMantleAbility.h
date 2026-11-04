@@ -29,6 +29,7 @@ private:
 	UFUNCTION(NetMulticast, Reliable) void MulticastAbilityStart(float Height, FALSComponentAndTransform Ledge, EALSMantleType Type);
 	UFUNCTION(NetMulticast, Reliable) void MulticastAbilityCancel();
 	void MonitorExecution();
+	UFUNCTION() void MantleTimelineFinished();
 	FTimerHandle ExecutionTimer;
 	double NextAutoAttempt = 0;
 	bool bCheckingOnServer = false;

@@ -72,7 +72,7 @@ void ANGBallisticProjectile::OnStopped(const FHitResult& Hit)
 		if (UNGCombatComponent::ApplyDamageToPawn(Target,SourceASC.Get(),Damage,&Hit) && Target->HitReaction)
 		{
 			FVector Direction=(Hit.TraceEnd-Hit.TraceStart).GetSafeNormal(); if (Direction.IsNearlyZero()) Direction=GetActorForwardVector();
-			Target->HitReaction->ApplyBulletImpact(Hit,Direction,BodyImpulse);
+			Target->HitReaction->ApplyImpact(Hit,Direction,BodyImpulse);
 		}
 	}
 	if (SourceCombat.IsValid()) SourceCombat->MulticastProjectileImpact(Hit.ImpactPoint,Hit.ImpactNormal,ShotId,ShotWeapon,Cast<ANextgenoneCharacter>(Hit.GetActor())!=nullptr);

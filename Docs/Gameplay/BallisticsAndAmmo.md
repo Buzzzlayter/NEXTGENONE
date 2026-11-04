@@ -37,6 +37,24 @@ Updated: Gameplay/NGCombat.h/.cpp, NextgenonePlayerState.h, NextgenonePlayerCont
 New project assets: Gameplay/Weapons/BP_BallisticProjectile, DA_Shotgun; Gameplay/Inventory/ID_Shotgun, ID_Ammo_Pistol, ID_Ammo_Rifle, ID_Ammo_Shotgun; Gameplay/UI/WBP_ServerConnection. Updated existing weapon definitions, Pistol/Rifle item fragments, Character, settings/inventory UI and fire/reload abilities. Added 11 selected Lyra Shotgun assets plus three SoundWaves (see manifest). Main map and project GameMode defaults were not switched.
 # Прицеливание от камеры (2026-11-04)
 
+## Удаление встроенного тестового оружия
+
+Character больше не создаёт TestWeapon и не загружает куб. Поле Combat.TestWeapon и неиспользуемый TryPickupOnServer удалены. SetEquippedOnServer не создаёт item: сначала выбрать имеющийся предмет через слот/RequestEquipItem, затем экипировать. При пустом инвентаре персонаж остаётся безоружным.
+
+Нативный StarterItems теперь пуст; стартовые предметы задаются явно на Combat в Pawn Blueprint. Сохранённые значения существующих Blueprint агент не менял. WeaponDefinition.InventoryItemClass назначается явно для compatibility WeaponPickup; универсальный ItemPickup уже использует ItemClass. FireAbilityClass/ReloadAbilityClass больше не инициализируются /Game-путями; при пустых полях используются UNGFireAbility/UNGReloadAbility. Для собственных BP-способностей назначить классы в WeaponDefinition. ProjectileClass/AimAbilityClass сохраняют native defaults. Старые тестовые Content assets в этом пакете не удалялись. Blueprint настроить/пересохранить пользователю; сборку и игровые тесты агент не запускал.
+
+## Прицеливание через GAS
+
+`UNGAimAbility` — LocalPredicted equipment ability. Оружие выдаёт её по `WeaponDefinition.AimAbilityClass` (по умолчанию native UNGAimAbility) с Input.Aim, снимает вместе с Fire/Reload по своим handles. Не добавлять второй экземпляр в Alive. SourceObject — существующий CombatComponent; проверяется текущий ASC Avatar и экипировка.
+
+На активации CommitAbility и Infinite `UNGAimingEffect` дают State.Weapon.Aiming. Effect нужен для репликации состояния также simulated proxies, независимо от настройки репликации ActivationOwnedTags. Отпускание через WaitInputRelease завершает способность и снимает только её effect handle. Снятие оружия/UnPossess/смерть отменяют её существующим lifecycle; появление blocked tags Dash/Mantle/Punch/Reload/Dead завершает активный ADS. После отмены нужно отпустить и нажать ввод заново. При смене Avatar Combat отписывается от старого ASC.
+
+`Combat.IsAiming` читает GAS-тег только для текущего Avatar и экипировки. OnAimChanged/ALS presentation обновляются от tag event. Отдельные replicated bAiming и ServerSetAiming удалены. `RequestAim(bool)` и Character.AimAction оставлены только как input→GAS переходники, без собственного состояния или сетевого протокола.
+
+Blueprint-сетап пользователя: в CharacterDefinition.InputConfig перенести IA прицеливания из NativeInputActions в AbilityInputActions с тегом Input.Aim. IMC остаётся у ControlStateDefinition; клавиши/геймпад задаются пользователем. Если оставить прежний Native маршрут, он тоже вызывает GAS; одновременно оба маршрута не назначать. Удалить старые Blueprint-вызовы ServerSetAiming, если существовали. При желании создать BP от UNGAimAbility и указать его в WeaponDefinition.AimAbilityClass, сохранив native lifecycle.
+
+Fire остаётся ServerOnly со свежим лучом в ServerRequestFire, серверным снарядом/уроном/патронами/rate limit. ADS не является условием выстрела. Разброс и текущая точность не изменены: возможность точного попадания от бедра пока сохраняется по явному решению пользователя. Сборка и runtime/сетевая работа нового GAS lifecycle не проверены; Blueprint и input assets агент не менял.
+
 Уточнение по Lyra: `LyraGameplayAbility_RangedWeapon.cpp` использует клиентский TargetData и проектирование начала луча вперёд к плоскости Pawn (`GetTargetingTransform`). В просмотренной локальной версии `OnTargetDataReadyCallback` содержит `bIsTargetDataValid=true`; готовой строгой серверной валидации там нет. Мы сохраняем собственный серверный trace и физический снаряд.
 
 `NGAimComponent.GetTargetingOrigin` теперь одинаково используется локальным прицеливанием и серверным выстрелом: переносит начало вдоль того же луча вперёд до Pawn, сохраняя экранное направление. Валидация камеры дополнительно делает sphere sweep с origin/radius/channel исходного `AALSBaseCharacter.GetThirdPersonTraceParams`; исходный eye-to-camera trace также сохранён. ALS plugin и Camera AnimBP не изменены. Это проверка столкновений и границ доверия, а не точное серверное восстановление камеры: pivot/rotation lag и offsets исходной камеры зависят от AnimBP-кривых, плечо в исходном ALS локальное. Произвольная камера внутри разрешённого объёма всё ещё возможна. Для более строгой политики нужен общий серверно-доступный профиль камеры с синхронизированным выбором режима/плеча, а не запуск Camera AnimBP на dedicated server.

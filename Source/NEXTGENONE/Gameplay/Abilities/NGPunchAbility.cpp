@@ -1,6 +1,7 @@
 #include "Gameplay/Abilities/NGPunchAbility.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
+#include "Gameplay/Character/NGHitReactionComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
@@ -48,7 +49,7 @@ void UNGPunchAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const F
 {
 	StrikePawn = Info ? Cast<ANextgenoneCharacter>(Info->AvatarActor.Get()) : nullptr;
 	if (!IsStrikePawnValid(Info) || !FMath::IsFinite(Damage) || !FMath::IsFinite(Reach) || !FMath::IsFinite(HitRadius)
-		|| !FMath::IsFinite(Windup) || !FMath::IsFinite(KnockbackSpeed) || !FMath::IsFinite(KnockbackLift)
+		|| !FMath::IsFinite(Windup) || !FMath::IsFinite(KnockbackSpeed) || !FMath::IsFinite(KnockbackLift) || !FMath::IsFinite(BodyImpactImpulse)
 		|| !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	auto* Pawn = StrikePawn.Get();
@@ -82,15 +83,16 @@ void UNGPunchAbility::ResolveStrike()
 			&& UNGCombatComponent::ApplyDamageToPawn(Target, CurrentActorInfo->AbilitySystemComponent.Get(), FMath::Clamp(Damage, 1.f, 1000.f), &Hit))
 		{
 			Pawn->Combat->MulticastPunchHit(Target, Hit.ImpactPoint);
+			const FVector TargetUp = -Target->GetCharacterMovement()->GetGravityDirection();
+			FVector Direction = FVector::VectorPlaneProject(ToTarget, TargetUp).GetSafeNormal();
+			if (Direction.IsNearlyZero()) Direction = Forward;
+			if (Target->HitReaction) Target->HitReaction->ApplyImpact(Hit,Direction,BodyImpactImpulse);
 			// Damage/death callbacks may invalidate a life. Never push a replacement avatar or revive a corpse.
 			if (IsValid(Target) && !Target->IsDead() && TargetASC->GetAvatarActor() == Target && Target->GetController())
 			{
 				// End movement root-motion tasks so they cannot override this authoritative knockback.
 				FGameplayTagContainer MovementTags; MovementTags.AddTag(TAG_NGMovementAbility);
 				TargetASC->CancelAbilities(&MovementTags);
-				const FVector TargetUp = -Target->GetCharacterMovement()->GetGravityDirection();
-				FVector Direction = FVector::VectorPlaneProject(ToTarget, TargetUp).GetSafeNormal();
-				if (Direction.IsNearlyZero()) Direction = Forward;
 				Target->LaunchCharacter(Direction * FMath::Clamp(KnockbackSpeed, 0.f, 2000.f)
 					+ TargetUp * FMath::Clamp(KnockbackLift, 0.f, 600.f), true, true);
 				Target->ForceNetUpdate();

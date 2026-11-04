@@ -12,7 +12,6 @@ UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputMove, "Input.Move");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookMouse, "Input.Look.Mouse");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookStick, "Input.Look.Stick");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputSprint, "Input.Sprint");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputAim, "Input.Aim");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputStance, "Input.Stance");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputWalk, "Input.Walk");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputRagdoll, "Input.Ragdoll");
@@ -90,13 +89,6 @@ void UNGCharacterInputComponent::HandleNativeInput_Implementation(FGameplayTag T
 		else if (bReleased) Combat->StopPrimaryInput();
 		return;
 	}
-	if (Tag == TAG_InputAim && (bStarted || bReleased))
-	{
-		if (ALS) ALS->AimAction(bStarted);
-		else if (Combat) Combat->RequestAim(bStarted);
-		return;
-	}
-	if (Tag == TAG_NGInputJump && ALS && (bStarted || bReleased)) { ALS->JumpAction(bStarted); return; }
 	if (Tag == TAG_InputSprint && ALS && (bStarted || bReleased)) { ALS->SprintAction(bStarted); return; }
 	if (bStarted && Combat)
 	{

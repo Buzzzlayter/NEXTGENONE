@@ -39,8 +39,6 @@ public:
 	virtual void OnRep_Controller() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
-	virtual void JumpAction_Implementation(bool bValue) override;
-	virtual void AimAction_Implementation(bool bValue) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void RagdollStart() override;
 	virtual void RagdollEnd() override;
@@ -52,9 +50,9 @@ public:
 	UPROPERTY(BlueprintAssignable) FNGDeathChanged OnDeathChanged;
 	void TryInitializeGameplay();
 	void UnbindGameplay();
+protected:
+	virtual void OnOverlayStateChanged(EALSOverlayState PreviousState) override;
 private:
-	bool bJumpInputHeld = false;
-	bool bAimInputHeld = false;
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	FDelegateHandle HealthHandle;
 	FDelegateHandle MaxHealthHandle;

@@ -53,6 +53,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TObjectPtr<UAnimMontage> CharacterReloadMontage;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon") TSoftClassPtr<UGameplayAbility> FireAbilityClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon") TSoftClassPtr<UGameplayAbility> ReloadAbilityClass;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon") TSubclassOf<UGameplayAbility> AimAbilityClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="1")) float Damage = 25.f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="1")) float Range = 10000.f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="0.05")) float FireInterval = 0.25f;
@@ -88,7 +89,6 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	UPROPERTY(EditDefaultsOnly, Category="Weapon") TObjectPtr<UNGWeaponDefinition> TestWeapon;
 	UPROPERTY(EditDefaultsOnly, Category="Weapon") TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
 	UPROPERTY(BlueprintAssignable) FNGEquipmentChanged OnEquipmentChanged;
 	UPROPERTY(BlueprintAssignable) FNGAmmoChanged OnAmmoChanged;
@@ -101,26 +101,24 @@ public:
 	UFUNCTION(BlueprintPure) FNGEquipmentState GetEquipment() const { return Equipment; }
 	UFUNCTION(BlueprintPure) int32 GetMagazineAmmo() const;
 	UFUNCTION(BlueprintPure) int32 GetReserveAmmo() const;
-	UFUNCTION(BlueprintPure) bool IsAiming() const { return bAiming; }
+	UFUNCTION(BlueprintPure) bool IsAiming() const;
 	UFUNCTION(BlueprintPure) UNGInventoryItemInstance* GetEquippedItem() const { return CurrentItem; }
 	UFUNCTION(BlueprintCallable) void RequestSelectSlot(int32 Index);
 	UFUNCTION(BlueprintCallable) void RequestEquipItem(UNGInventoryItemInstance* Item);
-	UFUNCTION(BlueprintCallable) void RequestAim(bool bValue);
 	UFUNCTION(BlueprintCallable) void RequestReload();
 	bool EquipInventoryItemOnServer(UNGInventoryItemInstance* Item);
 	bool CompleteReloadOnServer(UNGInventoryItemInstance* Item);
 	void BindInventory();
+	void BindAbilitySystem(UAbilitySystemComponent* ASC);
 	UFUNCTION(BlueprintCallable) void RequestEquip(bool bEquip);
 	UFUNCTION(BlueprintCallable) void RequestFire();
 	void StartPrimaryInput();
 	void StopPrimaryInput();
 	void SetEquippedOnServer(bool bEquip);
-	bool TryPickupOnServer(UNGWeaponDefinition* Definition);
 	bool FireOnServer();
 	UFUNCTION(Server, Reliable) void ServerSetEquipped(bool bEquip);
 	UFUNCTION(Server, Reliable) void ServerSelectSlot(int32 Index);
 	UFUNCTION(Server, Reliable) void ServerEquipItem(UNGInventoryItemInstance* Item);
-	UFUNCTION(Server, Reliable) void ServerSetAiming(bool bValue);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastReload();
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize Start, FVector_NetQuantize End, bool bHit, int32 ShotId,UNGWeaponDefinition* ShotWeapon);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastProjectileImpact(FVector_NetQuantize Point,FVector_NetQuantizeNormal Normal,int32 ShotId,UNGWeaponDefinition* ShotWeapon,bool bCharacter);
@@ -136,17 +134,18 @@ private:
 	FTimerHandle PrimaryInputTimer;
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) FNGEquipmentState Equipment;
 	UPROPERTY(ReplicatedUsing=OnRep_CurrentItem) TObjectPtr<UNGInventoryItemInstance> CurrentItem;
-	UPROPERTY(ReplicatedUsing=OnRep_Aiming) bool bAiming = false;
 	UPROPERTY() FNGGrantedHandles WeaponHandles;
 	TWeakObjectPtr<UNGInventoryItemInstance> BoundItem;
 	TWeakObjectPtr<UNGInventoryManagerComponent> BoundInventory;
 	TWeakObjectPtr<UAbilitySystemComponent> GrantedASC;
+	TWeakObjectPtr<UAbilitySystemComponent> ObservedASC;
+	FDelegateHandle AimingTagHandle;
 	int32 ShotSerial = 0;
 	bool bCompletingReload=false;
 	UFUNCTION() void OnRep_Equipment();
 	UFUNCTION() void OnRep_Ammo();
 	UFUNCTION() void OnRep_CurrentItem();
-	UFUNCTION() void OnRep_Aiming();
+	void AimingTagChanged(FGameplayTag Tag, int32 Count);
 	UFUNCTION() void InventoryChanged(FNGInventoryChangeMessage Change);
 	UFUNCTION() void HandleDeath(bool bDead);
 };
