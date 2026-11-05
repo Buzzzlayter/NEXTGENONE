@@ -1,6 +1,6 @@
 # Combat Foundation: фактическая проверка
 
-**Статус после последующих изменений:** перечисленные ниже сетевые PASS относятся к Combat Foundation до объединения классов в `Nextgenone*` и удаления voxel. После закрытия редактора пользователем рефакторинг собран: UBT PASS, Blueprint/map migration exit 0, 0 errors и 24 warnings. Логи: `Saved/Logs/NGConsolidationBuild.log` и `NGConsolidation.log`. Новые PIE/сетевые тесты не запускались: для этого требуется отдельный апрув.
+**Статус после последующих изменений:** перечисленные ниже сетевые PASS относятся к Combat Foundation до объединения классов в `Nextgenone*`. После закрытия редактора пользователем рефакторинг собран: UBT PASS, Blueprint/map migration exit 0, 0 errors и 24 warnings. Логи: `Saved/Logs/NGConsolidationBuild.log` и `NGConsolidation.log`. Новые PIE/сетевые тесты не запускались: для этого требуется отдельный апрув.
 
 Дата: 2026-11-01 (Europe/Moscow). Проект NEXTGENONE, ветка `research/gameplay-foundation`.
 

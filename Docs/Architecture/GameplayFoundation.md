@@ -1,6 +1,6 @@
 # NEXTGENONE: Gameplay Foundation
 
-**Текущий статус, 2026-11-01:** объединение игровых сущностей и удаление Voxel завершены после закрытия редактора пользователем. C++ переименован в `Nextgenone*`, добавлен общий GameMode; исходники, зависимости, ассеты и артефакты сборки NgxVoxel удалены. Полная сборка прошла, миграция Blueprint завершилась с exit 0. Единственная рабочая карта проекта — `/Game/Maps/Gameplay`. Игровые тесты этого рефакторинга не запускались; прежние сетевые PASS относятся к версии до переименования. Подробности — раздел 14.
+**Текущий статус, 2026-11-01:** объединение игровых сущностей завершено после закрытия редактора пользователем. C++ переименован в `Nextgenone*`, добавлен общий GameMode. Полная сборка прошла, миграция Blueprint завершилась с exit 0. Единственная рабочая карта проекта — `/Game/Maps/Gameplay`. Игровые тесты этого рефакторинга не запускались; прежние сетевые PASS относятся к версии до переименования. Подробности — раздел 14.
 
 Baseline: 2026-10-31, утверждён пользователем 2026-11-01. GAS и Combat Foundation реализованы. Ниже сохранено исходное обоснование; фактическая реализация и уточнения перечислены в разделе 13. Результаты запуска: [MultiplayerCombat.md](../Testing/MultiplayerCombat.md).
 
@@ -12,11 +12,10 @@ Baseline: 2026-10-31, утверждён пользователем 2026-11-01. 
 
 | Область | Установленный факт | Значение для интеграции |
 |---|---|---|
-| Модули | `.uproject`: NEXTGENONE, NgxVoxel, UIModule, ALSv4_Community | Памятка об одном модуле устарела; новый модуль пока не нужен |
+| Модули | `.uproject`: NEXTGENONE, UIModule, ALSv4_Community | Памятка об одном модуле устарела; новый модуль пока не нужен |
 | Движок | EngineAssociation 5.8; локальный Build.version: 5.8.0 | API проверять по `S:/UE_5.8`, а не по Lyra 5.4 |
 | Карта и режим | DefaultEngine.ini выбирает ALS_DemoLevel и ALS_GameMode_SP | Это defaults; World Settings конкретной карты могут переопределять режим |
 | ALS GameMode CDO | Pawn ALS_CharacterBP_C, Controller ALS_Player_Controller_C, обычные Engine.PlayerState/GameStateBase/HUD | GAS и существующий HUD сюда ещё не подключены |
-| Старый проектный GameMode | BP_NextgenoneGameMode наследует GameModeBase; Pawn BP_NextgenonePawn, стандартный Controller, HUD BP_NextgenoneHUD | Второй путь запуска с UI и voxel Pawn; нельзя считать его ALS-путём |
 | Character | ALS_CharacterBP → `/Script/ALSV4_CPP.ALSCharacter` | Нужен собственный производный персонаж с GAS hooks |
 | Компоненты ALS CDO | CharMoveComp, capsule, mesh, HeldObjectRoot, StaticMesh/SkeletalMesh для held object, MantleComponent, DebugComponent | Не добавлять вторую locomotion/camera систему; проверить конфликт held objects с оружейным visual |
 | Input | DefaultInput.ini включает EnhancedPlayerInput/EnhancedInputComponent; ALSPlayerController реально привязывает actions | Это подтверждённая интеграция, не только включённый plugin |
@@ -27,11 +26,10 @@ Baseline: 2026-10-31, утверждён пользователем 2026-11-01. 
 | Tags | DefaultGameplayTags.ini содержит UI.Layer.* и UIModule.Placeholders.* | Combat tags добавлять с отдельными назначениями |
 | Сеть ALS | ALSBaseCharacter реплицирует acceleration/control rotation, состояния и использует montage/ragdoll RPC | Это движение/presentation, а не подтверждение сетевого combat |
 | Оружие/GAS | Поиск C++ не нашёл ASC/health/weapon foundation; `/Game` Asset Registry поиск Weapon пуст | Полноценный оружейный пак не подтверждён; ALS held props не считать боевой системой |
-| Старый Pawn | ANextgenonePawn — отдельный voxel/debug Pawn; input напрямую вызывает voxel mutations и Chaos fields | Его инструменты не являются серверным damage pipeline и не подходят для grenade без отдельной интеграции |
 
-Основные пути аудита: `Source/NEXTGENONE/NextgenonePawn.{h,cpp}`, `NEXTGENONE.Build.cs`, `Source/NgxVoxel/`, `Source/UIModule/Public/Components/`, `Source/UIModule/Private/Components/`, `Source/UIModule/Private/Input/`, `Plugins/ALSV4_CPP/Source/ALSV4_CPP/{Public,Private}/Character/`, `Config/Default{Engine,Input,GameplayTags}.ini`.
+Основные пути аудита: `NEXTGENONE.Build.cs`, `Source/UIModule/Public/Components/`, `Source/UIModule/Private/Components/`, `Source/UIModule/Private/Input/`, `Plugins/ALSV4_CPP/Source/ALSV4_CPP/{Public,Private}/Character/`, `Config/Default{Engine,Input,GameplayTags}.ini`.
 
-Подключённые в `.uproject` плагины: ALSV4_CPP, ModelContextProtocol, Terminal, EditorToolset, ProceduralMeshComponent, GCFSM; ModelingToolsEditorMode выключен. GameplayMessageRouter присутствует в Plugins и имеет EnabledByDefault=true. Его runtime-модуль не является текущей зависимостью UIModule. GAS в NEXTGENONE.Build.cs пока отсутствует.
+Подключённые в `.uproject` плагины: ALSV4_CPP, ModelContextProtocol, Terminal, EditorToolset, GCFSM; ModelingToolsEditorMode выключен. GameplayMessageRouter присутствует в Plugins и имеет EnabledByDefault=true. Его runtime-модуль не является текущей зависимостью UIModule. GAS в NEXTGENONE.Build.cs пока отсутствует.
 
 Граница аудита: не прочитаны все графы всех imported assets, World Settings каждой карты и все defaults HFSM-компонентов. Утверждение «во всём проекте системы нет» из отрицательного текстового поиска не делается. Полный weapon pack вне workspace, путь к которому в задании оставлен placeholder, также не проверен.
 
@@ -146,7 +144,7 @@ Interaction сначала нужен для equip/pickup. Клиент лока
 
 GrenadeDefinition: projectile class/default primitive visual, speed, fuse, radius, damage, cooldown. Ability запрашивает действие; сервер проверяет жизнь, inventory count/cooldown, место spawn и сам создаёт replicated actor с ProjectileMovement. Только сервер запускает fuse и применяет radial damage через тот же GAS damage effect.
 
-Взрыв выполняется один раз, делает overlap уникальных victims, при выбранных правилах проверяет LOS/falloff и применяет GE на authority. Клиенты получают movement и cosmetic explosion; они не спавнят второй damage projectile. Count хранится в server state, не в ability instance. Chaos/voxel destruction из старого debug Pawn сюда автоматически не подключается: его replication/authority ещё не решены.
+Взрыв выполняется один раз, делает overlap уникальных victims, при выбранных правилах проверяет LOS/falloff и применяет GE на authority. Клиенты получают movement и cosmetic explosion; они не спавнят второй damage projectile. Count хранится в server state, не в ability instance.
 
 ## 11. План изменений после архитектурной проверки
 
@@ -210,7 +208,7 @@ Build.cs: добавить GameplayAbilities, GameplayTags, GameplayTasks; ALSV4
 
 Тестовый RPC harness активируется только в non-Shipping с `-NGCombatSmoke` и отдельным NGCombatTestGameMode. Он проверяет реальные client→server GAS/RPC requests и client replication reports. Production игровой ввод: E — equip, U — unequip, ЛКМ — одиночный fire; команды NGEquip/NGUnequip/NGFire доступны для development-проверки. Никаких self-running tests в обычном запуске карты нет.
 
-## 14. Объединение сущностей и удаление Voxel — завершено
+## 14. Объединение сущностей — завершено
 
 Единая цепочка игровых классов:
 
@@ -223,13 +221,9 @@ Build.cs: добавить GameplayAbilities, GameplayTags, GameplayTasks; ALSV4
 
 Для старых native имён NGCharacter/NGPlayerController/NGPlayerState добавлены ClassRedirects. NGSetup commandlet перенёс существующие BP_NGCharacter/BP_NGController в `/Game/Blueprints/BP_NextgenoneCharacter` и `BP_NextgenonePlayerController` через AssetTools RenameAssets. Существующий BP_NextgenoneGameMode перепривязан к общему C++ GameMode; его Pawn, Controller, PlayerState и HUD приведены к одной цепочке. Сохранены исходные ALS-графы, AnimBP и существующий UI HUD.
 
-Пользователь отдельно поручил полностью убрать voxel. Удалены `Source/NgxVoxel/`, NextgenonePawn.h/.cpp и VoxelPawnMovementComponent.h/.cpp. Из .uproject удалены runtime-модуль NgxVoxel и его явное включение ProceduralMeshComponent; из NEXTGENONE.Build.cs удалены NgxVoxel и использовавшиеся удалённым прототипом GeometryCollection/FieldSystem/Chaos dependencies. Сам движок и сторонние плагины физически не удаляются.
-
-По уточнению пользователя связанную с voxel карту удалили целиком: `Content/Maps/DevLevel.umap` и `DevLevel_HLOD0_Instancing.uasset`. Удалены BP_VoxelWorld, BP_VoxelStructure, BP_NextgenonePawn и Content/Voxel. До удаления сделаны резервные копии затронутых ассетов в `Saved/RefactorBackup/`; это не активный Content.
-
 Бывшая CombatTest перенесена в `/Game/Maps/Gameplay`. В её World Settings назначен BP_NextgenoneGameMode; этот же режим и карта назначены в DefaultEngine.ini как project defaults. Отдельная копия карты для тестов больше не нужна: runner использует `/Game/Maps/Gameplay?game=/Script/NEXTGENONE.NGCombatTestGameMode`. Redirector-ассеты прежних Blueprint/map путей исправлены и удалены через AssetTools. Демо-карты исходных сторонних пакетов не являются рабочими картами проекта и в эту очистку не входят.
 
-После закрытия редактора выполнена полная UBT сборка NEXTGENONEEditor Win64 Development: PASS, без compiler diagnostics. Затем `NGSetup -Consolidate` завершился с exit 0, 0 errors и 24 warnings. Логи: `Saved/Logs/NGConsolidationBuild.log`, `Saved/Logs/NGConsolidation.log`. Поиск сериализованных ссылок в активном Content не нашёл NgxVoxel, BP_Voxel*, Content/Voxel и старый Pawn. Удалены также старые NgxVoxel DLL/PDB/patches и его Intermediate каталоги. Это сборка и обработка assets, не игровой тест.
+После закрытия редактора выполнена полная UBT сборка NEXTGENONEEditor Win64 Development: PASS, без compiler diagnostics. Затем `NGSetup -Consolidate` завершился с exit 0, 0 errors и 24 warnings. Логи: `Saved/Logs/NGConsolidationBuild.log`, `Saved/Logs/NGConsolidation.log`. Это сборка и обработка assets, не игровой тест.
 
 Автотесты, PIE и сетевые прогоны этого рефакторинга не запускались. Для нового этапа тестирования требуется отдельный апрув пользователя.
 
