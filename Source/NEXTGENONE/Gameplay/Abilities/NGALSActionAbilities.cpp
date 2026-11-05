@@ -122,10 +122,15 @@ void UNGRagdollAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const
 	Task->ReadyForActivation();
 }
 
+bool UNGRagdollAbility::CanRequestGetUp(const UAbilitySystemComponent* ASC)
+{
+	return ASC && ASC->IsOwnerActorAuthoritative() && !ASC->HasMatchingGameplayTag(TAG_ALSActionCooldown);
+}
+
 void UNGRagdollAbility::GetUpPressed(float TimeWaited)
 {
 	if (!IsActive() || !CurrentActorInfo) return;
-	if (const auto* ASC = RagdollASC.Get(); !CurrentActorInfo->IsNetAuthority() || (ASC && ASC->HasMatchingGameplayTag(TAG_ALSActionCooldown)))
+	if (const auto* ASC = RagdollASC.Get(); !CurrentActorInfo->IsNetAuthority() || !CanRequestGetUp(ASC))
 	{
 		auto* Task = UAbilityTask_WaitInputPress::WaitInputPress(this, false);
 		Task->OnPress.AddDynamic(this, &ThisClass::GetUpPressed);

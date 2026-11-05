@@ -14,6 +14,7 @@
 #include "Curves/CurveFloat.h"
 #include "Character/ALSCharacterMovementComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -118,6 +119,9 @@ void AALSBaseCharacter::BeginPlay()
 void AALSBaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Apply the latest validated intents after temporary action gates reopen.
+	ProcessPendingClientStateCommands();
 
 	// Set required values
 	SetEssentialValues(DeltaTime);
@@ -296,8 +300,8 @@ void AALSBaseCharacter::SetDesiredStance(EALSStance NewStance)
 
 void AALSBaseCharacter::Server_SetDesiredStance_Implementation(EALSStance NewStance)
 {
-	if ((NewStance != EALSStance::Standing && NewStance != EALSStance::Crouching) || !AcceptClientStateCommand(0)) return;
-	SetDesiredStance(NewStance);
+	if ((NewStance != EALSStance::Standing && NewStance != EALSStance::Crouching)) return;
+	QueueClientStateCommand(0, static_cast<uint8>(NewStance));
 }
 
 void AALSBaseCharacter::SetDesiredGait(const EALSGait NewGait)
@@ -311,8 +315,8 @@ void AALSBaseCharacter::SetDesiredGait(const EALSGait NewGait)
 
 void AALSBaseCharacter::Server_SetDesiredGait_Implementation(EALSGait NewGait)
 {
-	if ((NewGait != EALSGait::Walking && NewGait != EALSGait::Running && NewGait != EALSGait::Sprinting) || !AcceptClientStateCommand(1)) return;
-	SetDesiredGait(NewGait);
+	if ((NewGait != EALSGait::Walking && NewGait != EALSGait::Running && NewGait != EALSGait::Sprinting)) return;
+	QueueClientStateCommand(1, static_cast<uint8>(NewGait));
 }
 
 void AALSBaseCharacter::SetDesiredRotationMode(EALSRotationMode NewRotMode)
@@ -327,9 +331,8 @@ void AALSBaseCharacter::SetDesiredRotationMode(EALSRotationMode NewRotMode)
 void AALSBaseCharacter::Server_SetDesiredRotationMode_Implementation(EALSRotationMode NewRotMode)
 {
 	// Aiming is derived from the project's GAS state, never from a locomotion RPC.
-	if ((NewRotMode != EALSRotationMode::VelocityDirection && NewRotMode != EALSRotationMode::LookingDirection) || !AcceptClientStateCommand(2)) return;
-	SetDesiredRotationMode(NewRotMode);
-	if (GetRotationMode() != EALSRotationMode::Aiming) SetRotationMode(NewRotMode);
+	if ((NewRotMode != EALSRotationMode::VelocityDirection && NewRotMode != EALSRotationMode::LookingDirection)) return;
+	QueueClientStateCommand(2, static_cast<uint8>(NewRotMode));
 }
 
 void AALSBaseCharacter::SetRotationMode(const EALSRotationMode NewRotationMode, bool bForce)
@@ -363,8 +366,8 @@ void AALSBaseCharacter::SetViewMode(const EALSViewMode NewViewMode, bool bForce)
 
 void AALSBaseCharacter::Server_SetViewMode_Implementation(EALSViewMode NewViewMode, bool bForce)
 {
-	if ((NewViewMode != EALSViewMode::FirstPerson && NewViewMode != EALSViewMode::ThirdPerson) || !AcceptClientStateCommand(3)) return;
-	SetViewMode(NewViewMode); // Client cannot force re-entry callbacks.
+	if ((NewViewMode != EALSViewMode::FirstPerson && NewViewMode != EALSViewMode::ThirdPerson)) return;
+	QueueClientStateCommand(3, static_cast<uint8>(NewViewMode));
 }
 
 void AALSBaseCharacter::SetOverlayState(const EALSOverlayState NewState, bool bForce)
@@ -1429,4 +1432,46 @@ bool AALSBaseCharacter::AcceptClientStateCommand(uint8 Command)
 	if (Now < NextClientStateCommandTime[Command]) return false;
 	NextClientStateCommandTime[Command] = Now + ClientStateCommandInterval;
 	return true;
+}
+
+
+void AALSBaseCharacter::QueueClientStateCommand(uint8 Command, uint8 Value)
+{
+	if (!HasAuthority() || !GetController() || Command >= UE_ARRAY_COUNT(PendingClientStateCommands)) return;
+	if (PendingClientStateController.Get() != GetController())
+	{
+		for (auto& Pending : PendingClientStateCommands) Pending.Reset();
+		PendingClientStateController = GetController();
+	}
+	// Fixed-size coalescing: clients cannot grow a queue while an action blocks locomotion.
+	PendingClientStateCommands[Command] = Value;
+	ProcessPendingClientStateCommands();
+}
+
+void AALSBaseCharacter::ProcessPendingClientStateCommands()
+{
+	if (!HasAuthority()) return;
+	if (!GetController() || PendingClientStateController.Get() != GetController())
+	{
+		for (auto& Pending : PendingClientStateCommands) Pending.Reset();
+		PendingClientStateController.Reset();
+		return;
+	}
+	for (uint8 Command = 0; Command < UE_ARRAY_COUNT(PendingClientStateCommands); ++Command)
+	{
+		auto& Pending = PendingClientStateCommands[Command];
+		if (!Pending.IsSet() || !AcceptClientStateCommand(Command)) continue;
+		const uint8 Value = Pending.GetValue();
+		Pending.Reset(); // State callbacks must not apply this intent twice.
+		switch (Command)
+		{
+		case 0: SetDesiredStance(static_cast<EALSStance>(Value)); break;
+		case 1: SetDesiredGait(static_cast<EALSGait>(Value)); break;
+		case 2:
+			SetDesiredRotationMode(static_cast<EALSRotationMode>(Value));
+			if (GetRotationMode() != EALSRotationMode::Aiming) SetRotationMode(static_cast<EALSRotationMode>(Value));
+			break;
+		case 3: SetViewMode(static_cast<EALSViewMode>(Value)); break;
+		}
+	}
 }

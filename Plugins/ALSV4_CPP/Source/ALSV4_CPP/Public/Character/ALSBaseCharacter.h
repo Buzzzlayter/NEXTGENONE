@@ -601,6 +601,10 @@ protected:
 private:
 	// Bounded client locomotion intents only. Actions/assets/transforms have no client RPC.
 	bool AcceptClientStateCommand(uint8 Command);
+	void QueueClientStateCommand(uint8 Command, uint8 Value);
+	void ProcessPendingClientStateCommands();
+	TOptional<uint8> PendingClientStateCommands[4];
+	TWeakObjectPtr<AController> PendingClientStateController;
 	double NextClientStateCommandTime[4] = {};
 	UPROPERTY(EditDefaultsOnly, Category="ALS|Networking", meta=(ClampMin="0.01"))
 	float ClientStateCommandInterval = .03f;

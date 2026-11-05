@@ -51,6 +51,7 @@ class NEXTGENONE_API UNGRagdollAbility : public UGameplayAbility
 	GENERATED_BODY()
 public:
 	UNGRagdollAbility();
+	static bool CanRequestGetUp(const UAbilitySystemComponent* ASC);
 	virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		const FGameplayTagContainer* SourceTags=nullptr, const FGameplayTagContainer* TargetTags=nullptr,
 		FGameplayTagContainer* RelevantTags=nullptr) const override;

@@ -177,7 +177,7 @@ void ANextgenoneCharacter::ReplicatedRagdollStart()
 void ANextgenoneCharacter::ReplicatedRagdollEnd()
 {
 	if (!HasAuthority() || IsDead() || GetHealth() <= 0.f) return;
-	if (auto* ASC = GetAbilitySystemComponent())
+	if (auto* ASC = GetAbilitySystemComponent(); UNGRagdollAbility::CanRequestGetUp(ASC))
 	{
 		FGameplayTagContainer AbilityTagsToCancel;
 		AbilityTagsToCancel.AddTag(TAG_NGRagdollAbility);
