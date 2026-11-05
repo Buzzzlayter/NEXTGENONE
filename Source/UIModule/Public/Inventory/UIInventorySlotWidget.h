@@ -1,13 +1,15 @@
-// Adapted from R5InventorySlotWidget; R5BL/consumable/backend dependencies are intentionally excluded.
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Inventory/UIInventoryTypes.h"
 #include "Input/InputData.h"
+#include "InputCoreTypes.h"
 #include "UIInventorySlotWidget.generated.h"
 
 class UButton;
+class UImage;
 class UInputAction;
 class UPlayerInputSubsystem;
 
@@ -31,10 +33,22 @@ public:
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent) override;
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+	UPROPERTY(EditDefaultsOnly, Category="Inventory|DragDrop") FKey DragButton = EKeys::LeftMouseButton;
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UButton> btn_Root;
+	/** Optional item image. Updated for every slot snapshot, including empty slots. */
+	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UImage> img_item;
 	UPROPERTY(BlueprintReadOnly, Category="Inventory") FUIInventorySlotData Data;
 	UPROPERTY(BlueprintReadOnly, Category="Inventory") TObjectPtr<UInputAction> InputAction;
 private:
+	UPROPERTY(Transient) FUIInventorySlotData PointerDownData;
+	bool bDragPending = false;
+	void ReleaseDragPress();
+	void UpdateItemIcon();
 	TWeakObjectPtr<UObject> OperationHandler;
 	TWeakObjectPtr<UPlayerInputSubsystem> InputSubsystem;
 	UFUNCTION() void PrimaryAction();

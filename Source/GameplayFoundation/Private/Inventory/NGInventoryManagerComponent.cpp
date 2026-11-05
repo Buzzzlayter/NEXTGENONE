@@ -159,7 +159,6 @@ UNGInventoryManagerComponent::UNGInventoryManagerComponent(const FObjectInitiali
 	, InventoryList(this)
 {
 	SetIsReplicatedByDefault(true);
-	InitializeSlots(20, TAG_NGSlotStorage);
 }
 
 void UNGInventoryManagerComponent::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
@@ -391,23 +390,16 @@ void UNGInventoryManagerComponent::GetReplicatedCustomConditionState(FCustomProp
 	DOREPDYNAMICCONDITION_INITCONDITION_FAST(ThisClass, InventoryList, bOwnerOnly ? COND_OwnerOnly : COND_None);
 }
 
-void UNGInventoryManagerComponent::InitializeSlots(int32 Count, FGameplayTag DefaultTag)
+void UNGInventoryManagerComponent::AddSlots(int32 Count, FGameplayTag SlotTag)
 {
-    if (HasBegunPlay() || Count < 0 || !GetAllItems().IsEmpty()) return;
-    InventoryList.Entries.Reset();
-    InventoryList.Entries.SetNum(Count);
-    for (int32 Index = 0; Index < Count; ++Index)
+    if (HasBegunPlay() || Count <= 0) return;
+    const int32 FirstIndex = InventoryList.Entries.AddDefaulted(Count);
+    for (int32 Index = FirstIndex; Index < InventoryList.Entries.Num(); ++Index)
     {
         auto& Entry = InventoryList.Entries[Index];
         Entry.SlotIndex = Index;
-        Entry.SlotTag = DefaultTag;
+        Entry.SlotTag = SlotTag;
     }
-}
-
-void UNGInventoryManagerComponent::SetSlotDefinition(int32 SlotIndex, FGameplayTag Tag, const FGameplayTagQuery& AcceptedItems)
-{
-    if (HasBegunPlay()) return;
-    if (auto* Entry = FindSlot(SlotIndex)) { Entry->SlotTag = Tag; Entry->AcceptedItems = AcceptedItems; }
 }
 
 void UNGInventoryManagerComponent::BeginPlay()

@@ -160,9 +160,8 @@ public:
 	UPROPERTY() FNGInventoryChanged OnInventoryChanged;
 	/** Fixed per component template; do not change the visibility policy during replication. */
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|Replication") bool bOwnerOnly = true;
-	/** Configure the persistent slot array before BeginPlay; no occupied slot is resized. */
-	void InitializeSlots(int32 Count, FGameplayTag DefaultTag);
-	void SetSlotDefinition(int32 SlotIndex, FGameplayTag Tag, const FGameplayTagQuery& AcceptedItems = {});
+	/** Append empty slots to the component defaults before BeginPlay. */
+	void AddSlots(int32 Count, FGameplayTag SlotTag);
 	virtual void BeginPlay() override;
 	virtual void GetReplicatedCustomConditionState(FCustomPropertyConditionState& OutActiveState) const override;
 	int32 GetSlotCount() const { return InventoryList.Entries.Num(); }
