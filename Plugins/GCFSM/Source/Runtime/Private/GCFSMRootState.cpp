@@ -45,7 +45,7 @@ UGCFSMRootState::FTicker::FTicker(UGCFSMRootState* _state)
 
 void UGCFSMRootState::FTicker::Tick(float deltaTime)
 {
-	if (auto contextObject = state->GetContextObject())
+	if (state->GetContextObject())
 	{
 		if (!paused)
 		{

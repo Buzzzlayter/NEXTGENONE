@@ -42,7 +42,7 @@ UGCFSMState* UGCFSMState::MakeStateObject(UGCFSM* fsm, TSubclassOf<UGCFSMState> 
 	return newState;
 }
 
-void UGCFSMState::Initialize(UObject* context, UGCFSMState* parent, bool processTickEvent, float timeOut, const FString& stateName)
+void UGCFSMState::Initialize(UObject* context, UGCFSMState* parent, bool bInProcessTickEvent, float InTimeOut, const FString& InStateName)
 {
 	UObject* contextObjectPtr;
 
@@ -77,7 +77,7 @@ void UGCFSMState::Initialize(UObject* context, UGCFSMState* parent, bool process
 				*contextObjectPtr->GetClass()->GetName());
 		}
 	}
-	UGCFSMBasicState::Initialize(processTickEvent, timeOut, stateName);
+	UGCFSMBasicState::Initialize(bInProcessTickEvent, InTimeOut, InStateName);
 }
 
 #if ENABLE_VISUAL_LOG

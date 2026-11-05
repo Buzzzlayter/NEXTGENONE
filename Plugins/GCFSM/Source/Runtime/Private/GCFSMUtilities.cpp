@@ -29,10 +29,10 @@ UGCFSMState* UGCFSMUtilities::GetState(UObject* stateOrContext, bool verbose)
 		check(state->IsInitialized());
 		return state;
 	}
-	else if (auto state = UGCFSMSubsystem::GetRootStateFromContext(stateOrContext, verbose))
+	else if (auto rootState = UGCFSMSubsystem::GetRootStateFromContext(stateOrContext, verbose))
 	{
-		check(state->IsInitialized());
-		return state;
+		check(rootState->IsInitialized());
+		return rootState;
 	}
 	else
 	{
@@ -50,10 +50,10 @@ UGCFSMState* UGCFSMUtilities::GetOrMakeState(UObject* stateOrContext)
 		check(state->IsInitialized());
 		return state;
 	}
-	else if (auto state = UGCFSMSubsystem::GetOrMakeRootStateFromContext(stateOrContext))
+	else if (auto rootState = UGCFSMSubsystem::GetOrMakeRootStateFromContext(stateOrContext))
 	{
-		check(state->IsInitialized());
-		return state;
+		check(rootState->IsInitialized());
+		return rootState;
 	}
 	else
 	{
@@ -72,10 +72,10 @@ UGCFSMRootState* UGCFSMUtilities::GetRootState(UObject* stateOrContext, bool ver
 		check(state->IsInitialized());
 		return state->GetRootState();
 	}
-	else if (auto state = UGCFSMSubsystem::GetRootStateFromContext(stateOrContext, verbose))
+	else if (auto rootState = UGCFSMSubsystem::GetRootStateFromContext(stateOrContext, verbose))
 	{
-		check(state->IsInitialized());
-		return state;
+		check(rootState->IsInitialized());
+		return rootState;
 	}
 	else
 	{
@@ -93,10 +93,10 @@ UGCFSMRootState* UGCFSMUtilities::GetOrMakeRootState(UObject* stateOrContext)
 		check(state->IsInitialized());
 		return state->GetRootState();
 	}
-	else if (auto state = UGCFSMSubsystem::GetOrMakeRootStateFromContext(stateOrContext))
+	else if (auto rootState = UGCFSMSubsystem::GetOrMakeRootStateFromContext(stateOrContext))
 	{
-		check(state->IsInitialized());
-		return state;
+		check(rootState->IsInitialized());
+		return rootState;
 	}
 	else
 	{

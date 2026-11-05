@@ -8,7 +8,6 @@ namespace UnrealBuildTool.Rules
 		{
 			PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-            ShadowVariableWarningLevel = WarningLevel.Off;
 
             PrivateIncludePaths.Add("Runtime/Private");
 

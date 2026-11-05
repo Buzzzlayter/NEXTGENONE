@@ -212,30 +212,30 @@ public:
 		FName icons[3];
 		FText texts[3];
 
-		const FSlateBrush* GetIcon(UGCFSMTriggerEventNode* node) const
+		const FSlateBrush* GetIcon(UGCFSMTriggerEventNode* eventNode) const
 		{
 			static FName styleSetName { "GCFSM" };
 			static FName styleDynamic { "Policy.ManagedByPin" };
-			bool dynamic = node->Pins[pinIndex]->LinkedTo.Num() > 0;
-			return FSlateIcon(styleSetName, dynamic ? styleDynamic : icons[selector(node)]).GetIcon();
+			bool dynamic = eventNode->Pins[pinIndex]->LinkedTo.Num() > 0;
+			return FSlateIcon(styleSetName, dynamic ? styleDynamic : icons[selector(eventNode)]).GetIcon();
 		}
 
-		FText ToolTipText(UGCFSMTriggerEventNode* node) const
+		FText ToolTipText(UGCFSMTriggerEventNode* eventNode) const
 		{
-			bool dynamic = node->Pins[pinIndex]->LinkedTo.Num() > 0;
-			return dynamic ? LOCTEXT("ManagedByPin", "This policy is managed dynamically by the value of the attached pin") : texts[selector(node)];
+			bool dynamic = eventNode->Pins[pinIndex]->LinkedTo.Num() > 0;
+			return dynamic ? LOCTEXT("ManagedByPin", "This policy is managed dynamically by the value of the attached pin") : texts[selector(eventNode)];
 		}
 
-		FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent&, UGCFSMTriggerEventNode* node) const
+		FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent&, UGCFSMTriggerEventNode* eventNode) const
 		{
-			auto pin = node->Pins[pinIndex];
+			auto pin = eventNode->Pins[pinIndex];
 			bool dynamic = pin->LinkedTo.Num() > 0;
 			if (!dynamic && toggleValue)
 			{
 				FScopedTransaction _ { LOCTEXT("TogglePolicy", "Changed Trigger Event Policy") };
-				node->Modify();
-				toggleValue(node);
-				node->SyncPinWithProperty(pin);
+				eventNode->Modify();
+				toggleValue(eventNode);
+				eventNode->SyncPinWithProperty(pin);
 			}
 			return FReply::Handled();
 		}
@@ -257,8 +257,8 @@ public:
 		static std::array<IconDesc, 5> descriptions { {
 			{
 				UGCFSMTriggerEventNode::TargetPolicyPinIndex,
-				[](UGCFSMTriggerEventNode* node) { return node->ShouldHideTargetPolicy() ? 0 : static_cast<int>(node->targetPolicy); },
-				[](UGCFSMTriggerEventNode* node) { if (!node->ShouldHideTargetPolicy()) nextValue(node->targetPolicy, 2); },
+				[](UGCFSMTriggerEventNode* eventNode) { return eventNode->ShouldHideTargetPolicy() ? 0 : static_cast<int>(eventNode->targetPolicy); },
+				[](UGCFSMTriggerEventNode* eventNode) { if (!eventNode->ShouldHideTargetPolicy()) nextValue(eventNode->targetPolicy, 2); },
 				{ "TargetPolicy.Context", "TargetPolicy.State" },
 				{
 					LOCTEXT("TP_Context", "The effective target is the Context object of the target object"),
@@ -267,8 +267,8 @@ public:
 			},
 			{
 				UGCFSMTriggerEventNode::PropagatePolicyPinIndex,
-				[](UGCFSMTriggerEventNode* node) { return static_cast<int>(node->propagateToSubstates); },
-				[](UGCFSMTriggerEventNode* node) { nextValue(node->propagateToSubstates); },
+				[](UGCFSMTriggerEventNode* eventNode) { return static_cast<int>(eventNode->propagateToSubstates); },
+				[](UGCFSMTriggerEventNode* eventNode) { nextValue(eventNode->propagateToSubstates); },
 				{ "PropagatePolicy.NoSubstates", "PropagatePolicy.Substates" },
 				{
 					LOCTEXT("PP_NoSubstates", "The event is triggered only on the effective target"),
@@ -277,8 +277,8 @@ public:
 			},
 			{
 				UGCFSMTriggerEventNode::TriggerInternalPolicyPinIndex,
-				[](UGCFSMTriggerEventNode* node) { return static_cast<int>(node->triggerInternalEvents); },
-				[](UGCFSMTriggerEventNode* node) { nextValue(node->triggerInternalEvents); },
+				[](UGCFSMTriggerEventNode* eventNode) { return static_cast<int>(eventNode->triggerInternalEvents); },
+				[](UGCFSMTriggerEventNode* eventNode) { nextValue(eventNode->triggerInternalEvents); },
 				{ "InternalEventPolicy.Disallow", "InternalEventPolicy.Allow" },
 				{
 					LOCTEXT("IE_Disallowed", "Internal events are NOT triggered"),
@@ -287,8 +287,8 @@ public:
 			},
 			{
 				UGCFSMTriggerEventNode::QueuePolicyPinIndex,
-				[](UGCFSMTriggerEventNode* node) { return static_cast<int>(node->queuePolicy); },
-				[](UGCFSMTriggerEventNode* node) { nextValue(node->queuePolicy, 3); },
+				[](UGCFSMTriggerEventNode* eventNode) { return static_cast<int>(eventNode->queuePolicy); },
+				[](UGCFSMTriggerEventNode* eventNode) { nextValue(eventNode->queuePolicy, 3); },
 				{ "QueuePolicy.JustQueue", "QueuePolicy.KeepFirst", "QueuePolicy.KeepLast" },
 				{
 					LOCTEXT("QP_JustQueue", "Multiple such events are allowed in the queue"),
@@ -298,7 +298,7 @@ public:
 			},
 			{
 				UGCFSMTriggerEventNode::ExpireAfterPinIndex,
-				[](UGCFSMTriggerEventNode* node) { return node->expireAfter > 0 ? 1 : 0; },
+				[](UGCFSMTriggerEventNode* eventNode) { return eventNode->expireAfter > 0 ? 1 : 0; },
 				nullptr,
 				{ "ExpirePolicy.NoExpiration", "ExpirePolicy.WithExpiration" },
 				{
@@ -314,7 +314,7 @@ public:
 	{
 		SGraphNodeK2Base::CreateBelowPinControls(MainBox);
 
-		auto node = CastChecked<UGCFSMTriggerEventNode>(GraphNode);
+		auto eventNode = CastChecked<UGCFSMTriggerEventNode>(GraphNode);
 
 		auto box = SNew(SHorizontalBox);
 		for (auto& icon : GetIconDescriptions())
@@ -326,9 +326,9 @@ public:
 				.Padding(FMargin(0, 0, 8, 0))
 				[
 					SNew(SImage)
-					.Image_Raw(&icon, &IconDesc::GetIcon, node)
-					.ToolTipText_Raw(&icon, &IconDesc::ToolTipText, node)
-					.OnMouseButtonDown_Raw(&icon, &IconDesc::OnMouseButtonDown, node)
+					.Image_Raw(&icon, &IconDesc::GetIcon, eventNode)
+					.ToolTipText_Raw(&icon, &IconDesc::ToolTipText, eventNode)
+					.OnMouseButtonDown_Raw(&icon, &IconDesc::OnMouseButtonDown, eventNode)
 					.IsEnabled(this, &SGraphNodeK2Base::IsNodeEditable)
 				];
 		}

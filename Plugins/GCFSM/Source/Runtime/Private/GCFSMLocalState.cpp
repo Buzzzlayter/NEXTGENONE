@@ -13,15 +13,15 @@ UGCFSMLocalState* UGCFSMLocalState::MakeLocalStateObject(UGCFSM* fsm, const FStr
 	return newState;
 }
 
-void UGCFSMLocalState::Initialize(const FString& graphName, UObject* blueprintContext, bool processTickEvent, float timeOut, const FString& stateName)
+void UGCFSMLocalState::Initialize(const FString& InGraphName, UObject* InBlueprintContext, bool bInProcessTickEvent, float InTimeOut, const FString& InStateName)
 {
-	check(blueprintContext);
-	this->graphName = graphName;
-	this->blueprintContext = blueprintContext;
-	entryFunction = blueprintContext->FindFunction(*FString::Printf(TEXT("GCFSM_%s_OnEntry"), *graphName));
-	tickFunction = blueprintContext->FindFunction(*FString::Printf(TEXT("GCFSM_%s_OnTick"), *graphName));
-	exitFunction = blueprintContext->FindFunction(*FString::Printf(TEXT("GCFSM_%s_OnExit"), *graphName));
-	UGCFSMBasicState::Initialize(processTickEvent, timeOut, stateName);
+	check(InBlueprintContext);
+	this->graphName = InGraphName;
+	this->blueprintContext = InBlueprintContext;
+	entryFunction = InBlueprintContext->FindFunction(*FString::Printf(TEXT("GCFSM_%s_OnEntry"), *InGraphName));
+	tickFunction = InBlueprintContext->FindFunction(*FString::Printf(TEXT("GCFSM_%s_OnTick"), *InGraphName));
+	exitFunction = InBlueprintContext->FindFunction(*FString::Printf(TEXT("GCFSM_%s_OnExit"), *InGraphName));
+	UGCFSMBasicState::Initialize(bInProcessTickEvent, InTimeOut, InStateName);
 }
 
 #if ENABLE_VISUAL_LOG

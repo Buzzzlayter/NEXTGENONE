@@ -11,13 +11,13 @@ UGCFSMSubmachineState* UGCFSMSubmachineState::MakeSubmachineStateObject(UGCFSM* 
 	return newState;
 }
 
-void UGCFSMSubmachineState::Initialize(UGCFSMState* parentState, FName submachineName, EGCFSMSubmachineReplicationOptions replicationOptions, bool processTickEvent, float timeOut, const FString& stateName)
+void UGCFSMSubmachineState::Initialize(UGCFSMState* parentState, FName InSubmachineName, EGCFSMSubmachineReplicationOptions InReplicationOptions, bool bInProcessTickEvent, float InTimeOut, const FString& InStateName)
 {
-	check(submachineName.IsValid());
+	check(InSubmachineName.IsValid());
 	blueprintContext = parentState->GetBlueprintContext();
-	this->submachineName = submachineName;
-	this->replicationOptions = replicationOptions;
-	UGCFSMState::Initialize(nullptr, parentState, processTickEvent, timeOut, stateName);
+	this->submachineName = InSubmachineName;
+	this->replicationOptions = InReplicationOptions;
+	UGCFSMState::Initialize(nullptr, parentState, bInProcessTickEvent, InTimeOut, InStateName);
 }
 
 #if ENABLE_VISUAL_LOG

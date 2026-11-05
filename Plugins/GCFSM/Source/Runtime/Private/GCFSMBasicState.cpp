@@ -15,14 +15,14 @@ UGCFSMBasicState* UGCFSMBasicState::MakeBasicStateObject(UGCFSM* fsm, bool proce
 	return newState;
 }
 
-void UGCFSMBasicState::Initialize(bool processTickEvent, float timeOut, const FString& stateName)
+void UGCFSMBasicState::Initialize(bool bInProcessTickEvent, float InTimeOut, const FString& InStateName)
 {
-	this->processTickEvent = processTickEvent;
-	if (timeOut > 0 && GetParentFSM()->GetRole() != EGCFSMRole::Proxy) // Proxies do not honor timeouts
+	this->processTickEvent = bInProcessTickEvent;
+	if (InTimeOut > 0 && GetParentFSM()->GetRole() != EGCFSMRole::Proxy) // Proxies do not honor timeouts
 	{
-		this->timeOut = timeOut;
+		this->timeOut = InTimeOut;
 	}
-	this->stateName = stateName;
+	this->stateName = InStateName;
 }
 
 #if ENABLE_VISUAL_LOG

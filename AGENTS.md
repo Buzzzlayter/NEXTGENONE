@@ -1,8 +1,9 @@
 # NEXTGENONE — проектная памятка для Codex
 
-UE **5.8** C++ проект.
+UE **5.8.4** C++ проект (EngineAssociation 5.8).
 
 ## Структура
+- Переход 5.8.4: S:/UE_5.8, CL58902052; ветка upgrade/ue-5.8.4. Полная Editor-пересборка выявила 40 ранее подавленных shadowing-диагностик GCFSM; исправлены имена в .cpp, подавление снято. Финальная Editor-сборка PASS, 0 compiler warnings/deprecated. ALS/GameplayMessageRouter не менялись; runtime/PIE/сеть не проверялись. Отчёт Docs/Upgrades/UE-5.8.4.md.
 - Interaction Session (UNGInteractionSessionStateComponent) ставится на родительский UI Interaction вместо обычного Router; его Exit завершает общий контекст/серверную storage-сессию. Маунтеры только монтируют, bCloseInteractionOnExit удалён. InterruptingTags у Interaction — единый набор для CanActivate GA_Interact и событийного прерывания: defaults State.Interaction.Blocked/Dead/Dash/Mantle/Punch/Reload. EndInteraction на сервере отменяет abilities с asset-тегом Ability.Type.Interaction; Manager реагирует на общий OnInteractionEnded, закрывает только свою сессию и уведомляет owning client. Нет новых input bindings/BP API. Сборка/runtime не проверены.
 - PlayerState.AbilitySystem и HealthSet — private native subobjects без BlueprintReadOnly. Внешний доступ к ASC только через IAbilitySystemInterface/GetAbilitySystemComponent; Character читает Health/MaxHealth через атрибуты своего привязанного ASC. Без текущего Avatar возвращает 0, старый Pawn не читает максимум новой жизни. Сборка/runtime правки не проверены.
 - Публичные NextAllowed*/LifeSerial/bStarterInventoryGranted из PlayerState удалены. Приватные server fire/interaction gates и AvatarGeneration принадлежат постоянному проектному ASC (CanFireNow/TryCommitFire/TryCommitInteraction/GetAvatarGeneration); инкремент поколения только внутри InitAbilityActorInfo для нового непустого server Avatar. Drop/transfer timers и однократность стартовой выдачи приватны в PlayerInventory Manager (TryBeginStarterGrant). Лимиты не сбрасываются переэкипировкой/отменой GA/сменой Pawn; снаряд читает поколение ASC для защиты от старой жизни. Сборка/сеть не проверены.
@@ -45,8 +46,8 @@ UE **5.8** C++ проект.
 
 ## Движок и сборка
 - По указанию пользователя от 2026-11-04 сборку выполняет пользователь. Агент не запускает UBT/Live Coding без отдельного запроса.
-- Движок UE **5.8**, установлен в `S:\UE_5.8` (резолвится из реестра по EngineAssociation).
-- **Тулчейн — **14.50.35717**.
+- Движок UE **5.8.4**, установлен в `S:\UE_5.8` (резолвится из реестра по EngineAssociation 5.8).
+- Фактически выбранный UBT toolchain при проверке 5.8.4: **MSVC 14.44.35228** (tools directory 14.44.35207), SDK 10.0.22621.0; не считать прежнее значение 14.50.35717 подтверждённым для текущей сборки.
 
 ### Батники в корне (self-contained, движок берут из реестра)
 - `Build.bat` — собрать `NEXTGENONEEditor Win64 Development`.

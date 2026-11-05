@@ -94,7 +94,6 @@ UGCFSMSnapshot* UGCFSMSnapshot::FromString(const FString& string)
 UGCFSMSnapshot* UGCFSMSnapshot::ParseSpan(const TCHAR* begin, const TCHAR* end)
 {
 	Builder builder;
-	FGuid guid;
 
 	while (begin != end)
 	{

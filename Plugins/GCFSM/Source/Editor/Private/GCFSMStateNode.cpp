@@ -291,8 +291,8 @@ FString UGCFSMStateNode::SuggestedNodeName() const
 	}
 	else if (IsSubmachineState())
 	{
-		auto node = GetSubmachineNode();
-		return node ? node->GetFriendlyName() : FString {};
+		auto implementationNode = GetSubmachineNode();
+		return implementationNode ? implementationNode->GetFriendlyName() : FString {};
 	}
 	else if (auto implementationClass = GetImplementationClass())
 	{
@@ -801,13 +801,13 @@ public:
 			auto selectedNode = stateNode->GetSubmachineNode();
 			TArray<UGCFSMStartNode*> startNodes;
 			FBlueprintEditorUtils::GetAllNodesOfClass<UGCFSMStartNode>(stateNode->GetBlueprint(), startNodes);
-			for (auto startNode : startNodes)
+			for (auto availableStartNode : startNodes)
 			{
-				if (startNode == selectedNode)
+				if (availableStartNode == selectedNode)
 				{
 					selectedName = comboNames.Num();
 				}
-				comboNames.Add(MakeShared<FName>(*startNode->GetFriendlyName()));
+				comboNames.Add(MakeShared<FName>(*availableStartNode->GetFriendlyName()));
 			}
 
 			LeftNodeBox->InsertSlot(1)
@@ -914,7 +914,7 @@ public:
 		FBlueprintEditorUtils::GetAllNodesOfClass(stateNode->GetBlueprint(), nodes);
 		const FString itemName = item->ToString();
 		auto selectedNode = nodes.FindByPredicate(
-			[&itemName](UGCFSMStartNode* node) { return node->GetFriendlyName() == itemName; });
+			[&itemName](UGCFSMStartNode* implementationNode) { return implementationNode->GetFriendlyName() == itemName; });
 		stateNode->submachineNodeGuid = selectedNode ? (*selectedNode)->NodeGuid : FGuid {};
 
 		if (auto schema = stateNode->GetSchema())
@@ -1263,8 +1263,8 @@ void UGCFSMStateNode::PrepareJumpTarget()
 	}
 	else if (IsSubmachineState())
 	{
-		auto node = GetSubmachineNode();
-		if (node == nullptr)
+		auto implementationNode = GetSubmachineNode();
+		if (implementationNode == nullptr)
 		{
 			CreateNewSubmachineImplementation();
 		}
@@ -1296,13 +1296,13 @@ void UGCFSMStateNode::CreateNewLocalImplementation()
 		// Create the entry/exit/tick nodes
 		auto createNode = [newGraph] (int y, ELocalStateEntryPoint kind) {
 			FGraphNodeCreator<UGCFSMLocalStateEntryPointNode> nodeCreator { *newGraph };
-			auto node = nodeCreator.CreateNode();
-			node->NodePosX = 0;
-			node->NodePosY = y;
-			node->kind = kind;
-			node->MakeAutomaticallyPlacedGhostNode();
-			node->bCommentBubbleVisible = true;
-			UEdGraphSchema::SetNodeMetaData(node, FNodeMetadata::DefaultGraphNode);
+			auto implementationNode = nodeCreator.CreateNode();
+			implementationNode->NodePosX = 0;
+			implementationNode->NodePosY = y;
+			implementationNode->kind = kind;
+			implementationNode->MakeAutomaticallyPlacedGhostNode();
+			implementationNode->bCommentBubbleVisible = true;
+			UEdGraphSchema::SetNodeMetaData(implementationNode, FNodeMetadata::DefaultGraphNode);
 			nodeCreator.Finalize();
 		};
 
@@ -1326,16 +1326,16 @@ void UGCFSMStateNode::CreateNewSubmachineImplementation()
 
 	// Create the entry/exit/tick nodes
 	FGraphNodeCreator<UGCFSMStartNode> nodeCreator { *GetGraph() };
-	auto node = nodeCreator.CreateUserInvokedNode(true);
-	node->CustomFunctionName = FBlueprintEditorUtils::FindUniqueKismetName(blueprint, TEXT("NewSubmachine"));
+	auto implementationNode = nodeCreator.CreateUserInvokedNode(true);
+	implementationNode->CustomFunctionName = FBlueprintEditorUtils::FindUniqueKismetName(blueprint, TEXT("NewSubmachine"));
 	auto pos = GetGraph()->GetGoodPlaceForNewNode();
-	node->NodePosX = pos.X;
-	node->NodePosY = pos.Y;
+	implementationNode->NodePosX = pos.X;
+	implementationNode->NodePosY = pos.Y;
 	nodeCreator.Finalize();
 
 	// update submachineNodeGuid to point to the newly created submachine
 	Modify();
-	submachineNodeGuid = node->NodeGuid;
+	submachineNodeGuid = implementationNode->NodeGuid;
 }
 
 void UGCFSMStateNode::CreateNewImplementation(UClass* contextClass) const
@@ -1439,11 +1439,11 @@ void UGCFSMStateNode::GetMenuActions(FBlueprintActionDatabaseRegistrar& actionRe
 
 		auto customize = [](UEdGraphNode* NewNode, bool bIsTemplateNode, EGCFSMStateNodeKind kind)
 		{
-			auto node = CastChecked<UGCFSMStateNode>(NewNode);
-			node->nodeKind = kind;
+			auto implementationNode = CastChecked<UGCFSMStateNode>(NewNode);
+			implementationNode->nodeKind = kind;
 			if (auto settings = GetMutableDefault<UGCFSMEditorSettings>())
 			{
-				node->transitionEvents = settings->defaultTransitionEvents;
+				implementationNode->transitionEvents = settings->defaultTransitionEvents;
 			}
 		};
 
