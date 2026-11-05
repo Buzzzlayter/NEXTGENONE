@@ -1,4 +1,4 @@
-// Adapted from R5 inventory UI: operations are dispatched through a backend-independent interface.
+
 #pragma once
 
 #include "CoreMinimal.h"

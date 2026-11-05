@@ -69,28 +69,18 @@ void UNGInventoryPanel::Refresh()
 	TArray<FUIInventorySlotData> Slots;
 	if (Inventory.IsValid())
 	{
-		const auto* PC = GetOwningPlayer();
-		const auto* PS = PC ? PC->GetPlayerState<APlayerState>() : nullptr;
-		const bool bOwnInventory = PS && (Inventory->GetOwner() == PS || Inventory->GetOwner() == PC->GetPawn());
 		for (int32 Index = 0; Index < Inventory->GetSlotCount(); ++Index)
 		{
 			const FGameplayTag Tag = Inventory->GetSlotTag(Index);
 			if (SlotFilter.IsValid() && !Tag.MatchesTag(SlotFilter)) continue;
 			auto& SlotInfo = Slots.AddDefaulted_GetRef();
-			SlotInfo.Inventory = Inventory.Get(); SlotInfo.SlotIndex = Index; SlotInfo.SlotTag = Tag;
+			SlotInfo.Inventory = Inventory.Get(); SlotInfo.SlotIndex = Index;
 			auto* Item = Inventory->GetItemAtSlot(Index);
 			if (!IsValid(Item) || !Item->GetItemDef()) continue;
 			const auto* Def = GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef());
-			SlotInfo.Item = Item; SlotInfo.Name = Def->DisplayName; SlotInfo.Icon = Def->Icon; SlotInfo.ItemTags = Def->ItemTags;
-			SlotInfo.Count = Inventory->GetCount(Item); SlotInfo.StackLimit = Def->MaxStackSize;
-			SlotInfo.StatStacks = Item->CaptureState(SlotInfo.Count).StatStacks;
+			SlotInfo.Item = Item; SlotInfo.Name = Def->DisplayName; SlotInfo.Icon = Def->Icon;
+			SlotInfo.Count = Inventory->GetCount(Item);
 			SlotInfo.bEquipped = Combat.IsValid() && Combat->GetEquipment().bEquipped && Combat->GetEquippedItem() == Item;
-			if (bOwnInventory)
-			{
-				SlotInfo.AvailableOperations.Add(EUIInventoryOperation::Drop);
-				if (Tag.MatchesTag(TAG_NGSlotAction) && Combat.IsValid() && UNGCombatComponent::GetWeaponDefinition(Def))
-					SlotInfo.AvailableOperations.Add(EUIInventoryOperation::PrimaryAction);
-			}
 			Item->OnStatsChanged.AddUniqueDynamic(this, &ThisClass::Refresh);
 			ObservedItems.Add(Item);
 		}
@@ -108,7 +98,8 @@ bool UNGInventoryPanel::RequestInventoryOperation_Implementation(const FUIInvent
 		|| SlotInfo.Inventory != Inventory.Get() || Inventory->GetItemAtSlot(SlotInfo.SlotIndex) != Item || !Inventory->Contains(Item) || Amount < 0 || Amount > Inventory->GetCount(Item)) return false;
 	if (Operation == EUIInventoryOperation::PrimaryAction)
 	{
-		if (!Combat.IsValid() || Combat->GetOwner() != PC->GetPawn() || !Item->GetItemDef()
+		if (!Inventory->GetSlotTag(SlotInfo.SlotIndex).MatchesTag(TAG_NGSlotAction)
+			|| !Combat.IsValid() || Combat->GetOwner() != PC->GetPawn() || !Item->GetItemDef()
 			|| !UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef()))) return false;
 		Combat->RequestEquipItem(Item);
 		return true;

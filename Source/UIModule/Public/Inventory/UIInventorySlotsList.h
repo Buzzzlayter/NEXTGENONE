@@ -1,4 +1,4 @@
-// Adapted from R5InventorySlotsList: reusable WrapBox list with BP-authored slot visuals.
+
 #pragma once
 
 #include "CoreMinimal.h"

@@ -10,6 +10,8 @@
 UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
 {
+    AddSlots(20, TAG_NGSlotStorage);
+    AddSlots(5, TAG_NGSlotAction);
 }
 
 bool UNGPlayerInventoryManagerComponent::TryBeginStarterGrant()

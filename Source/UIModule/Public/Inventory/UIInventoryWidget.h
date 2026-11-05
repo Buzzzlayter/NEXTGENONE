@@ -1,4 +1,4 @@
-// Adapted from R5InventoryWidget. No gameplay/backend or input-mode ownership.
+
 #pragma once
 
 #include "CoreMinimal.h"

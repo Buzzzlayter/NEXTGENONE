@@ -10,10 +10,6 @@ ANextgenonePlayerState::ANextgenonePlayerState()
     AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
     HealthSet = CreateDefaultSubobject<UNGHealthSet>(TEXT("HealthSet"));
     Inventory = CreateDefaultSubobject<UNGPlayerInventoryManagerComponent>(TEXT("Inventory"));
-    // One player container: 20 storage cells and 5 tagged action cells.
-    Inventory->InitializeSlots(25, TAG_NGSlotStorage);
-    for (int32 Index = 20; Index < 25; ++Index)
-        Inventory->SetSlotDefinition(Index, TAG_NGSlotAction);
     SetNetUpdateFrequency(30.f);
 }
 
