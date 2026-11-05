@@ -4,6 +4,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "GameFramework/Pawn.h"
+#include "Gameplay/Abilities/NGALSActionAbilities.h"
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputAim, "Input.Aim");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGWeaponAiming, "State.Weapon.Aiming");
@@ -26,6 +27,8 @@ UNGAimAbility::UNGAimAbility()
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
 	ActivationBlockedTags.AddTag(TAG_NGPunchActive);
 	ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive);
+	ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 }
 
 bool UNGAimAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

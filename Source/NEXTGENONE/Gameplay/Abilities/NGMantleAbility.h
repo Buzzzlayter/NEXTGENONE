@@ -24,7 +24,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	virtual void TickComponent(float Delta, ELevelTick Tick, FActorComponentTickFunction* ThisTick) override;
-	virtual void Server_MantleStart_Implementation(float Height, const FALSComponentAndTransform& Ledge, EALSMantleType Type) override final;
+	virtual void ReplicateMantleStart(float Height, const FALSComponentAndTransform& Ledge, EALSMantleType Type) override final;
 private:
 	UFUNCTION(NetMulticast, Reliable) void MulticastAbilityStart(float Height, FALSComponentAndTransform Ledge, EALSMantleType Type);
 	UFUNCTION(NetMulticast, Reliable) void MulticastAbilityCancel();

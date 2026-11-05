@@ -42,6 +42,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void RagdollStart() override;
 	virtual void RagdollEnd() override;
+	virtual void ReplicatedRagdollStart() override;
+	virtual void ReplicatedRagdollEnd() override;
+	virtual void Replicated_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate) override;
 	void ApplyCombatPresentation();
 	UFUNCTION(BlueprintPure, Category="Gameplay") bool IsDead() const;
 	UFUNCTION(BlueprintPure, Category="Gameplay") float GetHealth() const;
@@ -51,11 +54,15 @@ public:
 	void TryInitializeGameplay();
 	void UnbindGameplay();
 protected:
+	virtual bool CanAcceptClientLocomotion() const override;
 	virtual void OnOverlayStateChanged(EALSOverlayState PreviousState) override;
 private:
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	FDelegateHandle HealthHandle;
 	FDelegateHandle MaxHealthHandle;
+	FDelegateHandle RagdollTagHandle;
+	void RagdollTagChanged(FGameplayTag Tag, int32 Count);
+	void RequestALSAbility(FGameplayTag InputTag);
 	void HealthChanged(const FOnAttributeChangeData& Data);
 	void StateChanged(FGameplayTag Previous, FGameplayTag Current);
 };

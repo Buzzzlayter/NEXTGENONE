@@ -55,8 +55,7 @@ protected:
 	virtual void BeginPlay() override;
 
 	/** Mantling*/
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = "ALS|Mantle System")
-	void Server_MantleStart(float MantleHeight, const FALSComponentAndTransform& MantleLedgeWS,
+	virtual void ReplicateMantleStart(float MantleHeight, const FALSComponentAndTransform& MantleLedgeWS,
 	                        EALSMantleType MantleType);
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = "ALS|Mantle System")

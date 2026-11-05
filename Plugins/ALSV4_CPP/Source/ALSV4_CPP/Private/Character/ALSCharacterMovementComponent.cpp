@@ -146,11 +146,6 @@ FSavedMovePtr UALSCharacterMovementComponent::FNetworkPredictionData_Client_My::
 	return MakeShared<FSavedMove_My>();
 }
 
-void UALSCharacterMovementComponent::Server_SetAllowedGait_Implementation(const EALSGait NewAllowedGait)
-{
-	AllowedGait = NewAllowedGait;
-}
-
 float UALSCharacterMovementComponent::GetMappedSpeed() const
 {
 	// Map the character's current speed to the configured movement speeds with a range of 0-3,
@@ -184,23 +179,12 @@ void UALSCharacterMovementComponent::SetMovementSettings(FALSMovementSettings Ne
 
 void UALSCharacterMovementComponent::SetAllowedGait(EALSGait NewAllowedGait)
 {
+	// Both the authoritative character and predicting owner derive this from ALS settings.
+	// The client no longer chooses the server's AllowedGait through a separate RPC.
+	if (NewAllowedGait != EALSGait::Walking && NewAllowedGait != EALSGait::Running && NewAllowedGait != EALSGait::Sprinting) return;
 	if (AllowedGait != NewAllowedGait)
 	{
-		if (PawnOwner->IsLocallyControlled())
-		{
-			AllowedGait = NewAllowedGait;
-			if (GetCharacterOwner()->GetLocalRole() == ROLE_AutonomousProxy)
-			{
-				Server_SetAllowedGait(NewAllowedGait);
-			}
-			bRequestMovementSettingsChange = true;
-			return;
-		}
-		if (!PawnOwner->HasAuthority())
-		{
-			const float UpdateMaxWalkSpeed = CurrentMovementSettings.GetSpeedForGait(AllowedGait);
-			MaxWalkSpeed = UpdateMaxWalkSpeed;
-			MaxWalkSpeedCrouched = UpdateMaxWalkSpeed;
-		}
+		AllowedGait = NewAllowedGait;
+		bRequestMovementSettingsChange = true;
 	}
 }

@@ -1,4 +1,5 @@
 #include "Gameplay/Interaction/NGInteraction.h"
+#include "Gameplay/Abilities/NGALSActionAbilities.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Interaction/NGItemPickup.h"
 #include "Gameplay/Combat/NGCombat.h"
@@ -27,6 +28,7 @@ namespace
         Tags.AddTag(TAG_NGInteractionBlocked); Tags.AddTag(TAG_NGDead);
         Tags.AddTag(TAG_NGDashActive); Tags.AddTag(TAG_NGMantleActive);
         Tags.AddTag(TAG_NGPunchActive); Tags.AddTag(TAG_NGReloadActive);
+		Tags.AddTag(TAG_NGRollActive); Tags.AddTag(TAG_NGRagdollActive);
         return Tags;
     }
 }

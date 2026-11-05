@@ -1,4 +1,5 @@
 #include "Gameplay/Abilities/NGDashAbility.h"
+#include "Gameplay/Abilities/NGALSActionAbilities.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -18,6 +19,7 @@ UNGDashCooldownEffect::UNGDashCooldownEffect()
 }
 UNGDashAbility::UNGDashAbility()
 {
+	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	CooldownGameplayEffectClass = UNGDashCooldownEffect::StaticClass();

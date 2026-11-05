@@ -1,4 +1,5 @@
 #include "Gameplay/Abilities/NGPunchAbility.h"
+#include "Gameplay/Abilities/NGALSActionAbilities.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
@@ -26,6 +27,7 @@ UNGPunchAbility::UNGPunchAbility()
 	ActivationBlockedTags.AddTag(TAG_NGDead); ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive); ActivationBlockedTags.AddTag(TAG_NGPunchActive);
 	ActivationOwnedTags.AddTag(TAG_NGPunchActive);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 }
 bool UNGPunchAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const

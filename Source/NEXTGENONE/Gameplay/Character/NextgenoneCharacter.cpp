@@ -7,6 +7,7 @@
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
+#include "Gameplay/Abilities/NGALSActionAbilities.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -66,6 +67,8 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 	Combat->BindInventory();
 	HealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
 	MaxHealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
+	RagdollTagHandle = ASC->RegisterGameplayTagEvent(TAG_NGRagdollActive, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ThisClass::RagdollTagChanged);
+	RagdollTagChanged(TAG_NGRagdollActive, ASC->GetTagCount(TAG_NGRagdollActive));
 	// Startup effects run before delegate binding; observe their final health, including a lethal result.
 	FOnAttributeChangeData InitialHealth;
 	HealthChanged(InitialHealth);
@@ -79,6 +82,7 @@ void ANextgenoneCharacter::UnbindGameplay()
 	{
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).Remove(HealthHandle);
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).Remove(MaxHealthHandle);
+		ASC->RegisterGameplayTagEvent(TAG_NGRagdollActive, EGameplayTagEventType::NewOrRemoved).Remove(RagdollTagHandle);
 		if (ASC->GetAvatarActor() == this)
 		{
 			CharacterStateMachine->SuspendResources();
@@ -122,9 +126,8 @@ void ANextgenoneCharacter::Tick(float DeltaSeconds)
 {
 	if (IsDead())
 	{
-		// ALS's non-virtual RagdollUpdate trusts IsLocallyControlled/its client RPC.
 		// Death ragdolls are cosmetic local physics. Retain the engine/Blueprint actor tick
-		// without ALS's pelvis RPCs or remote-body correction.
+		// without following the server's live-ragdoll pelvis target.
 		ACharacter::Tick(DeltaSeconds);
 		return;
 	}
@@ -132,8 +135,7 @@ void ANextgenoneCharacter::Tick(float DeltaSeconds)
 }
 void ANextgenoneCharacter::RagdollStart()
 {
-	if (IsDead() && GetMovementState() == EALSMovementState::Ragdoll) return;
-	Super::RagdollStart();
+	if (GetMovementState() != EALSMovementState::Ragdoll) Super::RagdollStart();
 	if (IsDead())
 	{
 		GetMesh()->bOnlyAllowAutonomousTickPose = false;
@@ -144,6 +146,51 @@ void ANextgenoneCharacter::RagdollStart()
 		GetMesh()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 		if (HitReaction) HitReaction->ReleaseToRagdoll();
 	}
+}
+
+bool ANextgenoneCharacter::CanAcceptClientLocomotion() const
+{
+	const auto* ASC = GetAbilitySystemComponent();
+	return Super::CanAcceptClientLocomotion() && ASC && !IsDead() && GetHealth() > 0.f
+		&& !ASC->HasMatchingGameplayTag(TAG_NGDead) && !ASC->HasMatchingGameplayTag(TAG_NGDashActive)
+		&& !ASC->HasMatchingGameplayTag(TAG_NGMantleActive) && !ASC->HasMatchingGameplayTag(TAG_NGPunchActive)
+		&& !ASC->HasMatchingGameplayTag(TAG_NGRollActive) && !ASC->HasMatchingGameplayTag(TAG_NGRagdollActive);
+}
+
+void ANextgenoneCharacter::RequestALSAbility(FGameplayTag InputTag)
+{
+	if (IsDead() || (!HasAuthority() && !IsLocallyControlled())) return;
+	if (auto* ASC = Cast<UNGAbilitySystemComponent>(GetAbilitySystemComponent())) ASC->TryActivateAbilityByInputTag(InputTag);
+}
+
+void ANextgenoneCharacter::Replicated_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate)
+{
+	// Legacy ALS roll/breakfall entry point is intent only. Ignore the supplied asset and rate.
+	RequestALSAbility(TAG_NGInputRoll);
+}
+
+void ANextgenoneCharacter::ReplicatedRagdollStart()
+{
+	if (GetMovementState() != EALSMovementState::Ragdoll) RequestALSAbility(TAG_NGInputRagdoll);
+}
+
+void ANextgenoneCharacter::ReplicatedRagdollEnd()
+{
+	if (!HasAuthority() || IsDead() || GetHealth() <= 0.f) return;
+	if (auto* ASC = GetAbilitySystemComponent())
+	{
+		FGameplayTagContainer AbilityTagsToCancel;
+		AbilityTagsToCancel.AddTag(TAG_NGRagdollAbility);
+		ASC->CancelAbilities(&AbilityTagsToCancel);
+	}
+}
+
+void ANextgenoneCharacter::RagdollTagChanged(FGameplayTag Tag, int32 Count)
+{
+	const auto* ASC = GetAbilitySystemComponent();
+	if (!ASC || IsDead()) return;
+	if (Count > 0) RagdollStart();
+	else if (GetMovementState() == EALSMovementState::Ragdoll && GetHealth() > 0.f) RagdollEnd();
 }
 void ANextgenoneCharacter::RagdollEnd()
 {

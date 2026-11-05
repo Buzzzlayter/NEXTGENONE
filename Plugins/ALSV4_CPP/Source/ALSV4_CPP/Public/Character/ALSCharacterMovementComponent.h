@@ -73,6 +73,4 @@ class ALSV4_CPP_API UALSCharacterMovementComponent : public UCharacterMovementCo
 	UFUNCTION(BlueprintCallable, Category = "Movement Settings")
 	void SetAllowedGait(EALSGait NewAllowedGait);
 
-	UFUNCTION(Reliable, Server, Category = "Movement Settings")
-	void Server_SetAllowedGait(EALSGait NewAllowedGait);
 };

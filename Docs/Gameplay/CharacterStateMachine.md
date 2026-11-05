@@ -41,7 +41,7 @@ GCFSM обрабатывает события через очередь. При 
 
 ## Косметический регдолл
 
-Реплицируются состояние GCFSM и GAS-тег при привязанном ASC; отдельных death/phase флагов Pawn нет. Положение/скорость/поза тела не синхронизируются. Каждый клиент рассчитывает падение локально. Меш трупа отделяется от capsule; Actor остаётся у места смерти. Для dead Tick обходятся ALS pelvis RPC/remote correction, сохраняется ACharacter::Tick. ALS get-up мёртвого Pawn запрещён. Late join восстанавливает presentation из FSM, а не финальную позицию тела. Точный лут из тела, resurrection, custom-gravity corpse physics и оптимизация множества трупов не входят в пакет. ALS plugin/AnimBP не изменялись.
+Реплицируются состояние GCFSM и GAS-тег при привязанном ASC; отдельных death/phase флагов Pawn нет. Положение/скорость/поза трупа не синхронизируются. Каждый клиент рассчитывает падение локально. Меш трупа отделяется от capsule; Actor остаётся у места смерти. Для dead Tick обходится следование серверному target живого ragdoll, сохраняется ACharacter::Tick. ALS get-up мёртвого Pawn запрещён. Late join восстанавливает presentation из FSM, а не финальную позицию тела. Точный лут из тела, resurrection, custom-gravity corpse physics и оптимизация множества трупов не входят в пакет. AnimBP не менялся. Клиентские ALS action RPC удалены по [ALSAuthority.md](../Networking/ALSAuthority.md).
 
 ## Миграция и проверка
 

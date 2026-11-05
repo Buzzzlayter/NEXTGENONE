@@ -7,6 +7,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Abilities/NGALSActionAbilities.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputMove, "Input.Move");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookMouse, "Input.Look.Mouse");
@@ -14,7 +15,6 @@ UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookStick, "Input.Look.Stick");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputSprint, "Input.Sprint");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputStance, "Input.Stance");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputWalk, "Input.Walk");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputRagdoll, "Input.Ragdoll");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputCameraTap, "Input.Camera.Tap");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputCameraHeld, "Input.Camera.Held");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputVelocity, "Input.Rotation.Velocity");
@@ -94,6 +94,16 @@ void UNGCharacterInputComponent::HandleNativeInput_Implementation(FGameplayTag T
 		return;
 	}
 	if (Tag == TAG_InputSprint && ALS && (bStarted || bReleased)) { ALS->SprintAction(bStarted); return; }
+	if (Tag == TAG_NGInputRagdoll)
+	{
+		// Compatibility for NativeInputActions; prefer a single AbilityInputActions route.
+		if (auto* ASC = GetInputASC())
+		{
+			if (bStarted) ASC->AbilityInputTagPressed(Tag);
+			else if (bReleased) ASC->AbilityInputTagReleased(Tag);
+		}
+		return;
+	}
 	if (bStarted && Combat)
 	{
 		const FGameplayTag ActionSlots[] = {TAG_InputActionSlot1, TAG_InputActionSlot2, TAG_InputActionSlot3, TAG_InputActionSlot4, TAG_InputActionSlot5};
@@ -107,7 +117,6 @@ void UNGCharacterInputComponent::HandleNativeInput_Implementation(FGameplayTag T
 	{
 		if (Tag == TAG_InputStance) ALS->StanceAction();
 		else if (Tag == TAG_InputWalk) ALS->WalkAction();
-		else if (Tag == TAG_InputRagdoll) ALS->RagdollAction();
 		else if (Tag == TAG_InputCameraTap) ALS->CameraTapAction();
 		else if (Tag == TAG_InputCameraHeld) ALS->CameraHeldAction();
 		else if (Tag == TAG_InputVelocity) ALS->VelocityDirectionAction();

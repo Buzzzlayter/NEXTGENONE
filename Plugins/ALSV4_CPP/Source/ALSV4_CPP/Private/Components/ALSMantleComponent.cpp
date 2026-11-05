@@ -285,16 +285,16 @@ bool UALSMantleComponent::MantleCheck(const FALSMantleTraceSettings& TraceSettin
 	MantleWS.Component = HitComponent;
 	MantleWS.Transform = TargetTransform;
 	MantleStart(MantleHeight, MantleWS, MantleType);
-	Server_MantleStart(MantleHeight, MantleWS, MantleType);
+	if (GetOwner()->HasAuthority()) ReplicateMantleStart(MantleHeight, MantleWS, MantleType);
 
 	return true;
 }
 
-void UALSMantleComponent::Server_MantleStart_Implementation(float MantleHeight,
+void UALSMantleComponent::ReplicateMantleStart(float MantleHeight,
                                                             const FALSComponentAndTransform& MantleLedgeWS,
                                                             EALSMantleType MantleType)
 {
-	Multicast_MantleStart(MantleHeight, MantleLedgeWS, MantleType);
+	if (GetOwner()->HasAuthority()) Multicast_MantleStart(MantleHeight, MantleLedgeWS, MantleType);
 }
 
 void UALSMantleComponent::Multicast_MantleStart_Implementation(float MantleHeight,
