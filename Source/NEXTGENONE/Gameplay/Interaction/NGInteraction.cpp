@@ -115,7 +115,7 @@ bool UNGInteractionSubsystem::TakePickup(ANGItemPickup* Pickup,ANextgenoneCharac
 	const int32 Slot = Pickup->FindDestinationSlot(Pawn);
 	if (Slot == INDEX_NONE) return false;
 	// Initial placed items use definition fragments; dropped items restore the exact saved stats.
-	auto* Item=Pickup->HasSavedItemState() ? PS->Inventory->AddItemState(State,false,Slot) : PS->Inventory->AddItemDefinitionToSlot(State.ItemClass,Slot,State.Count);
+	auto* Item=Pickup->HasSavedItemState() ? PS->Inventory->AddItemState(State,false,Slot) : PS->Inventory->AddItemDefinitionDeferred(State.ItemClass,State.Count,Slot);
 	if (!Item) return false;
 	const bool bAutoEquip=Pickup->bAutoEquipWhenHandsEmpty;
 	Pickup->ConsumeForTransfer();

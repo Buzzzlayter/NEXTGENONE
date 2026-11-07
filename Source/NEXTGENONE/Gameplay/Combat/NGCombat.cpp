@@ -78,9 +78,10 @@ void UNGCombatComponent::BindInventory()
 }
 void UNGCombatComponent::InventoryChanged(FNGInventoryChangeMessage Change)
 {
-	if (GetOwner()->HasAuthority() && Change.Instance == CurrentItem && (Change.NewCount == 0 || !BoundInventory->GetSlotTag(BoundInventory->GetSlotIndex(CurrentItem)).MatchesTag(TAG_NGSlotAction)))
+	if (GetOwner()->HasAuthority() && CurrentItem && BoundInventory.IsValid()
+		&& (!BoundInventory->Contains(CurrentItem) || !BoundInventory->GetSlotTag(BoundInventory->GetSlotIndex(CurrentItem)).MatchesTag(TAG_NGSlotAction)))
 	{
-		SetEquippedOnServer(false); if (Change.NewCount == 0) CurrentItem = nullptr; OnRep_CurrentItem();
+		SetEquippedOnServer(false); if (!BoundInventory->Contains(CurrentItem)) CurrentItem = nullptr; OnRep_CurrentItem();
 	}
 	OnRep_Ammo();
 }
@@ -390,18 +391,10 @@ bool UNGCombatComponent::CompleteReloadOnServer(UNGInventoryItemInstance* Item)
 	if (Amount <= 0) return false;
 	UClass* Ammo=Def->AmmoItemClass.LoadSynchronous(); if (!Ammo) return false;
 	bCompletingReload=true; ON_SCOPE_EXIT { bCompletingReload=false; };
-	TArray<TTuple<UNGInventoryItemInstance*,int32,int32>> Changes;
-	int32 Remaining=Amount;
-	for (auto* Stack:BoundInventory->GetAllItems()) if (Stack->GetItemDef()==Ammo && Remaining>0)
+	return BoundInventory->ConsumeItemsByDefinition(Ammo, Amount, [Item, Amount]
 	{
-		const int32 Old=BoundInventory->GetCount(Stack),Take=FMath::Min(Old,Remaining);
-		if (!BoundInventory->RemoveQuantity(Stack,Take,false)) return false;
-		Changes.Emplace(Stack,Old,Old-Take); Remaining-=Take;
-	}
-	if (Remaining!=0) return false;
-	Item->AddStatTagStack(TAG_NGMagazineAmmo, Amount);
-	for (const auto& Change:Changes) BoundInventory->NotifyItemChange(Change.Get<0>(),Change.Get<1>(),Change.Get<2>());
-	return true;
+		Item->AddStatTagStack(TAG_NGMagazineAmmo, Amount);
+	});
 }
 void UNGCombatComponent::MulticastReload_Implementation()
 {

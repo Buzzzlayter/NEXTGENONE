@@ -181,7 +181,7 @@ public:
 	int32 GetCount(UNGInventoryItemInstance* Item) const;
 	// Internal transfer primitives: subsystem publishes notifications after both owners have committed.
 	UNGInventoryItemInstance* AddItemState(const FNGItemState& State, bool bNotify=true, int32 SlotIndex=INDEX_NONE);
-	UNGInventoryItemInstance* AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 Count);
+	UNGInventoryItemInstance* AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 Count, int32 SlotIndex=INDEX_NONE);
 	bool RemoveQuantity(UNGInventoryItemInstance* Item, int32 Count, bool bNotify=true);
 	void NotifyItemChange(UNGInventoryItemInstance* Item, int32 OldCount, int32 NewCount, int32 SlotIndex=INDEX_NONE);
 
@@ -200,6 +200,8 @@ public:
 
 	int32 GetTotalItemCountByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef) const;
 	bool ConsumeItemsByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 NumToConsume);
+	/** Trusted synchronous credit after all debits, before inventory notifications. */
+	bool ConsumeItemsByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 NumToConsume, TFunctionRef<void()> OnConsumed);
 
 	//~UObject interface
 	virtual bool ReplicateSubobjects(class UActorChannel* Channel, class FOutBunch* Bunch, FReplicationFlags* RepFlags) override;
@@ -208,6 +210,12 @@ public:
 
 private:
 	friend struct FNGInventoryList;
+	struct FMutationScope;
+	UNGInventoryItemInstance* AddItemInternal(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 Count, const TMap<FGameplayTag, int32>* Stats, bool bNotify, int32 SlotIndex);
+	bool RemoveQuantityInternal(UNGInventoryItemInstance* Item, int32 Count, bool bNotify);
+	void QueueChange(const FNGInventoryChangeMessage& Message);
+	void PublishChanges();
+	TMap<int32, FNGInventoryChangeMessage> PendingChanges;
 	bool bTransferring = false;
 	bool bSlotsInitialized = false;
 	FNGInventoryEntry* FindSlot(int32 SlotIndex);

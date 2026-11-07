@@ -65,7 +65,7 @@ void UNGInventoryPanel::EquipmentChanged(FNGEquipmentState Equipment) { Refresh(
 
 void UNGInventoryPanel::Refresh()
 {
-	UnbindItems();
+	TArray<TWeakObjectPtr<UNGInventoryItemInstance>> CurrentItems;
 	TArray<FUIInventorySlotData> Slots;
 	if (Inventory.IsValid())
 	{
@@ -81,10 +81,13 @@ void UNGInventoryPanel::Refresh()
 			SlotInfo.Item = Item; SlotInfo.Name = Def->DisplayName; SlotInfo.Icon = Def->Icon;
 			SlotInfo.Count = Inventory->GetCount(Item);
 			SlotInfo.bEquipped = Combat.IsValid() && Combat->GetEquipment().bEquipped && Combat->GetEquippedItem() == Item;
-			Item->OnStatsChanged.AddUniqueDynamic(this, &ThisClass::Refresh);
-			ObservedItems.Add(Item);
+			CurrentItems.Add(Item);
+			if (!ObservedItems.Contains(Item)) Item->OnStatsChanged.AddUniqueDynamic(this, &ThisClass::Refresh);
 		}
 	}
+	for (auto Item : ObservedItems)
+		if (Item.IsValid() && !CurrentItems.Contains(Item)) Item->OnStatsChanged.RemoveDynamic(this, &ThisClass::Refresh);
+	ObservedItems = MoveTemp(CurrentItems);
 	SetInventoryData(InventoryTitle, Slots, this);
 }
 

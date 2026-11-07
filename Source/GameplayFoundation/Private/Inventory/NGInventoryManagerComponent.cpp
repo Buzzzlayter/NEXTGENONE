@@ -19,6 +19,28 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotAction, "Inventory.Slot.Action");
 
 struct FReplicationFlags;
 
+// Keep mutation callbacks out of partial state, including fragment initialization.
+struct UNGInventoryManagerComponent::FMutationScope
+{
+    UNGInventoryManagerComponent* Source;
+    UNGInventoryManagerComponent* Target;
+    explicit FMutationScope(UNGInventoryManagerComponent* InSource, UNGInventoryManagerComponent* InTarget = nullptr)
+        : Source(InSource), Target(InTarget == InSource ? nullptr : InTarget)
+    {
+        Source->bTransferring = true;
+        if (Target) Target->bTransferring = true;
+    }
+    ~FMutationScope()
+    {
+        // Listeners see the final state, but cannot mutate either participant reentrantly.
+        Source->PublishChanges();
+        if (Target) Target->PublishChanges();
+        Source->bTransferring = false;
+        if (Target) Target->bTransferring = false;
+    }
+};
+
+
 
 //////////////////////////////////////////////////////////////////////
 // FNGInventoryEntry
@@ -38,12 +60,16 @@ FString FNGInventoryEntry::GetDebugString() const
 // FNGInventoryList
 void FNGInventoryList::PostReplicatedReceive(const FFastArraySerializer::FPostReplicatedReceiveParameters& Parameters)
 {
-	if (auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent))
-	{
-		FNGInventoryChangeMessage Message; Message.InventoryOwner = OwnerComponent;
-		Manager->OnInventoryChanged.Broadcast(Message); // Also refresh after item NetGUIDs become mapped.
-	}
+    if (auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent))
+    {
+        // Includes NetGUID remapping even when there are no count changes.
+        FNGInventoryChangeMessage Message; Message.InventoryOwner = OwnerComponent;
+        Manager->PendingChanges.Reset();
+        Manager->QueueChange(Message);
+        Manager->PublishChanges();
+    }
 }
+
 
 void FNGInventoryList::PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize)
 {
@@ -84,7 +110,7 @@ void FNGInventoryList::BroadcastChangeMessage(FNGInventoryEntry& Entry, int32 Ol
 	Message.Delta = NewCount - OldCount;
 	Message.SlotIndex = Entry.SlotIndex;
 
-	if (auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent)) Manager->OnInventoryChanged.Broadcast(Message);
+	if (auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent)) Manager->QueueChange(Message);
 }
 
 UNGInventoryItemInstance* FNGInventoryList::AddEntry(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount, const TMap<FGameplayTag, int32>* RestoredStats, bool bNotify, int32 SlotIndex)
@@ -117,7 +143,7 @@ void FNGInventoryList::AddEntry(UNGInventoryItemInstance* Instance)
     if (!Entry) return;
     Entry->Instance = Instance; Entry->StackCount = 1;
     MarkItemDirty(*Entry);
-    BroadcastChangeMessage(*Entry, 0, 1);
+
 }
 
 void FNGInventoryList::RemoveEntry(UNGInventoryItemInstance* Instance, bool bNotify)
@@ -177,54 +203,40 @@ bool UNGInventoryManagerComponent::CanAddItemDefinition(TSubclassOf<UNGInventory
 
 UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount)
 {
-	UNGInventoryItemInstance* Result = nullptr;
-	if (InitializeInventory() && CanAddItemDefinition(ItemDef, StackCount))
-	{
-		Result = InventoryList.AddEntry(ItemDef, StackCount);
-
-		if (IsUsingRegisteredSubObjectList() && IsReadyForReplication() && Result)
-		{
-			AddReplicatedSubObject(Result, bOwnerOnly ? COND_OwnerOnly : COND_None);
-		}
-	}
-	return Result;
+    if (bTransferring || !InitializeInventory()) return nullptr;
+    FMutationScope Mutation(this);
+    return AddItemInternal(ItemDef, StackCount, nullptr, true, INDEX_NONE);
 }
+
 
 UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinitionToSlot(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 SlotIndex, int32 StackCount)
 {
-	if (!InitializeInventory() || !CanAddItemDefinition(ItemDef, StackCount) || !CanPlaceItemAtSlot(ItemDef, SlotIndex) || GetItemAtSlot(SlotIndex)) return nullptr;
-	// Run item fragments (including initial magazine stats), then publish only the final slot.
-	auto* Item = InventoryList.AddEntry(ItemDef, StackCount, nullptr, false, SlotIndex);
-	if (!Item) return nullptr;
-	if (IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(Item, bOwnerOnly ? COND_OwnerOnly : COND_None);
-	NotifyItemChange(Item, 0, StackCount);
-	return Item;
+    if (bTransferring || !InitializeInventory()) return nullptr;
+    FMutationScope Mutation(this);
+    return AddItemInternal(ItemDef, StackCount, nullptr, true, SlotIndex);
 }
+
 
 void UNGInventoryManagerComponent::AddItemInstance(UNGInventoryItemInstance* ItemInstance)
 {
-	if (!InitializeInventory()) return;
-	if (!GetOwner()->HasAuthority() || !ItemInstance || ItemInstance->GetOuter() != GetOwner() || Contains(ItemInstance) || FindFirstAvailableSlot(ItemInstance->GetItemDef()) == INDEX_NONE) return;
-	TArray<UNGInventoryManagerComponent*> Containers;
-	GetOwner()->GetComponents(Containers);
-	for (const auto* Container : Containers) if (Container->Contains(ItemInstance)) return;
-	InventoryList.AddEntry(ItemInstance);
-	if (IsUsingRegisteredSubObjectList() && IsReadyForReplication() && ItemInstance)
-	{
-		AddReplicatedSubObject(ItemInstance, bOwnerOnly ? COND_OwnerOnly : COND_None);
-	}
+    if (bTransferring || !InitializeInventory() || !IsValid(ItemInstance) || ItemInstance->GetOuter() != GetOwner()
+        || Contains(ItemInstance) || !CanAddItemDefinition(ItemInstance->GetItemDef())) return;
+    TArray<UNGInventoryManagerComponent*> Containers;
+    GetOwner()->GetComponents(Containers);
+    for (const auto* Container : Containers) if (Container->Contains(ItemInstance)) return;
+    FMutationScope Mutation(this);
+    InventoryList.AddEntry(ItemInstance);
+    if (!Contains(ItemInstance)) return;
+    if (IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(ItemInstance, bOwnerOnly ? COND_OwnerOnly : COND_None);
+    NotifyItemChange(ItemInstance, 0, 1);
 }
+
 
 void UNGInventoryManagerComponent::RemoveItemInstance(UNGInventoryItemInstance* ItemInstance)
 {
-	if (!GetOwner()->HasAuthority()) return;
-	InventoryList.RemoveEntry(ItemInstance);
-
-	if (ItemInstance && IsUsingRegisteredSubObjectList())
-	{
-		RemoveReplicatedSubObject(ItemInstance);
-	}
+    RemoveQuantity(ItemInstance, GetCount(ItemInstance));
 }
+
 
 TArray<UNGInventoryItemInstance*> UNGInventoryManagerComponent::GetAllItems() const
 {
@@ -270,23 +282,29 @@ int32 UNGInventoryManagerComponent::GetTotalItemCountByDefinition(TSubclassOf<UN
 
 bool UNGInventoryManagerComponent::ConsumeItemsByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 NumToConsume)
 {
-	AActor* OwningActor = GetOwner();
-	if (!OwningActor || !OwningActor->HasAuthority())
-	{
-		return false;
-	}
-
-	if (!ItemDef || NumToConsume < 1 || GetTotalItemCountByDefinition(ItemDef) < NumToConsume) return false;
-	for (int32 Index = InventoryList.Entries.Num()-1; Index >= 0 && NumToConsume > 0; --Index)
-	{
-		auto& Entry = InventoryList.Entries[Index];
-		if (!Entry.Instance || Entry.Instance->GetItemDef() != ItemDef) continue;
-		const int32 Count = FMath::Min(Entry.StackCount, NumToConsume); NumToConsume -= Count;
-		if (Count == Entry.StackCount) RemoveItemInstance(Entry.Instance);
-		else { const int32 Old = Entry.StackCount; Entry.StackCount -= Count; InventoryList.MarkItemDirty(Entry); InventoryList.BroadcastChangeMessage(Entry, Old, Entry.StackCount); }
-	}
-	return true;
+    return ConsumeItemsByDefinition(ItemDef, NumToConsume, [] {});
 }
+
+bool UNGInventoryManagerComponent::ConsumeItemsByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 NumToConsume, TFunctionRef<void()> OnConsumed)
+{
+    if (bTransferring || !GetOwner() || !GetOwner()->HasAuthority() || !ItemDef || NumToConsume < 1
+        || GetTotalItemCountByDefinition(ItemDef) < NumToConsume) return false;
+    FMutationScope Mutation(this);
+    int32 Remaining = NumToConsume;
+    const auto Items = GetAllItems();
+    for (auto* Item : Items)
+    {
+        if (Remaining == 0) break;
+        if (Item->GetItemDef() != ItemDef) continue;
+        const int32 Take = FMath::Min(GetCount(Item), Remaining);
+        // No callbacks occur between preflight and these private mutations.
+        RemoveQuantityInternal(Item, Take, true);
+        Remaining -= Take;
+    }
+    OnConsumed();
+    return true;
+}
+
 
 void UNGInventoryManagerComponent::ReadyForReplication()
 {
@@ -343,22 +361,38 @@ int32 UNGInventoryManagerComponent::GetCount(UNGInventoryItemInstance* Item) con
 }
 UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemState(const FNGItemState& State, bool bNotify, int32 SlotIndex)
 {
-	if (!InitializeInventory() || !CanAddItemDefinition(State.ItemClass, State.Count)) return nullptr;
-	if (SlotIndex != INDEX_NONE && (!CanPlaceItemAtSlot(State.ItemClass, SlotIndex) || GetItemAtSlot(SlotIndex))) return nullptr;
-	for (const auto& Pair : State.StatStacks) if (!Pair.Key.IsValid() || Pair.Value < 0) return nullptr;
-	auto* Item = InventoryList.AddEntry(State.ItemClass, State.Count, &State.StatStacks, false, SlotIndex);
-	if (Item && bNotify) NotifyItemChange(Item, 0, State.Count);
-	if (Item && IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(Item, bOwnerOnly ? COND_OwnerOnly : COND_None);
-	return Item;
+    if (bTransferring || !InitializeInventory()) return nullptr;
+    FMutationScope Mutation(this);
+    return AddItemInternal(State.ItemClass, State.Count, &State.StatStacks, bNotify, SlotIndex);
 }
-UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass,int32 Count)
+
+UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemInternal(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 Count, const TMap<FGameplayTag, int32>* Stats, bool bNotify, int32 SlotIndex)
 {
-	if (!InitializeInventory() || !CanAddItemDefinition(ItemClass,Count)) return nullptr;
-	auto* Item=InventoryList.AddEntry(ItemClass,Count,nullptr,false);
-	if (Item && IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(Item,bOwnerOnly ? COND_OwnerOnly : COND_None);
-	return Item;
+    if (!CanAddItemDefinition(ItemDef, Count)) return nullptr;
+    if (SlotIndex != INDEX_NONE && (!CanPlaceItemAtSlot(ItemDef, SlotIndex) || GetItemAtSlot(SlotIndex))) return nullptr;
+    if (Stats) for (const auto& Pair : *Stats) if (!Pair.Key.IsValid() || Pair.Value < 0) return nullptr;
+    auto* Item = InventoryList.AddEntry(ItemDef, Count, Stats, false, SlotIndex);
+    if (!Item) return nullptr;
+    if (IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(Item, bOwnerOnly ? COND_OwnerOnly : COND_None);
+    if (bNotify) NotifyItemChange(Item, 0, Count);
+    return Item;
 }
+
+UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 Count, int32 SlotIndex)
+{
+    if (bTransferring || !InitializeInventory()) return nullptr;
+    FMutationScope Mutation(this);
+    return AddItemInternal(ItemClass, Count, nullptr, false, SlotIndex);
+}
+
 bool UNGInventoryManagerComponent::RemoveQuantity(UNGInventoryItemInstance* Item, int32 Count, bool bNotify)
+{
+    if (bTransferring || !GetOwner() || !GetOwner()->HasAuthority()) return false;
+    FMutationScope Mutation(this);
+    return RemoveQuantityInternal(Item, Count, bNotify);
+}
+
+bool UNGInventoryManagerComponent::RemoveQuantityInternal(UNGInventoryItemInstance* Item, int32 Count, bool bNotify)
 {
 	if (!GetOwner()->HasAuthority() || Count < 1 || !Contains(Item) || GetCount(Item) < Count) return false;
 	for (auto& Entry : InventoryList.Entries) if (Entry.Instance == Item)
@@ -383,7 +417,22 @@ void UNGInventoryManagerComponent::NotifyItemChange(UNGInventoryItemInstance* It
 	FNGInventoryChangeMessage Message; Message.InventoryOwner = this; Message.Instance = Item;
 	Message.NewCount = NewCount; Message.Delta = NewCount-OldCount;
 	Message.SlotIndex = SlotIndex == INDEX_NONE ? GetSlotIndex(Item) : SlotIndex;
-	OnInventoryChanged.Broadcast(Message);
+	QueueChange(Message);
+}
+
+void UNGInventoryManagerComponent::QueueChange(const FNGInventoryChangeMessage& Message)
+{
+    PendingChanges.Add(Message.SlotIndex, Message);
+    if (!bTransferring && GetOwner() && GetOwner()->HasAuthority()) PublishChanges();
+}
+
+void UNGInventoryManagerComponent::PublishChanges()
+{
+    if (PendingChanges.IsEmpty()) return;
+    FNGInventoryChangeMessage Message; Message.InventoryOwner = this;
+    if (PendingChanges.Num() == 1) Message = PendingChanges.CreateConstIterator().Value();
+    PendingChanges.Reset(); // Clear before observers; no duplicate publication on reentry.
+    OnInventoryChanged.Broadcast(Message);
 }
 
 void UNGInventoryManagerComponent::GetReplicatedCustomConditionState(FCustomPropertyConditionState& OutActiveState) const
@@ -420,7 +469,7 @@ bool UNGInventoryManagerComponent::InitializeInventory()
 	}
 	bSlotsInitialized = true; // Empty layouts are initialized too; never rebuild an occupied inventory.
 	FNGInventoryChangeMessage Message; Message.InventoryOwner = this;
-	OnInventoryChanged.Broadcast(Message);
+	QueueChange(Message);
 	return true;
 }
 
@@ -489,7 +538,7 @@ bool UNGInventoryManagerComponent::MoveItemToSlot(UNGInventoryItemInstance* Item
     auto* TargetEntry = FindSlot(SlotIndex);
     auto* Other = TargetEntry->Instance.Get();
     if (Other && !CanPlaceItemAtSlot(Other->GetItemDef(), OldSlot)) return false;
-    TGuardValue<bool> Guard(bTransferring, true);
+    FMutationScope Mutation(this);
     Swap(SourceEntry->Instance, TargetEntry->Instance);
     Swap(SourceEntry->StackCount, TargetEntry->StackCount);
     InventoryList.MarkItemDirty(*SourceEntry);
@@ -534,20 +583,19 @@ bool UNGInventoryManagerComponent::TransferTo(UNGInventoryManagerComponent* Targ
 	if (Other && !bMerge) return false;
 	const int32 TargetCount = Other ? Target->GetCount(Other) : 0;
 	if (bMerge && Count > GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef())->MaxStackSize - TargetCount) return false;
-	TGuardValue<bool> SourceGuard(bTransferring, true);
-	TGuardValue<bool> TargetGuard(Target->bTransferring, true);
+	FMutationScope Mutation(this, Target);
 	UNGInventoryItemInstance* DestinationItem = Other;
 	if (!bMerge)
 	{
-		DestinationItem = Target->AddItemState(State, false, TargetSlot);
+		DestinationItem = Target->AddItemInternal(State.ItemClass, State.Count, &State.StatStacks, false, TargetSlot);
 		if (!DestinationItem) return false;
 	}
 	// Revalidate after fragment initialization before committing the source removal.
 	if (GetItemAtSlot(SourceSlot) != Item || GetCount(Item) != OldCount
 		|| !Item->CaptureState(Count).StatStacks.OrderIndependentCompareEqual(State.StatStacks)
-		|| !RemoveQuantity(Item, Count, false))
+		|| !RemoveQuantityInternal(Item, Count, false))
 	{
-		if (!bMerge) Target->RemoveQuantity(DestinationItem, Count, false);
+		if (!bMerge) Target->RemoveQuantityInternal(DestinationItem, Count, false);
 		return false;
 	}
 	if (bMerge)
