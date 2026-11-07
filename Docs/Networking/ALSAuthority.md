@@ -30,6 +30,8 @@ AllowedGait вычисляется в обычном серверном ALS Upda
 
 Обнаруженный дефект мог оставлять server speed cap старым при клиентском спринте. Это согласуется с сообщением пользователя о рывках autonomous Pawn; runtime-корреляция не установлена. ALS считает lean по изменению скорости, поэтому наклон может реагировать на correction/replay; AnimBP и коэффициенты lean не менялись. Сборка и воспроизведение не выполнялись. Нужна отдельная проверка переходов walk/run/sprint и replay на сервере + owning client; порядок доставки locomotion intents и CMC moves этим патчем полностью не унифицирован.
 
+Пользователь после сборки подтвердил устранение описанных рывков и наклона на сетевом управляемом персонаже. Это ручное подтверждение конкретного симптома, не полный regression или профилирование; агент собственный прогон не выполнял.
+
 ## Действия через GAS
 
 - UNGRollAbility: ServerInitiated/ServerOnlyTermination. Сервер валидирует и начинает действие, клиент не задаёт ему asset/rate. Montage берётся из authored GetRollAnimation, проверяется skeleton; PlayRate берётся только из ability defaults, проверяется конечность и диапазон 0.1..3. Воспроизведение и root motion проходят через AbilityTask_PlayMontageAndWait/ASC. Клиентский экземпляр также выполняет task: обычная ASC montage replication пропускает owning client. Старый Replicated_PlayMontage у проектного Character передаёт только намерение Input.Roll, игнорируя asset/rate.
