@@ -122,7 +122,7 @@ bool UNGInteractionSubsystem::TakePickup(ANGItemPickup* Pickup,ANextgenoneCharac
 	if (!Item) return false;
 	const bool bAutoEquip=Pickup->bAutoEquipWhenHandsEmpty;
 	Pickup->ConsumeForTransfer();
-	PS->Inventory->NotifyItemChange(Item,0,State.Count);
+	PS->Inventory->NotifyInventoryChanged();
 	const auto* Def=GetDefault<UNGInventoryItemDefinition>(State.ItemClass);
 	if (bAutoEquip && UNGCombatComponent::GetWeaponDefinition(Def) && !Pawn->Combat->GetEquipment().bEquipped) Pawn->Combat->EquipInventoryItemOnServer(Item);
 	return true;
@@ -132,7 +132,6 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 	if (!IsCurrentInteractor(Pawn) || !Item || ActiveDrops.Contains(Item)) return nullptr;
 	auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
 	const int32 OldCount=PS->Inventory->GetCount(Item); if (Count==0) Count=OldCount;
-	const int32 OldSlot=PS->Inventory->GetSlotIndex(Item);
 	if (Count<1 || Count>OldCount) return nullptr;
 	const auto State=Item->CaptureState(Count);
 	if (!State.ItemClass) return nullptr;
@@ -159,7 +158,7 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 		!Item->CaptureState(Count).StatStacks.OrderIndependentCompareEqual(State.StatStacks) || !PS->Inventory->RemoveQuantity(Item,Count,false))
 	{ if (IsValid(Pickup)) Pickup->Destroy(); return nullptr; }
 	Pickup->PublishDrop();
-	PS->Inventory->NotifyItemChange(Item,OldCount,OldCount-Count,OldSlot);
+	PS->Inventory->NotifyInventoryChanged();
 	return Pickup;
 }
 UNGInteractionComponent::UNGInteractionComponent()

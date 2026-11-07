@@ -23,6 +23,17 @@ struct FReplicationFlags;
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGSlotStorage);
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGSlotAction);
 
+/** Explicit starting item: use an exact index or the first compatible slot in a tagged group. */
+USTRUCT()
+struct GAMEPLAYFOUNDATION_API FNGInventoryStarterEntry
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere) TSubclassOf<UNGInventoryItemDefinition> ItemClass;
+	UPROPERTY(EditAnywhere, meta=(ClampMin="1")) int32 Count = 1;
+	UPROPERTY(EditAnywhere) FGameplayTag SlotTag;
+	UPROPERTY(EditAnywhere, meta=(ClampMin="-1")) int32 SlotIndex = INDEX_NONE;
+};
+
 USTRUCT(BlueprintType)
 struct GAMEPLAYFOUNDATION_API FNGInventorySlotState
 {
@@ -31,25 +42,8 @@ struct GAMEPLAYFOUNDATION_API FNGInventorySlotState
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FNGItemState Item;
 };
 
-/** A message when an item is added to the inventory */
-USTRUCT(BlueprintType)
-struct GAMEPLAYFOUNDATION_API FNGInventoryChangeMessage
-{
-	GENERATED_BODY()
-
-	//@TODO: Tag based names+owning actors for inventories instead of directly exposing the component?
-	UPROPERTY(BlueprintReadOnly, Category=Inventory)
-	TObjectPtr<UActorComponent> InventoryOwner = nullptr;
-
-	UPROPERTY(BlueprintReadOnly, Category = Inventory)
-	TObjectPtr<UNGInventoryItemInstance> Instance = nullptr;
-
-	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 NewCount = 0;
-	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 Delta = 0;
-	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 SlotIndex = INDEX_NONE;
-};
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGInventoryChanged, FNGInventoryChangeMessage, Change);
+/** Final inventory invalidation. Observers read a fresh snapshot; no per-slot delta is promised. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNGInventoryChanged);
 
 /** One persistent slot: rules and optional contents share one replicated record. */
 USTRUCT(BlueprintType)
@@ -75,8 +69,6 @@ private:
 	int32 StackCount = 0;
 	UPROPERTY() int32 SlotIndex = INDEX_NONE;
 
-	UPROPERTY(NotReplicated)
-	int32 LastObservedCount = INDEX_NONE;
 };
 
 /** Single replicated array of persistent slots, including empty ones. */
@@ -99,9 +91,6 @@ struct GAMEPLAYFOUNDATION_API FNGInventoryList : public FFastArraySerializer
 
 public:
 	//~FFastArraySerializer contract
-	void PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize);
-	void PostReplicatedAdd(const TArrayView<int32> AddedIndices, int32 FinalSize);
-	void PostReplicatedChange(const TArrayView<int32> ChangedIndices, int32 FinalSize);
 	void PostReplicatedReceive(const FFastArraySerializer::FPostReplicatedReceiveParameters& Parameters);
 	//~End of FFastArraySerializer contract
 
@@ -114,9 +103,6 @@ public:
 	void AddEntry(UNGInventoryItemInstance* Instance);
 
 	void RemoveEntry(UNGInventoryItemInstance* Instance, bool bNotify=true);
-
-private:
-	void BroadcastChangeMessage(FNGInventoryEntry& Entry, int32 OldCount, int32 NewCount);
 
 private:
 	friend UNGInventoryManagerComponent;
@@ -135,15 +121,6 @@ struct TStructOpsTypeTraits<FNGInventoryList> : public TStructOpsTypeTraitsBase2
 {
 	enum { WithNetDeltaSerializer = true };
 };
-
-
-
-
-
-
-
-
-
 
 /**
  * Manages an inventory
@@ -183,7 +160,7 @@ public:
 	UNGInventoryItemInstance* AddItemState(const FNGItemState& State, bool bNotify=true, int32 SlotIndex=INDEX_NONE);
 	UNGInventoryItemInstance* AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 Count, int32 SlotIndex=INDEX_NONE);
 	bool RemoveQuantity(UNGInventoryItemInstance* Item, int32 Count, bool bNotify=true);
-	void NotifyItemChange(UNGInventoryItemInstance* Item, int32 OldCount, int32 NewCount, int32 SlotIndex=INDEX_NONE);
+	void NotifyInventoryChanged();
 
 	bool CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1) const;
 
@@ -213,9 +190,8 @@ private:
 	struct FMutationScope;
 	UNGInventoryItemInstance* AddItemInternal(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 Count, const TMap<FGameplayTag, int32>* Stats, bool bNotify, int32 SlotIndex);
 	bool RemoveQuantityInternal(UNGInventoryItemInstance* Item, int32 Count, bool bNotify);
-	void QueueChange(const FNGInventoryChangeMessage& Message);
 	void PublishChanges();
-	TMap<int32, FNGInventoryChangeMessage> PendingChanges;
+	bool bInventoryDirty = false;
 	bool bTransferring = false;
 	bool bSlotsInitialized = false;
 	FNGInventoryEntry* FindSlot(int32 SlotIndex);

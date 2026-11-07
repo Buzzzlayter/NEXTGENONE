@@ -52,8 +52,8 @@ R1/R2 реализованы в текущем пакете: ограничен�
   обработку частичного отказа выдачи. Разделить Fire/Reload ability implementations и обязанности Combat
   без добавления универсального equipment framework.
   GrantStarterInventory принадлежит PlayerInventory; частичный результат сохраняется, ошибки логируются,
-  повторной неявной выдачи на respawn нет. Inventory.StarterItems имеет приоритет, старый Combat.StarterItems
-  пока fallback для сохранённых BP. Fire/Reload вынесены в NGWeaponAbilities.cpp без переименования UClass.
+  повторной неявной выдачи на respawn нет. После R6 используются явные Inventory.InitialContents;
+  старые StarterItems сохраняются только для ручной миграции. Fire/Reload вынесены в NGWeaponAbilities.cpp.
 - [x] Настраивать класс dropped pickup через существующую конфигурацию вместо LoadClass с /Game-путём;
   валидировать доступность класса при cook.
   Используется hard class reference Interaction.DroppedPickupClass (native default NGItemPickup);
@@ -89,8 +89,6 @@ R1/R2 реализованы в текущем пакете: ограничен�
   не невалидным FireOnServer без remote view. Runner требует настроенный GameMode class path.
   Сценарий не запускался; ограничения fixture и ручные шаги — Docs/Testing/MultiplayerCombat.md.
 
-## Проверки, ожидающие отдельного разрешения
-
 ## Дополнительное ревью 2026-11-07
 
 - [x] R1: терминальный отказ реплицируется, закрывает общий Pawn/ASC gate и активацию GAS;
@@ -104,9 +102,13 @@ R1/R2 реализованы в текущем пакете: ограничен�
 - [x] R4: per-request callback регистрируется до отправки; Panel получает server result и ID через
   OnInventoryRequestCompleted (Blueprint event для оформления отказов). Поддержан синхронный listen server;
   результат запроса не меняет данные слотов. Runtime не проверен.
-- [ ] R6: явные стартовые записи вместо классификации оружия в PlayerInventory.
-- [ ] R7: упростить общую inventory invalidation до dirty-флага.
-- [ ] R8: убрать повторную валидацию неизменяемого weapon definition.
+- [x] R6: Inventory.InitialContents содержит ItemClass/Count/SlotTag/SlotIndex; нет классификации
+  оружия или чтения WeaponDefinition в PlayerInventory. Старые StarterItems не исполняются; значения
+  сохранены для ручного переноса. Требуется Blueprint-сетап InitialContents после сборки.
+- [x] R7: один dirty-флаг и OnInventoryChanged без аргументов; удалены map сообщений, delta DTO
+  и per-entry replication callbacks. Текущие native подписчики переведены на snapshot invalidation.
+- [x] R8: Fire/Reload используют ValidateDefinition как единый контракт параметров; повторные
+  finite/range/clamp после успешной проверки убраны. Pawn/ADS/ammo/view/cooldown проверки сохранены.
 
 ### Проверки, ожидающие отдельного разрешения
 

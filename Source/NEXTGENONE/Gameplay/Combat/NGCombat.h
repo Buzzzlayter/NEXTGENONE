@@ -16,7 +16,6 @@ class UNGInventoryManagerComponent;
 class ANGBallisticProjectile;
 class USoundBase;
 class UNiagaraSystem;
-struct FNGInventoryChangeMessage;
 
 UCLASS(BlueprintType, Blueprintable)
 class NEXTGENONE_API UNGWeaponDefinition : public UDataAsset
@@ -93,7 +92,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	UPROPERTY(EditDefaultsOnly, Category="Weapon") TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
+	UPROPERTY(EditDefaultsOnly, Category="Weapon|Legacy", meta=(DisplayName="Legacy Starter Items (Migration Only)")) TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
 	UPROPERTY(BlueprintAssignable) FNGEquipmentChanged OnEquipmentChanged;
 	UPROPERTY(BlueprintAssignable) FNGAmmoChanged OnAmmoChanged;
 	// Weapon-pack adapters subscribe here; cosmetic events never apply damage.
@@ -151,7 +150,7 @@ private:
 	UFUNCTION() void OnRep_Ammo();
 	UFUNCTION() void OnRep_CurrentItem();
 	void AimingTagChanged(FGameplayTag Tag, int32 Count);
-	UFUNCTION() void InventoryChanged(FNGInventoryChangeMessage Change);
+	UFUNCTION() void InventoryChanged();
 	UFUNCTION() void HandleDeath(bool bDead);
 };
 

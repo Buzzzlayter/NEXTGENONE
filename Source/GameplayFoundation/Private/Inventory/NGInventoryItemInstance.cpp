@@ -81,9 +81,7 @@ void UNGInventoryItemInstance::OnRep_ItemDef()
 		Owner->GetComponents(Managers);
 		for (auto* Manager : Managers) if (Manager->Contains(this))
 		{
-			FNGInventoryChangeMessage Change; Change.InventoryOwner = Manager; Change.Instance = this;
-			Change.NewCount = Manager->GetCount(this); Change.SlotIndex = Manager->GetSlotIndex(this);
-			Manager->OnInventoryChanged.Broadcast(Change);
+			Manager->NotifyInventoryChanged();
 		}
 	}
 }

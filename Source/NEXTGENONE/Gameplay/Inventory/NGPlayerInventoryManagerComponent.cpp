@@ -1,6 +1,5 @@
 #include "NGPlayerInventoryManagerComponent.h"
 #include "Gameplay/Interaction/NGInteraction.h"
-#include "Gameplay/Combat/NGCombat.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryManagerComponent.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
@@ -105,6 +104,12 @@ void UNGPlayerInventoryManagerComponent::ClientRequestCompleted_Implementation(u
     RequestCallbacks.RemoveAndCopyValue(RequestId, Completion);
     Completion.ExecuteIfBound(RequestId, Result); // Removed before callback; safe for synchronous/reentrant requests.
     OnRequestCompleted.Broadcast(RequestId, Result);
+}
+
+void UNGPlayerInventoryManagerComponent::ForgetRequestCallbacks(const UObject* Listener)
+{
+    for (auto It = RequestCallbacks.CreateIterator(); It; ++It)
+        if (It.Value().IsBoundToObject(Listener)) It.RemoveCurrent();
 }
 
 void UNGPlayerInventoryManagerComponent::ServerDropItem_Implementation(uint32 RequestId, ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count)
@@ -212,50 +217,26 @@ void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(
 }
 
 
-void UNGPlayerInventoryManagerComponent::GrantStarterInventory(const TArray<TSoftClassPtr<UNGInventoryItemDefinition>>& LegacyItems)
+void UNGPlayerInventoryManagerComponent::GrantStarterInventory()
 {
     if (!TryBeginStarterGrant()) return;
-    const auto& Items = StarterItems.IsEmpty() ? LegacyItems : StarterItems;
-    int32 Failures = 0;
-    auto GrantToGroup = [&](TSubclassOf<UNGInventoryItemDefinition> ItemClass, FGameplayTag Group, int32 Count)
+    if (InitialContents.IsEmpty() && !StarterItems.IsEmpty())
     {
-        if (!ItemClass || Count < 1) { ++Failures; return; }
-        if (FindFirstItemStackByDefinition(ItemClass)) return;
-        const int32 Destination = FindFirstAvailableSlot(ItemClass, Count, Group);
-        if (Destination != INDEX_NONE && AddItemDefinitionToSlot(ItemClass, Destination, Count)) return;
-        ++Failures;
-        UE_LOG(LogTemp, Warning, TEXT("Starter item %s: could not grant %d to %s"), *GetNameSafe(ItemClass.Get()), Count, *Group.ToString());
-    };
-    TArray<TSubclassOf<UNGInventoryItemDefinition>> Loaded;
-    for (const auto& SoftClass : Items)
-    {
-        if (UClass* ItemClass = SoftClass.LoadSynchronous()) Loaded.Add(ItemClass);
-        else { ++Failures; UE_LOG(LogTemp, Error, TEXT("Starter item could not load: %s"), *SoftClass.ToString()); }
+        UE_LOG(LogTemp, Warning, TEXT("%s: migrate legacy StarterItems to explicit InitialContents; legacy items are no longer granted."), *GetPathName());
     }
-    // Weapon order defines Action 1..5, independent of ammo ordering.
-    for (auto ItemClass : Loaded)
+    int32 Failures = 0;
+    for (const auto& Entry : InitialContents)
     {
-        const auto* Weapon = UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(ItemClass));
-        if (!Weapon) continue;
-        GrantToGroup(ItemClass, TAG_NGSlotAction, 1);
-        if (Weapon->InitialReserveAmmo <= 0) continue;
-        UClass* Ammo = Weapon->AmmoItemClass.LoadSynchronous();
-        if (!Ammo) { ++Failures; continue; }
-        // Spread reserves across stacks instead of silently truncating to MaxStackSize.
-        int32 Remaining = Weapon->InitialReserveAmmo;
-        const int32 Limit = GetDefault<UNGInventoryItemDefinition>(Ammo)->MaxStackSize;
-        if (Limit < 1) { ++Failures; continue; }
-        if (FindFirstItemStackByDefinition(Ammo)) continue;
-        while (Remaining > 0)
+        const int32 Destination = Entry.SlotIndex == INDEX_NONE
+            ? FindFirstAvailableSlot(Entry.ItemClass, Entry.Count, Entry.SlotTag) : Entry.SlotIndex;
+        const bool bMatchesGroup = !Entry.SlotTag.IsValid() || GetSlotTag(Destination).MatchesTag(Entry.SlotTag);
+        if (Destination == INDEX_NONE || !bMatchesGroup || !AddItemDefinitionToSlot(Entry.ItemClass, Destination, Entry.Count))
         {
-            const int32 Count = FMath::Min(Remaining, Limit);
-            const int32 Destination = FindFirstAvailableSlot(Ammo, Count, TAG_NGSlotStorage);
-            if (Destination == INDEX_NONE || !AddItemDefinitionToSlot(Ammo, Destination, Count)) { ++Failures; break; }
-            Remaining -= Count;
+            ++Failures;
+            UE_LOG(LogTemp, Error, TEXT("%s: rejected starter item %s count=%d slot=%d group=%s"),
+                *GetPathName(), *GetNameSafe(Entry.ItemClass.Get()), Entry.Count, Entry.SlotIndex, *Entry.SlotTag.ToString());
         }
     }
-    for (auto ItemClass : Loaded)
-        if (!UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(ItemClass))) GrantToGroup(ItemClass, TAG_NGSlotStorage, 1);
-    // Successful grants remain; partial failures are terminal, with no implicit respawn retry.
+    // Preserve successful entries, report partial failure, never retry implicitly on respawn.
     if (Failures) UE_LOG(LogTemp, Error, TEXT("%s: starter inventory partially granted (%d failures); no automatic retry."), *GetPathName(), Failures);
 }

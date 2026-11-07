@@ -25,6 +25,7 @@ void UNGInventoryPanel::NativeConstruct()
 
 void UNGInventoryPanel::SetInventorySource(UNGInventoryManagerComponent* Source)
 {
+	if (Inventory.Get() != Source && PlayerInventory.IsValid()) PlayerInventory->ForgetRequestCallbacks(this);
 	UnbindItems();
 	if (Inventory.IsValid()) Inventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::Changed);
 	Inventory = Source;
@@ -34,6 +35,7 @@ void UNGInventoryPanel::SetInventorySource(UNGInventoryManagerComponent* Source)
 
 void UNGInventoryPanel::PawnChanged(APawn* OldPawn, APawn* NewPawn)
 {
+	if (PlayerInventory.IsValid()) PlayerInventory->ForgetRequestCallbacks(this);
 	if (Combat.IsValid()) Combat->OnEquipmentChanged.RemoveDynamic(this, &ThisClass::EquipmentChanged);
 	Combat = NewPawn ? NewPawn->FindComponentByClass<UNGCombatComponent>() : nullptr;
 	if (Combat.IsValid()) Combat->OnEquipmentChanged.AddUniqueDynamic(this, &ThisClass::EquipmentChanged);
@@ -51,6 +53,7 @@ void UNGInventoryPanel::UnbindItems()
 
 void UNGInventoryPanel::NativeDestruct()
 {
+	if (PlayerInventory.IsValid()) PlayerInventory->ForgetRequestCallbacks(this);
 	UnbindItems();
 	if (Inventory.IsValid()) Inventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::Changed);
 	if (Combat.IsValid()) Combat->OnEquipmentChanged.RemoveDynamic(this, &ThisClass::EquipmentChanged);
@@ -60,7 +63,7 @@ void UNGInventoryPanel::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UNGInventoryPanel::Changed(FNGInventoryChangeMessage Change) { Refresh(); }
+void UNGInventoryPanel::Changed() { Refresh(); }
 void UNGInventoryPanel::EquipmentChanged(FNGEquipmentState Equipment) { Refresh(); }
 
 void UNGInventoryPanel::Refresh()

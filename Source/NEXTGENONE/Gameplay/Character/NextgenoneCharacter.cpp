@@ -64,7 +64,7 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 	BoundASC = ASC;
 	Combat->BindAbilitySystem(ASC);
 	Interaction->BindAbilitySystem(ASC);
-	PS->Inventory->GrantStarterInventory(Combat->StarterItems);
+	PS->Inventory->GrantStarterInventory();
 	Combat->BindInventory();
 	HealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
 	MaxHealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);

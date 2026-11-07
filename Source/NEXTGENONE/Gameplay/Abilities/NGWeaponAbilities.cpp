@@ -34,12 +34,13 @@ void UNGReloadAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const 
 {
 	auto* Combat = Cast<UNGCombatComponent>(GetSourceObject(Handle, Info));
 	const auto* Def = Combat ? Combat->GetEquipment().Definition.Get() : nullptr;
+	FString DefinitionError;
 	if (!Info || !Info->IsNetAuthority() || !Combat || Combat->GetOwner() != Info->AvatarActor.Get() || !Combat->GetEquipment().bEquipped
-		|| !Def || !FMath::IsFinite(Def->ReloadDuration) || Combat->GetMagazineAmmo() >= Def->MagazineCapacity || Combat->GetReserveAmmo() <= 0 || !CommitAbility(Handle, Info, Activation))
+		|| !Def || !Def->ValidateDefinition(DefinitionError) || Combat->GetMagazineAmmo() >= Def->MagazineCapacity || Combat->GetReserveAmmo() <= 0 || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	ReloadCombat = Combat; ReloadItem = Combat->GetEquippedItem();
 	Combat->MulticastReload();
-	auto* Task = UAbilityTask_WaitDelay::WaitDelay(this, FMath::Clamp(Def->ReloadDuration, .1f, 10.f));
+	auto* Task = UAbilityTask_WaitDelay::WaitDelay(this, Def->ReloadDuration);
 	Task->OnFinish.AddDynamic(this, &ThisClass::FinishReload); Task->ReadyForActivation();
 }
 

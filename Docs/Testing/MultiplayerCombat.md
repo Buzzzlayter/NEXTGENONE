@@ -4,7 +4,7 @@
 
 Код runner обновлён под Action inventory, выбранный item и GAS ADS. Исторические PASS ниже относятся к старым версиям и не подтверждают этот пакет. Сборка и запуск требуют отдельного разрешения.
 
-Подготовка после сборки: создать отдельный Blueprint-наследник `NGCombatTestGameMode`; назначить ему тот же Character/Controller и `PlayerStateClass=BP_NextgenonePlayerState`, что используются игрой. Проверить Layout и стартовый список у Inventory. Старый Combat.StarterItems пока поддерживается как fallback, когда Inventory.StarterItems пуст. Основной GameMode и defaults проекта не переключать.
+Подготовка после сборки: создать отдельный Blueprint-наследник `NGCombatTestGameMode`; назначить ему тот же Character/Controller и `PlayerStateClass=BP_NextgenonePlayerState`, что используются игрой. Проверить Layout и явные **Inventory.InitialContents**: оружие с Count=1/SlotTag=Inventory.Slot.Action, отдельные записи патронов с SlotTag=Inventory.Slot.Storage и Count в пределах MaxStackSize. Старые StarterItems больше не выдаются автоматически. Основной GameMode и defaults проекта не переключать.
 
 Fixture: открытый ровный участок возле координат (0,0,100) и (600,0,100), обычная гравитация, Alive/Dead FSM, отсутствие внешнего урона. В Action должно быть оружие с одним projectile и нулевым spread; magazine содержит достаточно патронов, чтобы убить цель без Reload. HP, damage, magazine и ожидание полёта берутся из текущих данных. Неподходящий fixture заканчивается FAIL, оружие автоматически не создаётся. Таймаут сценария — 120 секунд.
 

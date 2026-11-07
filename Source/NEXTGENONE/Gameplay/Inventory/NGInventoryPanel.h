@@ -36,7 +36,7 @@ private:
 	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> PlayerInventory;
 	TArray<TWeakObjectPtr<UNGInventoryItemInstance>> ObservedItems;
 	UFUNCTION() void Refresh();
-	UFUNCTION() void Changed(FNGInventoryChangeMessage Change);
+	UFUNCTION() void Changed();
 	UFUNCTION() void EquipmentChanged(FNGEquipmentState Equipment);
 	UFUNCTION() void PawnChanged(APawn* OldPawn, APawn* NewPawn);
 	void UnbindItems();

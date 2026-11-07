@@ -12,6 +12,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "Gameplay/Interaction/NGInteraction.h"
+#include "Gameplay/Combat/NGCombat.h"
 
 bool UNGCharacterStateMachineComponent::StartIfReady()
 {
@@ -155,6 +157,12 @@ void UNGCharacterStateMachineComponent::OnRep_ResourceFailure()
 		ASC->CancelAllAbilities();
 	}
 	if (auto* Input = GetOwner()->FindComponentByClass<UNGGameplayInputComponent>()) Input->ShutdownInput();
+	if (auto* Interaction = GetOwner()->FindComponentByClass<UNGInteractionComponent>()) Interaction->EndInteraction();
+	if (auto* Combat = GetOwner()->FindComponentByClass<UNGCombatComponent>())
+	{
+		Combat->StopPrimaryInput();
+		if (GetOwner()->HasAuthority()) Combat->SetEquippedOnServer(false);
+	}
 	if (auto* Character = Cast<ACharacter>(GetOwner())) Character->GetCharacterMovement()->DisableMovement();
 	NotifyStateChanged();
 	// This notification means the handoff barrier is released, not gameplay success.

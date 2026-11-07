@@ -41,9 +41,13 @@ void UNGCombatComponent::BindInventory()
 	if (BoundInventory.IsValid()) BoundInventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::InventoryChanged);
 	BoundInventory = PS->Inventory;
 	PS->Inventory->OnInventoryChanged.AddDynamic(this, &ThisClass::InventoryChanged);
+	if (Pawn->HasAuthority() && !StarterItems.IsEmpty() && PS->Inventory->InitialContents.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: migrate legacy Combat.StarterItems and reserve ammo to PlayerState.Inventory.InitialContents; legacy items are no longer granted."), *GetPathName());
+	}
 
 }
-void UNGCombatComponent::InventoryChanged(FNGInventoryChangeMessage Change)
+void UNGCombatComponent::InventoryChanged()
 {
 	if (GetOwner()->HasAuthority() && CurrentItem && BoundInventory.IsValid()
 		&& (!BoundInventory->Contains(CurrentItem) || !BoundInventory->GetSlotTag(BoundInventory->GetSlotIndex(CurrentItem)).MatchesTag(TAG_NGSlotAction)))
@@ -244,8 +248,7 @@ bool UNGCombatComponent::FireOnServer()
 	if (!ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming)) return false;
 	if (ASC->HasMatchingGameplayTag(TAG_NGRagdollActive) || ASC->HasMatchingGameplayTag(TAG_NGRollActive)) return false;
 	if (ASC->HasMatchingGameplayTag(TAG_NGDashActive) || ASC->HasMatchingGameplayTag(TAG_NGMantleActive) || ASC->HasMatchingGameplayTag(TAG_NGPunchActive) || ASC->HasMatchingGameplayTag(TAG_NGReloadActive)) return false;
-	if (!ASC->CanFireNow(Pawn) || !FMath::IsFinite(Def->FireInterval) || !FMath::IsFinite(Def->Damage) || !FMath::IsFinite(Def->Range) || Def->Damage <= 0 || Def->Range <= 0) return false;
-	if (!Def->ProjectileClass || !FMath::IsFinite(Def->MuzzleSpeed) || Def->MuzzleSpeed<100.f || !FMath::IsFinite(Def->GravityScale) || !FMath::IsFinite(Def->LinearDrag) || !FMath::IsFinite(Def->SpreadDegrees)) return false;
+	if (!ASC->CanFireNow(Pawn)) return false;
 	FVector Eye, ViewDirection;
 	if (RequestedShotView.IsSet())
 	{
@@ -266,7 +269,7 @@ bool UNGCombatComponent::FireOnServer()
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(NGWeapon), false, Pawn);
 	TArray<AActor*> Attached; Pawn->GetAttachedActors(Attached); Params.AddIgnoredActors(Attached);
 	FHitResult EyeHit;
-	const FVector AimEnd = Eye + ViewDirection * FMath::Min(Def->Range, 100000.f);
+	const FVector AimEnd = Eye + ViewDirection * Def->Range;
 	// Capsule hits for this slice. A server anchor avoids animation tick dependence.
 	GetWorld()->LineTraceSingleByChannel(EyeHit, Eye, AimEnd, ECC_Visibility, Params);
 	const FVector Up=-Pawn->GetCharacterMovement()->GetGravityDirection();
@@ -275,16 +278,16 @@ bool UNGCombatComponent::FireOnServer()
 	if (FVector::DotProduct(End - Start, ViewDirection) <= UE_SMALL_NUMBER) return false;
 	FHitResult Obstruction;
 	if (GetWorld()->LineTraceSingleByChannel(Obstruction,Pawn->GetActorLocation(),Start,ECC_Visibility,Params)) return false;
-	if (!ASC->TryCommitFire(Pawn, FMath::Max(0.05f, Def->FireInterval))) return false;
+	if (!ASC->TryCommitFire(Pawn, Def->FireInterval)) return false;
 	TArray<ANGBallisticProjectile*> Projectiles;
-	const int32 Count=FMath::Clamp(Def->PelletsPerShot,1,16);
+	const int32 Count=Def->PelletsPerShot;
 	for (int32 I=0;I<Count;++I)
 	{
-		const FVector Direction=FMath::VRandCone((End-Start).GetSafeNormal(),FMath::DegreesToRadians(FMath::Clamp(Def->SpreadDegrees,0.f,20.f)));
+		const FVector Direction=FMath::VRandCone((End-Start).GetSafeNormal(),FMath::DegreesToRadians(Def->SpreadDegrees));
 		const FTransform Transform(Direction.Rotation(),Start);
 		auto* Projectile=GetWorld()->SpawnActorDeferred<ANGBallisticProjectile>(Def->ProjectileClass,Transform,Pawn,Pawn,ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (!Projectile) { for (auto* Spawned:Projectiles) Spawned->Destroy(); return false; }
-		Projectile->Initialize(Pawn,this,Direction*FMath::Clamp(Def->MuzzleSpeed,100.f,200000.f),-Up*FMath::Abs(GetWorld()->GetGravityZ())*FMath::Clamp(Def->GravityScale,0.f,10.f),FMath::Clamp(Def->LinearDrag,0.f,2.f),FMath::Clamp(Def->Damage,1.f,10000.f),FMath::Clamp(Def->Range,100.f,100000.f),ShotSerial+1,Def->BodyImpactImpulse);
+		Projectile->Initialize(Pawn,this,Direction*Def->MuzzleSpeed,-Up*FMath::Abs(GetWorld()->GetGravityZ())*Def->GravityScale,Def->LinearDrag,Def->Damage,Def->Range,ShotSerial+1,Def->BodyImpactImpulse);
 		Projectile->SetWeaponEffects(Equipment.Definition);
 		Projectiles.Add(Projectile);
 	}

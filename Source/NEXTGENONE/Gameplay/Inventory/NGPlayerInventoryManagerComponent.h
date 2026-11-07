@@ -28,14 +28,18 @@ public:
     UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
     virtual void BeginPlay() override;
     virtual void EndPlay(EEndPlayReason::Type Reason) override;
-	UPROPERTY(EditDefaultsOnly, Category="Inventory|Starter") TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
-	void GrantStarterInventory(const TArray<TSoftClassPtr<UNGInventoryItemDefinition>>& LegacyItems);
+	UPROPERTY(EditDefaultsOnly, Category="Inventory|Starter") TArray<FNGInventoryStarterEntry> InitialContents;
+	/** Serialized for manual migration only; runtime grants use InitialContents. */
+	UPROPERTY(EditDefaultsOnly, Category="Inventory|Legacy", meta=(DisplayName="Legacy Starter Items (Migration Only)")) TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
+	void GrantStarterInventory();
 	UNGInventoryManagerComponent* GetViewedInventory() const;
 	void OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
 	void CloseInventoryView();
 	/** Nonzero ID means submitted, not accepted. Completion does not imply replication has arrived. */
 	uint32 RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0, FNGInventoryRequestCompleted::FDelegate Completion = {});
 	FNGInventoryRequestCompleted OnRequestCompleted;
+	/** Forget UI callbacks only; an already submitted server operation is not cancelled. */
+	void ForgetRequestCallbacks(const UObject* Listener);
 	UPROPERTY(EditDefaultsOnly, Category="Inventory", meta=(ClampMin="0.01")) float InventoryOperationInterval = .05f;
     uint32 RequestDropItem(UNGInventoryItemInstance* Item, int32 Count=0, FNGInventoryRequestCompleted::FDelegate Completion = {});
     UFUNCTION(Server, Reliable) void ServerDropItem(uint32 RequestId, ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
