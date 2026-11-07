@@ -1,10 +1,13 @@
 #include "NGPlayerInventoryManagerComponent.h"
 #include "Gameplay/Interaction/NGInteraction.h"
+#include "Gameplay/Combat/NGCombat.h"
+#include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryManagerComponent.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "Misc/ScopeExit.h"
 
 
 UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
@@ -78,20 +81,42 @@ void UNGPlayerInventoryManagerComponent::ClearViewedContext()
     SessionInteraction.Reset();
     if (Interaction) Interaction->ClearContext(ViewedInventory.Get());
 }
-void UNGPlayerInventoryManagerComponent::RequestDropItem(UNGInventoryItemInstance* Item,int32 Count)
+uint32 UNGPlayerInventoryManagerComponent::RequestDropItem(UNGInventoryItemInstance* Item, int32 Count)
 {
-	if (!IsLocalController() && !GetOwner()->HasAuthority()) return;
-	auto* Expected=Cast<ANextgenoneCharacter>(GetInventoryPawn());
-	if (GetOwner()->HasAuthority()) ServerDropItem_Implementation(Expected,Item,Count); else ServerDropItem(Expected,Item,Count);
+    if (!IsLocalController() && !GetOwner()->HasAuthority()) return 0;
+    const uint32 Id = AllocateRequestId();
+    auto* Expected = Cast<ANextgenoneCharacter>(GetInventoryPawn());
+    if (GetOwner()->HasAuthority()) ServerDropItem_Implementation(Id, Expected, Item, Count);
+    else ServerDropItem(Id, Expected, Item, Count);
+    return Id;
 }
-void UNGPlayerInventoryManagerComponent::ServerDropItem_Implementation(ANextgenoneCharacter* ExpectedPawn,UNGInventoryItemInstance* Item,int32 Count)
+
+uint32 UNGPlayerInventoryManagerComponent::AllocateRequestId()
 {
-	if (!ExpectedPawn || GetInventoryPawn()!=ExpectedPawn) return;
-	auto* System=GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
-	if (!System || !System->IsCurrentInteractor(ExpectedPawn)) return;
-	const double Now=GetWorld()->GetTimeSeconds(); if (Now<NextDropTime) return;
-	NextDropTime=Now+.15; System->DropInventoryItem(ExpectedPawn,Item,Count);
+    if (++LastRequestId == 0) ++LastRequestId;
+    return LastRequestId;
 }
+
+void UNGPlayerInventoryManagerComponent::ClientRequestCompleted_Implementation(uint32 RequestId, ENGInventoryRequestResult Result)
+{
+    OnRequestCompleted.Broadcast(RequestId, Result);
+}
+
+void UNGPlayerInventoryManagerComponent::ServerDropItem_Implementation(uint32 RequestId, ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count)
+{
+    auto Result = ENGInventoryRequestResult::InvalidRequest;
+    ON_SCOPE_EXIT { ClientRequestCompleted(RequestId, Result); };
+    if (!RequestId || Count < 0) return;
+    if (!ExpectedPawn || GetInventoryPawn() != ExpectedPawn) { Result = ENGInventoryRequestResult::StalePawn; return; }
+    auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
+    if (!System || !System->IsCurrentInteractor(ExpectedPawn)) { Result = ENGInventoryRequestResult::AccessDenied; return; }
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (Now < NextDropTime) { Result = ENGInventoryRequestResult::RateLimited; return; }
+    NextDropTime = Now + .15;
+    if (!IsValid(Item) || !Contains(Item)) { Result = ENGInventoryRequestResult::StaleItem; return; }
+    Result = System->DropInventoryItem(ExpectedPawn, Item, Count) ? ENGInventoryRequestResult::Succeeded : ENGInventoryRequestResult::Rejected;
+}
+
 void UNGPlayerInventoryManagerComponent::OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType)
 {
 	auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
@@ -153,20 +178,78 @@ bool UNGPlayerInventoryManagerComponent::CanAccessInventory(UNGInventoryManagerC
 		&& Inventory->GetOwner()->GetClass()->ImplementsInterface(UNGInteractable::StaticClass())
 		&& INGInteractable::Execute_CanInteract(Inventory->GetOwner(), CharacterPawn);
 }
-void UNGPlayerInventoryManagerComponent::RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
+uint32 UNGPlayerInventoryManagerComponent::RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
 {
-	if (!IsLocalController() && !GetOwner()->HasAuthority()) return;
-	auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
-	if (GetOwner()->HasAuthority()) ServerInventoryTransfer_Implementation(CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
-	else ServerInventoryTransfer(CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
+    if (!IsLocalController() && !GetOwner()->HasAuthority()) return 0;
+    const uint32 Id = AllocateRequestId();
+    auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
+    if (GetOwner()->HasAuthority()) ServerInventoryTransfer_Implementation(Id, CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
+    else ServerInventoryTransfer(Id, CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
+    return Id;
 }
-void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(ANextgenoneCharacter* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
+
+void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(uint32 RequestId, ANextgenoneCharacter* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
 {
-	if (!ExpectedPawn || GetInventoryPawn() != ExpectedPawn || ExpectedPawn->IsDead() || !FMath::IsFinite(InventoryOperationInterval)
-		|| !CanAccessInventory(Source) || !CanAccessInventory(Target) || !IsValid(ExpectedItem)
-		|| Source->GetItemAtSlot(SourceSlot) != ExpectedItem || Target->GetItemAtSlot(TargetSlot) != ExpectedTarget) return;
-	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now < NextOperationTime) return;
-	NextOperationTime = Now + FMath::Max(.01f, InventoryOperationInterval);
-	Source->TransferTo(Target, SourceSlot, TargetSlot, Amount);
+    auto Result = ENGInventoryRequestResult::InvalidRequest;
+    ON_SCOPE_EXIT { ClientRequestCompleted(RequestId, Result); };
+    if (!RequestId || Amount < 0 || SourceSlot < 0 || TargetSlot < 0 || !FMath::IsFinite(InventoryOperationInterval)) return;
+    if (!ExpectedPawn || GetInventoryPawn() != ExpectedPawn || ExpectedPawn->IsDead()) { Result = ENGInventoryRequestResult::StalePawn; return; }
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (Now < NextOperationTime) { Result = ENGInventoryRequestResult::RateLimited; return; }
+    NextOperationTime = Now + FMath::Max(.01f, InventoryOperationInterval);
+    auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
+    if (!System || !System->IsCurrentInteractor(ExpectedPawn) || !CanAccessInventory(Source) || !CanAccessInventory(Target))
+    { Result = ENGInventoryRequestResult::AccessDenied; return; }
+    if (!IsValid(ExpectedItem) || Source->GetItemAtSlot(SourceSlot) != ExpectedItem || Target->GetItemAtSlot(TargetSlot) != ExpectedTarget)
+    { Result = ENGInventoryRequestResult::StaleItem; return; }
+    Result = Source->TransferTo(Target, SourceSlot, TargetSlot, Amount) ? ENGInventoryRequestResult::Succeeded : ENGInventoryRequestResult::Rejected;
+}
+
+
+void UNGPlayerInventoryManagerComponent::GrantStarterInventory(const TArray<TSoftClassPtr<UNGInventoryItemDefinition>>& LegacyItems)
+{
+    if (!TryBeginStarterGrant()) return;
+    const auto& Items = StarterItems.IsEmpty() ? LegacyItems : StarterItems;
+    int32 Failures = 0;
+    auto GrantToGroup = [&](TSubclassOf<UNGInventoryItemDefinition> ItemClass, FGameplayTag Group, int32 Count)
+    {
+        if (!ItemClass || Count < 1) { ++Failures; return; }
+        if (FindFirstItemStackByDefinition(ItemClass)) return;
+        const int32 Destination = FindFirstAvailableSlot(ItemClass, Count, Group);
+        if (Destination != INDEX_NONE && AddItemDefinitionToSlot(ItemClass, Destination, Count)) return;
+        ++Failures;
+        UE_LOG(LogTemp, Warning, TEXT("Starter item %s: could not grant %d to %s"), *GetNameSafe(ItemClass.Get()), Count, *Group.ToString());
+    };
+    TArray<TSubclassOf<UNGInventoryItemDefinition>> Loaded;
+    for (const auto& SoftClass : Items)
+    {
+        if (UClass* ItemClass = SoftClass.LoadSynchronous()) Loaded.Add(ItemClass);
+        else { ++Failures; UE_LOG(LogTemp, Error, TEXT("Starter item could not load: %s"), *SoftClass.ToString()); }
+    }
+    // Weapon order defines Action 1..5, independent of ammo ordering.
+    for (auto ItemClass : Loaded)
+    {
+        const auto* Weapon = UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(ItemClass));
+        if (!Weapon) continue;
+        GrantToGroup(ItemClass, TAG_NGSlotAction, 1);
+        if (Weapon->InitialReserveAmmo <= 0) continue;
+        UClass* Ammo = Weapon->AmmoItemClass.LoadSynchronous();
+        if (!Ammo) { ++Failures; continue; }
+        // Spread reserves across stacks instead of silently truncating to MaxStackSize.
+        int32 Remaining = Weapon->InitialReserveAmmo;
+        const int32 Limit = GetDefault<UNGInventoryItemDefinition>(Ammo)->MaxStackSize;
+        if (Limit < 1) { ++Failures; continue; }
+        if (FindFirstItemStackByDefinition(Ammo)) continue;
+        while (Remaining > 0)
+        {
+            const int32 Count = FMath::Min(Remaining, Limit);
+            const int32 Destination = FindFirstAvailableSlot(Ammo, Count, TAG_NGSlotStorage);
+            if (Destination == INDEX_NONE || !AddItemDefinitionToSlot(Ammo, Destination, Count)) { ++Failures; break; }
+            Remaining -= Count;
+        }
+    }
+    for (auto ItemClass : Loaded)
+        if (!UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(ItemClass))) GrantToGroup(ItemClass, TAG_NGSlotStorage, 1);
+    // Successful grants remain; partial failures are terminal, with no implicit respawn retry.
+    if (Failures) UE_LOG(LogTemp, Error, TEXT("%s: starter inventory partially granted (%d failures); no automatic retry."), *GetPathName(), Failures);
 }

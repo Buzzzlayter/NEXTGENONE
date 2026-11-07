@@ -1,4 +1,5 @@
 #include "Gameplay/Interaction/NGInteraction.h"
+#include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/Abilities/NGALSActionAbilities.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Interaction/NGItemPickup.h"
@@ -35,10 +36,9 @@ namespace
 
 bool UNGInteractionSubsystem::IsCurrentInteractor(const ANextgenoneCharacter* Pawn,bool bAuthority) const
 {
-	if (!IsValid(Pawn) || (Pawn->Interaction && Pawn->Interaction->IsInteractionBlocked()) || Pawn->GetWorld()!=GetWorld() || (bAuthority && !Pawn->HasAuthority()) || Pawn->IsDead() || !Pawn->GetController() || Pawn->GetController()->GetPawn()!=Pawn) return false;
-	const auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
-	const auto* ASC=Pawn->GetAbilitySystemComponent();
-	return PS && ASC && ASC==PS->GetAbilitySystemComponent() && ASC->GetAvatarActor()==Pawn && Pawn->GetHealth()>0.f;
+    auto* ASC = NGPlayerContext::GetCurrentASC(Pawn, bAuthority);
+    return ASC && Pawn->GetWorld() == GetWorld() && !Pawn->IsDead() && Pawn->GetHealth() > 0.f
+        && (!Pawn->Interaction || !Pawn->Interaction->IsInteractionBlocked());
 }
 AActor* UNGInteractionSubsystem::FindTarget(ANextgenoneCharacter* Pawn,float MaxDistance,float CaptureRadius) const
 {

@@ -36,24 +36,32 @@ R1/R2 реализованы в текущем пакете: ограничен�
   AddItemInternal/RemoveQuantityInternal и FMutationScope объединяют пути; callbacks не могут
   повторно мутировать участников незавершённой операции. Reload использует общий consume с credit
   после всех debits и до inventory notifications. Pickup использует deferred add в выбранный слот.
-- [ ] Возвращать причины отказа inventory RPC и идентификатор запроса; различать отправку запроса
+- [x] Возвращать причины отказа inventory RPC и идентификатор запроса; различать отправку запроса
   и подтверждённое серверное выполнение. Не менять серверное состояние оптимистически в UI.
+  RequestDropItem/RequestInventoryTransfer возвращают ID (0 — не отправлено); native OnRequestCompleted
+  сообщает Succeeded/InvalidRequest/StalePawn/RateLimited/AccessDenied/StaleItem/Rejected.
+  Completion не гарантирует, что репликация слотов уже пришла; listen-server completion может быть синхронным.
 - [x] Объединять уведомления завершённого набора изменений инвентаря; обновлять затронутые UI-слоты,
   сохранять неизменившиеся подписки и иконки. Замерить эффект до заявления о приросте производительности.
   Один broadcast на mutation/replicated receive; слот пропускает одинаковый presentation snapshot,
   иконка перезагружается только при смене item/icon, подписки панели обновляются разницей наборов.
   Панель ещё формирует полный snapshot. Замеров нет, прирост производительности не заявлен.
-- [ ] Перенести стартовую выдачу из Combat.BindInventory к владельцу инвентаря; определить
+- [x] Перенести стартовую выдачу из Combat.BindInventory к владельцу инвентаря; определить
   обработку частичного отказа выдачи. Разделить Fire/Reload ability implementations и обязанности Combat
   без добавления универсального equipment framework.
+  GrantStarterInventory принадлежит PlayerInventory; частичный результат сохраняется, ошибки логируются,
+  повторной неявной выдачи на respawn нет. Inventory.StarterItems имеет приоритет, старый Combat.StarterItems
+  пока fallback для сохранённых BP. Fire/Reload вынесены в NGWeaponAbilities.cpp без переименования UClass.
 - [x] Настраивать класс dropped pickup через существующую конфигурацию вместо LoadClass с /Game-путём;
   валидировать доступность класса при cook.
   Используется hard class reference Interaction.DroppedPickupClass (native default NGItemPickup);
   null/abstract запрещены на runtime-границе. Назначенный Blueprint попадает в cook по ссылке.
   Capacity/pickup используют одну чистую функцию поиска; Action занят → Storage без auto-equip.
   Статический просмотр выполнен, cook/runtime не проверены.
-- [ ] Консолидировать повторные проверки текущего Pawn/Controller/ASC небольшими функциями.
+- [x] Консолидировать повторные проверки текущего Pawn/Controller/ASC небольшими функциями.
   Сохранить специализированную серверную валидацию на каждой входной границе.
+  NGPlayerContext.GetCurrentASC используется Combat и Interaction; GetInventoryPawn остаётся транспортной
+  проверкой PlayerState/Controller, а access/health/state/rate/snapshot проверки сохранены на границах.
 - [ ] Добавить валидацию item/weapon definitions: размеры стеков, числовые диапазоны,
   обязательные ссылки и согласованность fragment stats. Не полагаться только на ClampMin в Details.
 

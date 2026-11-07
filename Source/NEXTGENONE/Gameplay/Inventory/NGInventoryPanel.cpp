@@ -110,8 +110,7 @@ bool UNGInventoryPanel::RequestInventoryOperation_Implementation(const FUIInvent
 	if (Operation == EUIInventoryOperation::Drop)
 		if (auto* Transport = PlayerInventory.Get())
 		{
-			Transport->RequestDropItem(Item, Amount);
-			return true;
+			return Transport->RequestDropItem(Item, Amount) != 0;
 		}
 	return false;
 }
@@ -126,6 +125,5 @@ bool UNGInventoryPanel::MoveInventoryItem_Implementation(const FUIInventorySlotD
 	if (!Transport || !IsValid(SourceInventory) || !IsValid(TargetInventory) || TargetInventory != Inventory.Get()
 		|| !IsValid(Item) || SourceInventory->GetItemAtSlot(Source.SlotIndex) != Item || Amount < 0 || Amount > SourceInventory->GetCount(Item)
 		|| TargetInventory->GetItemAtSlot(Destination.SlotIndex) != ExpectedTarget) return false;
-	Transport->RequestInventoryTransfer(SourceInventory, Item, Source.SlotIndex, TargetInventory, Destination.SlotIndex, ExpectedTarget, Amount);
-	return true;
+	return Transport->RequestInventoryTransfer(SourceInventory, Item, Source.SlotIndex, TargetInventory, Destination.SlotIndex, ExpectedTarget, Amount) != 0;
 }
