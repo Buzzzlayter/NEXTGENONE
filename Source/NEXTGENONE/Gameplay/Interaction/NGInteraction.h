@@ -69,6 +69,7 @@ public:
 	FNGInteractionContextChanged OnContextChanged;
 	FNGInteractionEnded OnInteractionEnded;
 	UPROPERTY(EditDefaultsOnly, Category="Interaction|GAS") FGameplayTagContainer InterruptingTags;
+	UPROPERTY(EditDefaultsOnly, Category="Inventory|World") TSubclassOf<ANGItemPickup> DroppedPickupClass;
 	virtual void TickComponent(float Delta, ELevelTick Tick, FActorComponentTickFunction* ThisTick) override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Interaction", meta=(ClampMin="50",ClampMax="500")) float MaxDistance=350.f;

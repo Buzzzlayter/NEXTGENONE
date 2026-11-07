@@ -166,7 +166,7 @@ public:
 	UNGInventoryItemInstance* GetItemAtSlot(int32 SlotIndex) const;
 	int32 GetSlotIndex(UNGInventoryItemInstance* Item) const;
 	int32 FindFirstEmptySlot() const;
-	int32 FindFirstAvailableSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass) const;
+	int32 FindFirstAvailableSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 StackCount = 1, FGameplayTag SlotTag = {}) const;
 	FGameplayTag GetSlotTag(int32 SlotIndex) const;
 	int32 FindSlotByTag(FGameplayTag SlotTag, int32 Ordinal) const;
 	bool CanPlaceItemAtSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 SlotIndex) const;
@@ -185,7 +185,7 @@ public:
 	bool RemoveQuantity(UNGInventoryItemInstance* Item, int32 Count, bool bNotify=true);
 	void NotifyItemChange(UNGInventoryItemInstance* Item, int32 OldCount, int32 NewCount, int32 SlotIndex=INDEX_NONE);
 
-	bool CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1);
+	bool CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1) const;
 
 	UNGInventoryItemInstance* AddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1);
 	UNGInventoryItemInstance* AddItemDefinitionToSlot(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 SlotIndex, int32 StackCount = 1);

@@ -170,16 +170,15 @@ void UNGInventoryManagerComponent::GetLifetimeReplicatedProps(TArray< FLifetimeP
 	DOREPLIFETIME_CONDITION(ThisClass, InventoryList, COND_Dynamic);
 }
 
-bool UNGInventoryManagerComponent::CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount)
+bool UNGInventoryManagerComponent::CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount) const
 {
-	return GetOwner() && GetOwner()->HasAuthority() && InitializeInventory() && ItemDef && StackCount > 0
-		&& StackCount <= GetDefault<UNGInventoryItemDefinition>(ItemDef)->MaxStackSize && FindFirstAvailableSlot(ItemDef) != INDEX_NONE;
+	return FindFirstAvailableSlot(ItemDef, StackCount) != INDEX_NONE;
 }
 
 UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount)
 {
 	UNGInventoryItemInstance* Result = nullptr;
-	if (CanAddItemDefinition(ItemDef, StackCount))
+	if (InitializeInventory() && CanAddItemDefinition(ItemDef, StackCount))
 	{
 		Result = InventoryList.AddEntry(ItemDef, StackCount);
 
@@ -193,7 +192,7 @@ UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinition(TSubcl
 
 UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinitionToSlot(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 SlotIndex, int32 StackCount)
 {
-	if (!CanAddItemDefinition(ItemDef, StackCount) || !CanPlaceItemAtSlot(ItemDef, SlotIndex) || GetItemAtSlot(SlotIndex)) return nullptr;
+	if (!InitializeInventory() || !CanAddItemDefinition(ItemDef, StackCount) || !CanPlaceItemAtSlot(ItemDef, SlotIndex) || GetItemAtSlot(SlotIndex)) return nullptr;
 	// Run item fragments (including initial magazine stats), then publish only the final slot.
 	auto* Item = InventoryList.AddEntry(ItemDef, StackCount, nullptr, false, SlotIndex);
 	if (!Item) return nullptr;
@@ -344,7 +343,7 @@ int32 UNGInventoryManagerComponent::GetCount(UNGInventoryItemInstance* Item) con
 }
 UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemState(const FNGItemState& State, bool bNotify, int32 SlotIndex)
 {
-	if (!CanAddItemDefinition(State.ItemClass, State.Count)) return nullptr;
+	if (!InitializeInventory() || !CanAddItemDefinition(State.ItemClass, State.Count)) return nullptr;
 	if (SlotIndex != INDEX_NONE && (!CanPlaceItemAtSlot(State.ItemClass, SlotIndex) || GetItemAtSlot(SlotIndex))) return nullptr;
 	for (const auto& Pair : State.StatStacks) if (!Pair.Key.IsValid() || Pair.Value < 0) return nullptr;
 	auto* Item = InventoryList.AddEntry(State.ItemClass, State.Count, &State.StatStacks, false, SlotIndex);
@@ -354,7 +353,7 @@ UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemState(const FNGIt
 }
 UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass,int32 Count)
 {
-	if (!CanAddItemDefinition(ItemClass,Count)) return nullptr;
+	if (!InitializeInventory() || !CanAddItemDefinition(ItemClass,Count)) return nullptr;
 	auto* Item=InventoryList.AddEntry(ItemClass,Count,nullptr,false);
 	if (Item && IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(Item,bOwnerOnly ? COND_OwnerOnly : COND_None);
 	return Item;
@@ -453,10 +452,13 @@ int32 UNGInventoryManagerComponent::FindFirstEmptySlot() const
         if (const auto* Entry = FindSlot(Index); Entry && Entry->StackCount == 0 && !Entry->Instance) return Index;
     return INDEX_NONE;
 }
-int32 UNGInventoryManagerComponent::FindFirstAvailableSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass) const
+int32 UNGInventoryManagerComponent::FindFirstAvailableSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 StackCount, FGameplayTag SlotTag) const
 {
+    if (!ItemClass || ItemClass->HasAnyClassFlags(CLASS_Abstract) || StackCount < 1
+        || StackCount > GetDefault<UNGInventoryItemDefinition>(ItemClass)->MaxStackSize) return INDEX_NONE;
     for (int32 Index = 0; Index < GetSlotCount(); ++Index)
-        if (const auto* Entry = FindSlot(Index); Entry && Entry->StackCount == 0 && !Entry->Instance && CanPlaceItemAtSlot(ItemClass, Index)) return Index;
+        if (const auto* Entry = FindSlot(Index); Entry && Entry->StackCount == 0 && !Entry->Instance
+            && (!SlotTag.IsValid() || Entry->SlotTag.MatchesTag(SlotTag)) && CanPlaceItemAtSlot(ItemClass, Index)) return Index;
     return INDEX_NONE;
 }
 FGameplayTag UNGInventoryManagerComponent::GetSlotTag(int32 SlotIndex) const

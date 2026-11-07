@@ -33,6 +33,7 @@ public:
 	void PublishDrop();
 	FNGItemState GetStateForTransfer() const;
 	bool HasSavedItemState() const { return bHasSavedState; }
+	int32 FindDestinationSlot(const ANextgenoneCharacter* Interactor) const;
 	void ConsumeForTransfer();
 private:
 	UPROPERTY(ReplicatedUsing=OnRep_Available) bool bAvailable=true;

@@ -111,9 +111,11 @@ bool UNGInteractionSubsystem::TakePickup(ANGItemPickup* Pickup,ANextgenoneCharac
 	ActivePickups.Add(Pickup); ON_SCOPE_EXIT { ActivePickups.Remove(Pickup); };
 	auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
 	const auto State=Pickup->GetStateForTransfer();
-	if (!PS->Inventory->CanAddItemDefinition(State.ItemClass,State.Count)) return false;
+	if (!PS->Inventory->InitializeInventory()) return false;
+	const int32 Slot = Pickup->FindDestinationSlot(Pawn);
+	if (Slot == INDEX_NONE) return false;
 	// Initial placed items use definition fragments; dropped items restore the exact saved stats.
-	auto* Item=Pickup->HasSavedItemState() ? PS->Inventory->AddItemState(State,false) : PS->Inventory->AddItemDefinitionDeferred(State.ItemClass,State.Count);
+	auto* Item=Pickup->HasSavedItemState() ? PS->Inventory->AddItemState(State,false,Slot) : PS->Inventory->AddItemDefinitionToSlot(State.ItemClass,Slot,State.Count);
 	if (!Item) return false;
 	const bool bAutoEquip=Pickup->bAutoEquipWhenHandsEmpty;
 	Pickup->ConsumeForTransfer();
@@ -142,8 +144,8 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 	Position=Ground.ImpactPoint+Up*28.f;
 	if (GetWorld()->OverlapBlockingTestByChannel(Position,FQuat::Identity,ECC_Visibility,FCollisionShape::MakeSphere(24.f),Params)) return nullptr;
 	if (FVector::DistSquared(Position,Pawn->GetActorLocation())>FMath::Square(650.f)) return nullptr;
-	UClass* Class=LoadClass<ANGItemPickup>(nullptr,TEXT("/Game/Gameplay/Interaction/BP_ItemPickup.BP_ItemPickup_C"));
-	if (!Class) Class=ANGItemPickup::StaticClass();
+	UClass* Class = Pawn->Interaction ? Pawn->Interaction->DroppedPickupClass.Get() : nullptr;
+	if (!Class || Class->HasAnyClassFlags(CLASS_Abstract)) return nullptr;
 	const FTransform Transform(FRotationMatrix::MakeFromXZ(Forward,Up).Rotator(),Position);
 	auto* Pickup=GetWorld()->SpawnActorDeferred<ANGItemPickup>(Class,Transform,nullptr,nullptr,ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!Pickup) return nullptr;
@@ -158,6 +160,7 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 }
 UNGInteractionComponent::UNGInteractionComponent()
 {
+	DroppedPickupClass = ANGItemPickup::StaticClass();
 	InterruptingTags = DefaultInteractionInterruptions();
 	SetIsReplicatedByDefault(true); PrimaryComponentTick.bCanEverTick=true; PrimaryComponentTick.TickInterval=.1f;
 }
