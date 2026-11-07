@@ -8,6 +8,8 @@
 #include "Engine/World.h"
 #include "Misc/ScopeExit.h"
 #include "Gameplay/Player/NGPlayerContext.h"
+#include "Gameplay/Abilities/NGItemUseAbility.h"
+#include "Inventory/NGInventoryFragment_ItemActions.h"
 
 
 UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
@@ -243,4 +245,47 @@ void UNGPlayerInventoryManagerComponent::GrantStarterInventory()
     }
     // Preserve successful entries, report partial failure, never retry implicitly on respawn.
     if (Failures) UE_LOG(LogTemp, Error, TEXT("%s: starter inventory partially granted (%d failures); no automatic retry."), *GetPathName(), Failures);
+}
+
+uint32 UNGPlayerInventoryManagerComponent::RequestUseItem(UNGInventoryItemInstance* Item, bool bSecondary, FNGInventoryRequestCompleted::FDelegate Completion)
+{
+    if (!IsLocalController() && !GetOwner()->HasAuthority()) return 0;
+    const uint32 Id = AllocateRequestId();
+    if (Completion.IsBound()) RequestCallbacks.Add(Id, MoveTemp(Completion));
+    if (GetOwner()->HasAuthority()) ServerUseItem_Implementation(Id, GetInventoryPawn(), Item, GetSlotIndex(Item), bSecondary);
+    else ServerUseItem(Id, GetInventoryPawn(), Item, GetSlotIndex(Item), bSecondary);
+    return Id;
+}
+
+void UNGPlayerInventoryManagerComponent::ServerUseItem_Implementation(uint32 RequestId, APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 ExpectedSlot, bool bSecondary)
+{
+    auto Result = ENGInventoryRequestResult::InvalidRequest;
+    ON_SCOPE_EXIT { ClientRequestCompleted(RequestId, Result); };
+    if (!RequestId) return;
+    if (!ExpectedPawn || ExpectedPawn != GetInventoryPawn()) { Result = ENGInventoryRequestResult::StalePawn; return; }
+    if (!IsValid(Item) || ExpectedSlot < 0 || GetItemAtSlot(ExpectedSlot) != Item) { Result = ENGInventoryRequestResult::StaleItem; return; }
+    Result = UseItemOnServer(Item, bSecondary) ? ENGInventoryRequestResult::Succeeded : ENGInventoryRequestResult::Rejected;
+}
+
+bool UNGPlayerInventoryManagerComponent::UseItemOnServer(UNGInventoryItemInstance* Item, bool bSecondary)
+{
+    auto* CurrentPawn = GetInventoryPawn();
+    auto* ASC = NGPlayerContext::GetCurrentASC(CurrentPawn, true);
+    if (!ASC || !IsValid(Item) || !Contains(Item) || GetCount(Item) < 1 || !Item->GetItemDef()
+        || ASC->GetNumericAttribute(UNGHealthSet::GetHealthAttribute()) <= 0.f
+        || ASC->HasMatchingGameplayTag(TAG_NGDead) || ASC->HasMatchingGameplayTag(TAG_NGUsingItem)) return false;
+    const auto* Actions = Item->FindFragmentByClass<UNGInventoryFragment_ItemActions>();
+    TSubclassOf<UGameplayAbility> AbilityClass;
+    if (Actions) AbilityClass = bSecondary ? Actions->SecondaryAbility : Actions->PrimaryAbility;
+    if (!AbilityClass || !AbilityClass->IsChildOf(UNGItemUseAbility::StaticClass()) || AbilityClass->HasAnyClassFlags(CLASS_Abstract)
+        || AbilityClass.GetDefaultObject()->GetNetExecutionPolicy() != EGameplayAbilityNetExecutionPolicy::ServerOnly
+        || AbilityClass.GetDefaultObject()->GetInstancingPolicy() != EGameplayAbilityInstancingPolicy::InstancedPerActor) return false;
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (Now < NextUseTime) return false;
+    NextUseTime = Now + .15;
+    // Repeated requests cannot grant parallel copies of an already active action.
+    for (const auto& Spec : ASC->GetActivatableAbilities())
+        if (Spec.SourceObject.Get() == Item && Spec.IsActive()) return false;
+    FGameplayAbilitySpec Spec(AbilityClass, 1); Spec.SourceObject = Item;
+    return ASC->GiveAbilityAndActivateOnce(Spec).IsValid();
 }

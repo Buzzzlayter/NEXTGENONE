@@ -56,6 +56,7 @@ public:
 protected:
 	virtual bool CanAcceptClientLocomotion() const override;
 	virtual void OnOverlayStateChanged(EALSOverlayState PreviousState) override;
+	virtual void OnGaitChanged(EALSGait PreviousGait) override;
 private:
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	FDelegateHandle HealthHandle;

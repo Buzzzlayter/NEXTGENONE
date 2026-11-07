@@ -172,6 +172,8 @@ public:
 	UNGInventoryItemInstance* AddItemState(const FNGItemState& State, bool bNotify=true, int32 SlotIndex=INDEX_NONE);
 	UNGInventoryItemInstance* AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 Count, int32 SlotIndex=INDEX_NONE);
 	bool RemoveQuantity(UNGInventoryItemInstance* Item, int32 Count, bool bNotify=true);
+	/** Debit one owned instance and execute a trusted synchronous credit before publishing. */
+	bool ConsumeItem(UNGInventoryItemInstance* Item, int32 Count, TFunctionRef<void()> OnConsumed);
 	void NotifyInventoryChanged();
 
 	bool CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1) const;

@@ -8,6 +8,7 @@
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
 #include "Gameplay/Abilities/NGALSActionAbilities.h"
+#include "Gameplay/Abilities/NGItemUseAbility.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -118,6 +119,17 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 	StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
+void ANextgenoneCharacter::OnGaitChanged(EALSGait PreviousGait)
+{
+	Super::OnGaitChanged(PreviousGait);
+	if (HasAuthority() && GetGait() == EALSGait::Sprinting)
+		if (auto* ASC = GetAbilitySystemComponent())
+		{
+			FGameplayTagContainer ItemActions; ItemActions.AddTag(TAG_NGItemUseAbility);
+			ASC->CancelAbilities(&ItemActions);
+		}
+}
+
 void ANextgenoneCharacter::OnOverlayStateChanged(EALSOverlayState PreviousState)
 {
 	Super::OnOverlayStateChanged(PreviousState);

@@ -11,6 +11,8 @@
 FReply UUIInventorySlotWidget::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	const FReply BlueprintReply = Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+    if (!BlueprintReply.IsEventHandled() && InMouseEvent.GetEffectingButton() == SecondaryActionButton && ContainsItem())
+        return RequestOperation(EUIInventoryOperation::SecondaryAction) ? FReply::Handled() : BlueprintReply;
 	if (BlueprintReply.IsEventHandled() || InMouseEvent.GetEffectingButton() != DragButton || !ContainsItem()
 		|| !OperationHandler.IsValid() || !GetOwningLocalPlayer()) return BlueprintReply;
 	ReleaseDragPress();

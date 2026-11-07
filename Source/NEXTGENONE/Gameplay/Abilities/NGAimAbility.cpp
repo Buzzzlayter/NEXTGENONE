@@ -1,3 +1,4 @@
+#include "Gameplay/Abilities/NGItemUseAbility.h"
 #include "Gameplay/Abilities/NGAimAbility.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "AbilitySystem/NGAbilitySystem.h"
@@ -23,6 +24,7 @@ UNGAimAbility::UNGAimAbility()
 {
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	ActivationBlockedTags.AddTag(TAG_NGDead);
+	ActivationBlockedTags.AddTag(TAG_NGUsingItem);
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
 	ActivationBlockedTags.AddTag(TAG_NGPunchActive);

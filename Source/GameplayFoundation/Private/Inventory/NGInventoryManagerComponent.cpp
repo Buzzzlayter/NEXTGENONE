@@ -336,6 +336,16 @@ bool UNGInventoryManagerComponent::RemoveQuantity(UNGInventoryItemInstance* Item
     return RemoveQuantityInternal(Item, Count, bNotify);
 }
 
+bool UNGInventoryManagerComponent::ConsumeItem(UNGInventoryItemInstance* Item, int32 Count, TFunctionRef<void()> OnConsumed)
+{
+	if (bTransferring || !GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Item)
+		|| Count < 1 || GetCount(Item) < Count || (GetCount(Item) > Count && !Item->CaptureState().CanSplitStack())) return false;
+	FMutationScope Mutation(this);
+	if (!RemoveQuantityInternal(Item, Count, true)) return false;
+	OnConsumed();
+	return true;
+}
+
 bool UNGInventoryManagerComponent::RemoveQuantityInternal(UNGInventoryItemInstance* Item, int32 Count, bool bNotify)
 {
 	if (!GetOwner()->HasAuthority() || Count < 1 || !Contains(Item) || GetCount(Item) < Count) return false;

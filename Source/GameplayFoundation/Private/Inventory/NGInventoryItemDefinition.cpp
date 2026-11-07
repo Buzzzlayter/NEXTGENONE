@@ -3,6 +3,8 @@
 
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryFragment_SetStats.h"
+#include "Inventory/NGInventoryFragment_ItemActions.h"
+#include "Abilities/GameplayAbility.h"
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
 #endif
@@ -79,10 +81,22 @@ bool UNGInventoryItemDefinition::ValidateDefinition(FString& Error) const
     if (MaxStackSize < 1) { Error = TEXT("MaxStackSize must be positive."); return false; }
     if (PickupTransform.ContainsNaN()) { Error = TEXT("Pickup transform must be finite."); return false; }
     bool bEquipmentFound = false;
+    bool bActionsFound = false;
     TSet<FGameplayTag> StatTags;
     for (const UNGInventoryItemFragment* Fragment : Fragments)
     {
         if (!Fragment) { Error = TEXT("Null item fragment."); return false; }
+        if (const auto* Actions = Cast<UNGInventoryFragment_ItemActions>(Fragment))
+        {
+            if (bActionsFound || (!Actions->PrimaryAbility && !Actions->SecondaryAbility))
+            { Error = TEXT("Item requires at most one nonempty Item Actions fragment."); return false; }
+            bActionsFound = true;
+            for (auto Action : {Actions->PrimaryAbility, Actions->SecondaryAbility})
+                if (Action && (Action->HasAnyClassFlags(CLASS_Abstract)
+                    || Action.GetDefaultObject()->GetNetExecutionPolicy() != EGameplayAbilityNetExecutionPolicy::ServerOnly
+                    || Action.GetDefaultObject()->GetInstancingPolicy() != EGameplayAbilityInstancingPolicy::InstancedPerActor))
+                { Error = TEXT("Item actions require concrete ServerOnly/InstancedPerActor abilities."); return false; }
+        }
         if (const auto* Equipment = Cast<UNGInventoryFragment_Equipment>(Fragment))
         {
             if (bEquipmentFound || !Equipment->Definition) { Error = TEXT("Equipment requires one non-null definition."); return false; }

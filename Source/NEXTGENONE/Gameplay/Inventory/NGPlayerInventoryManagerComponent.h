@@ -35,6 +35,8 @@ public:
 	UNGInventoryManagerComponent* GetViewedInventory() const;
 	void OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
 	void CloseInventoryView();
+	uint32 RequestUseItem(UNGInventoryItemInstance* Item, bool bSecondary, FNGInventoryRequestCompleted::FDelegate Completion = {});
+	bool UseItemOnServer(UNGInventoryItemInstance* Item, bool bSecondary);
 	/** Nonzero ID means submitted, not accepted. Completion does not imply replication has arrived. */
 	uint32 RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0, FNGInventoryRequestCompleted::FDelegate Completion = {});
 	FNGInventoryRequestCompleted OnRequestCompleted;
@@ -45,6 +47,8 @@ public:
     UFUNCTION(Server, Reliable) void ServerDropItem(uint32 RequestId, ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
 
 private:
+	UFUNCTION(Server, Reliable) void ServerUseItem(uint32 RequestId, APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 ExpectedSlot, bool bSecondary);
+	double NextUseTime = 0.;
 	bool TryBeginStarterGrant();
 	uint32 LastRequestId = 0;
 	TMap<uint32, FNGInventoryRequestCompleted::FDelegate> RequestCallbacks;

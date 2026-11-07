@@ -1,6 +1,7 @@
 #include "NGInventoryPanel.h"
 #include "Inventory/NGInventoryItemInstance.h"
 #include "Inventory/NGInventoryItemDefinition.h"
+#include "Inventory/NGInventoryFragment_ItemActions.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "NGPlayerInventoryManagerComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -104,11 +105,21 @@ bool UNGInventoryPanel::RequestInventoryOperation_Implementation(const FUIInvent
 		|| SlotInfo.Inventory != Inventory.Get() || Inventory->GetItemAtSlot(SlotInfo.SlotIndex) != Item || !Inventory->Contains(Item) || Amount < 0 || Amount > Inventory->GetCount(Item)) return false;
 	if (Operation == EUIInventoryOperation::PrimaryAction)
 	{
+		if (Item->FindFragmentByClass<UNGInventoryFragment_ItemActions>())
+		{
+			return PlayerInventory.IsValid() && Inventory.Get() == PlayerInventory.Get()
+				&& PlayerInventory->RequestUseItem(Item, false, FNGInventoryRequestCompleted::FDelegate::CreateUObject(this, &ThisClass::HandleRequestCompleted)) != 0;
+		}
 		if (!Inventory->GetSlotTag(SlotInfo.SlotIndex).MatchesTag(TAG_NGSlotAction)
 			|| !Combat.IsValid() || Combat->GetOwner() != PC->GetPawn() || !Item->GetItemDef()
 			|| !UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef()))) return false;
 		Combat->RequestEquipItem(Item);
 		return true;
+	}
+	if (Operation == EUIInventoryOperation::SecondaryAction)
+	{
+		return PlayerInventory.IsValid() && Inventory.Get() == PlayerInventory.Get()
+			&& PlayerInventory->RequestUseItem(Item, true, FNGInventoryRequestCompleted::FDelegate::CreateUObject(this, &ThisClass::HandleRequestCompleted)) != 0;
 	}
 	if (Operation == EUIInventoryOperation::Drop)
 		if (auto* Transport = PlayerInventory.Get())
