@@ -1,9 +1,9 @@
 #include "Gameplay/AbilitySystem/NGDeathRagdollCue.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Character/ALSBaseCharacter.h"
 
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDeathRagdollCue, "GameplayCue.Character.Death.Ragdoll");
 
 UNGDeathRagdollCue::UNGDeathRagdollCue(const FObjectInitializer& Init) : Super(Init)
 {

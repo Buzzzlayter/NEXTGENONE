@@ -1,4 +1,5 @@
 #include "NGCharacterStateMachineComponent.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "NGCharacterStateResources.h"
 #include "AbilitySystemComponent.h"
 #include "GCFSMUtilities.h"
@@ -8,12 +9,7 @@
 #include "GameplayCueManager.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/NGAbilitySystem.h"
-#include "Input/NGGameplayInputComponent.h"
-#include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
-#include "Gameplay/Interaction/NGInteraction.h"
-#include "Gameplay/Combat/NGCombat.h"
 
 bool UNGCharacterStateMachineComponent::StartIfReady()
 {
@@ -156,14 +152,7 @@ void UNGCharacterStateMachineComponent::OnRep_ResourceFailure()
 		if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
 		ASC->CancelAllAbilities();
 	}
-	if (auto* Input = GetOwner()->FindComponentByClass<UNGGameplayInputComponent>()) Input->ShutdownInput();
-	if (auto* Interaction = GetOwner()->FindComponentByClass<UNGInteractionComponent>()) Interaction->EndInteraction();
-	if (auto* Combat = GetOwner()->FindComponentByClass<UNGCombatComponent>())
-	{
-		Combat->StopPrimaryInput();
-		if (GetOwner()->HasAuthority()) Combat->SetEquippedOnServer(false);
-	}
-	if (auto* Character = Cast<ACharacter>(GetOwner())) Character->GetCharacterMovement()->DisableMovement();
+	OnResourceFailure.Broadcast();
 	NotifyStateChanged();
 	// This notification means the handoff barrier is released, not gameplay success.
 	OnResourcesReady.Broadcast(GetOwner());

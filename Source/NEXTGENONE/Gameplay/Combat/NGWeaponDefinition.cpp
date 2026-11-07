@@ -1,4 +1,5 @@
 #include "Gameplay/Combat/NGCombat.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Combat/NGBallisticProjectile.h"
 #include "Gameplay/Abilities/NGAimAbility.h"
 #include "Inventory/NGInventoryItemDefinition.h"

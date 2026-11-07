@@ -1,4 +1,5 @@
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
+#include "GameplayTags/NGGameplayTags.h"
 
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "GameFramework/Actor.h"

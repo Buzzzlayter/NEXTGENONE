@@ -106,10 +106,7 @@ public:
 	UFUNCTION(BlueprintPure) int32 GetReserveAmmo() const;
 	UFUNCTION(BlueprintPure) bool IsAiming() const;
 	UFUNCTION(BlueprintPure) UNGInventoryItemInstance* GetEquippedItem() const { return CurrentItem; }
-	UFUNCTION(BlueprintCallable) void RequestSelectSlot(int32 Index);
-	UFUNCTION(BlueprintCallable) void RequestEquipItem(UNGInventoryItemInstance* Item);
 	UFUNCTION(BlueprintCallable) void RequestReload();
-	bool EquipInventoryItemOnServer(UNGInventoryItemInstance* Item);
 	static UNGWeaponDefinition* GetWeaponDefinition(const UNGInventoryItemDefinition* ItemDefinition);
 	bool CompleteReloadOnServer(UNGInventoryItemInstance* Item);
 	void BindInventory();
@@ -118,11 +115,9 @@ public:
 	UFUNCTION(BlueprintCallable) void RequestFire();
 	void StartPrimaryInput();
 	void StopPrimaryInput();
-	void SetEquippedOnServer(bool bEquip);
+	void UnequipOnServer();
 	bool FireOnServer();
 	UFUNCTION(Server, Reliable) void ServerSetEquipped(bool bEquip);
-	UFUNCTION(Server, Reliable) void ServerSelectSlot(int32 Index);
-	UFUNCTION(Server, Reliable) void ServerEquipItem(UNGInventoryItemInstance* Item);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastReload();
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize Start, FVector_NetQuantize End, bool bHit, int32 ShotId,UNGWeaponDefinition* ShotWeapon);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastProjectileImpact(FVector_NetQuantize Point,FVector_NetQuantizeNormal Normal,int32 ShotId,UNGWeaponDefinition* ShotWeapon,bool bCharacter);
@@ -131,6 +126,9 @@ public:
 	// Shared damage entry point rejects stale Pawn/ASC pairings, including corpses.
 	static bool ApplyDamageToPawn(class ANextgenoneCharacter* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit = nullptr);
 private:
+	friend class UNGEquipWeaponItemAbility;
+	bool EquipItemFromAbility(UNGInventoryItemInstance* Item);
+	void SetEquippedOnServer(bool bEquip);
 	UFUNCTION(Server, Reliable) void ServerRequestFire(FVector_NetQuantize ViewOrigin, FVector_NetQuantizeNormal ViewDirection, int32 EquipmentRevision);
 	// Only valid during synchronous activation of GA_Fire; never reused by a later shot.
 	TOptional<FTransform> RequestedShotView;

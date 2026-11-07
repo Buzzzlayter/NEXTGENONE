@@ -38,11 +38,8 @@ R1/R2 реализованы в текущем пакете: ограничен�
   AddItemInternal/RemoveQuantityInternal и FMutationScope объединяют пути; callbacks не могут
   повторно мутировать участников незавершённой операции. Reload использует общий consume с credit
   после всех debits и до inventory notifications. Pickup использует deferred add в выбранный слот.
-- [x] Возвращать причины отказа inventory RPC и идентификатор запроса; различать отправку запроса
-  и подтверждённое серверное выполнение. Не менять серверное состояние оптимистически в UI.
-  RequestDropItem/RequestInventoryTransfer возвращают ID (0 — не отправлено); native OnRequestCompleted
-  сообщает Succeeded/InvalidRequest/StalePawn/RateLimited/AccessDenied/StaleItem/Rejected.
-  Completion не гарантирует, что репликация слотов уже пришла; listen-server completion может быть синхронным.
+- ~~Возвращать причины отказа inventory RPC и идентификатор запроса.~~ Удалено по решению пользователя:
+  UI обновляется только итоговыми данными inventory; bool запроса означает отправку, не серверный успех.
 - [x] Объединять уведомления завершённого набора изменений инвентаря; обновлять затронутые UI-слоты,
   сохранять неизменившиеся подписки и иконки. Замерить эффект до заявления о приросте производительности.
   Один broadcast на mutation/replicated receive; слот пропускает одинаковый presentation snapshot,
@@ -99,9 +96,8 @@ R1/R2 реализованы в текущем пакете: ограничен�
 - [x] R2/R3: smoke ждёт CanFireNow после limiter probe и проверяет доступность gate после hip-fire;
   клиент подтверждает попытку только с экипировкой и без ADS. ADS retry выполняет release/press,
   только если ADS ещё не активен. Прогон не выполнялся.
-- [x] R4: per-request callback регистрируется до отправки; Panel получает server result и ID через
-  OnInventoryRequestCompleted (Blueprint event для оформления отказов). Поддержан синхронный listen server;
-  результат запроса не меняет данные слотов. Runtime не проверен.
+- ~~R4: per-request completion в UI.~~ Отменено пользователем; callbacks/ID/result RPC удалены,
+  остались репликация и OnInventoryChanged. Runtime не проверен.
 - [x] R6: Inventory.InitialContents содержит ItemClass/Count/SlotTag/SlotIndex; нет классификации
   оружия или чтения WeaponDefinition в PlayerInventory. Старые StarterItems не исполняются; значения
   сохранены для ручного переноса. Требуется Blueprint-сетап InitialContents после сборки.

@@ -1,4 +1,5 @@
 #include "Gameplay/Character/NextgenoneCharacter.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Input/NGCharacterInputComponent.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Gameplay/Player/NextgenonePlayerState.h"
@@ -8,7 +9,6 @@
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
 #include "Gameplay/Abilities/NGALSActionAbilities.h"
-#include "Gameplay/Abilities/NGItemUseAbility.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -34,7 +34,7 @@ UAbilitySystemComponent* ANextgenoneCharacter::GetAbilitySystemComponent() const
 }
 bool ANextgenoneCharacter::IsDead() const
 {
-    return CharacterStateMachine && CharacterStateMachine->HasStateTag(TAG_NGDead);
+	return CharacterStateMachine && CharacterStateMachine->HasStateTag(TAG_NGDead);
 }
 float ANextgenoneCharacter::GetHealth() const
 {
@@ -125,7 +125,7 @@ void ANextgenoneCharacter::OnGaitChanged(EALSGait PreviousGait)
 	if (HasAuthority() && GetGait() == EALSGait::Sprinting)
 		if (auto* ASC = GetAbilitySystemComponent())
 		{
-			FGameplayTagContainer ItemActions; ItemActions.AddTag(TAG_NGItemUseAbility);
+			FGameplayTagContainer ItemActions; ItemActions.AddTag(TAG_NGItemActivateAbility);
 			ASC->CancelAbilities(&ItemActions);
 		}
 }
@@ -216,31 +216,39 @@ void ANextgenoneCharacter::RagdollEnd()
 }
 void ANextgenoneCharacter::HealthChanged(const FOnAttributeChangeData& Data)
 {
-    auto* ASC = BoundASC.Get();
-    if (!ASC || ASC->GetAvatarActor() != this || IsDead()) return;
-    if (HasAuthority() && GetHealth() <= 0.f)
-    {
-        ASC->CancelAllAbilities();
-        CharacterStateMachine->NotifyDeath();
-    }
-    OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
+	auto* ASC = BoundASC.Get();
+	if (!ASC || ASC->GetAvatarActor() != this || IsDead()) return;
+	if (HasAuthority() && GetHealth() <= 0.f)
+	{
+		ASC->CancelAllAbilities();
+		CharacterStateMachine->NotifyDeath();
+	}
+	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
 }
 void ANextgenoneCharacter::StateChanged(FGameplayTag Previous, FGameplayTag Current)
 {
-    const bool bNowDead = IsDead();
-    if (bNowDead)
-    {
-        GameplayInput->ShutdownInput();
-        GetCharacterMovement()->DisableMovement();
-    }
-    if (Previous.MatchesTag(TAG_NGDead) != bNowDead) OnDeathChanged.Broadcast(bNowDead);
-    OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
+	const bool bNowDead = IsDead();
+	if (bNowDead)
+	{
+		GameplayInput->ShutdownInput();
+		GetCharacterMovement()->DisableMovement();
+	}
+	if (Previous.MatchesTag(TAG_NGDead) != bNowDead) OnDeathChanged.Broadcast(bNowDead);
+	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
+}
+void ANextgenoneCharacter::StateResourcesFailed()
+{
+	GameplayInput->ShutdownInput();
+	GetCharacterMovement()->DisableMovement();
+	Interaction->EndInteraction();
+	Combat->StopPrimaryInput();
+	if (HasAuthority()) Combat->UnequipOnServer();
 }
 void ANextgenoneCharacter::PossessedBy(AController* C) { Super::PossessedBy(C); TryInitializeGameplay(); }
 void ANextgenoneCharacter::UnPossessed()
 {
 	GameplayInput->ShutdownInput();
-	if (HasAuthority()) Combat->SetEquippedOnServer(false);
+	if (HasAuthority()) Combat->UnequipOnServer();
 	if (!HasAuthority() || CharacterStateMachine->CanReleaseAvatar()) UnbindGameplay();
 	Super::UnPossessed();
 	CharacterStateMachine->RefreshResources();
@@ -249,16 +257,20 @@ void ANextgenoneCharacter::OnRep_PlayerState() { Super::OnRep_PlayerState(); Try
 void ANextgenoneCharacter::OnRep_Controller() { Super::OnRep_Controller(); if (!IsLocallyControlled()) GameplayInput->ShutdownInput(); TryInitializeGameplay(); CharacterStateMachine->RefreshResources(); }
 void ANextgenoneCharacter::BeginPlay()
 {
-    CharacterStateMachine->OnStateChanged.AddUObject(this, &ThisClass::StateChanged);
-    Super::BeginPlay();
-    GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-    TryInitializeGameplay();
-    if (auto* ASC = BoundASC.Get(); ASC && ASC->GetAvatarActor() == this) CharacterStateMachine->NotifyGameplayReady(ASC);
-    CharacterStateMachine->RestorePresentation();
+	CharacterStateMachine->OnStateChanged.AddUObject(this, &ThisClass::StateChanged);
+	CharacterStateMachine->OnResourceFailure.AddUObject(this, &ThisClass::StateResourcesFailed);
+	Super::BeginPlay();
+	if (CharacterStateMachine->HasResourceFailure()) StateResourcesFailed();
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	TryInitializeGameplay();
+	if (auto* ASC = BoundASC.Get(); ASC && ASC->GetAvatarActor() == this) CharacterStateMachine->NotifyGameplayReady(ASC);
+	CharacterStateMachine->RestorePresentation();
 	ApplyCombatPresentation();
 }
 void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
+	CharacterStateMachine->OnResourceFailure.RemoveAll(this);
+	CharacterStateMachine->OnStateChanged.RemoveAll(this);
 	auto* ASC = BoundASC.Get();
 	auto* PS = ASC ? Cast<ANextgenonePlayerState>(ASC->GetOwnerActor()) : nullptr;
 	GameplayInput->ShutdownInput();

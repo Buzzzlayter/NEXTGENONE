@@ -1,4 +1,5 @@
 #include "NGInteractionStateComponent.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "GameFramework/PlayerController.h"

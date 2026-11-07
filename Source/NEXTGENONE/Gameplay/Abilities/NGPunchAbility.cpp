@@ -1,5 +1,5 @@
 #include "Gameplay/Abilities/NGPunchAbility.h"
-#include "Gameplay/Abilities/NGALSActionAbilities.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
@@ -8,7 +8,6 @@
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "Engine/World.h"
 
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGPunchCooldown, "Cooldown.Combat.Punch");
 
 UNGPunchCooldownEffect::UNGPunchCooldownEffect()
 {

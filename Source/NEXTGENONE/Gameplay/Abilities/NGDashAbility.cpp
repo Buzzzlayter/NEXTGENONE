@@ -1,12 +1,10 @@
 #include "Gameplay/Abilities/NGDashAbility.h"
-#include "Gameplay/Abilities/NGALSActionAbilities.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionConstantForce.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDashCooldown, "Cooldown.Movement.Dash");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDashCue, "GameplayCue.Movement.Dash");
 
 UNGDashCooldownEffect::UNGDashCooldownEffect()
 {

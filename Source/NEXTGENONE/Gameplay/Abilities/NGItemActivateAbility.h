@@ -3,23 +3,20 @@
 #include "Abilities/GameplayAbility.h"
 #include "GameplayEffect.h"
 #include "Inventory/NGInventoryItemDefinition.h"
-#include "NativeGameplayTags.h"
-#include "NGItemUseAbility.generated.h"
+#include "NGItemActivateAbility.generated.h"
 
 class UNGInventoryItemInstance;
 class UNGPlayerInventoryManagerComponent;
 struct FOnAttributeChangeData;
 
-NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGUsingItem);
-NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGItemUseAbility);
 
 /** One-shot server grant. SourceObject is the selected item, never the equipped weapon. */
 UCLASS(Abstract, Blueprintable)
-class NEXTGENONE_API UNGItemUseAbility : public UGameplayAbility
+class NEXTGENONE_API UNGItemActivateAbility : public UGameplayAbility
 {
 	GENERATED_BODY()
 public:
-	UNGItemUseAbility();
+	UNGItemActivateAbility();
 	virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		const FGameplayTagContainer* SourceTags=nullptr, const FGameplayTagContainer* TargetTags=nullptr,
 		FGameplayTagContainer* RelevantTags=nullptr) const override;
@@ -35,15 +32,25 @@ class NEXTGENONE_API UNGInventoryFragment_Medical : public UNGInventoryItemFragm
 	GENERATED_BODY()
 public:
 	UPROPERTY(EditDefaultsOnly, Category="Healing", meta=(ClampMin="0.01")) float Healing = 50.f;
-	UPROPERTY(EditDefaultsOnly, Category="Healing", meta=(ClampMin="0.1")) float UseDuration = 3.f;
+	UPROPERTY(EditDefaultsOnly, Category="Healing", meta=(ClampMin="0.1")) float ActivationDuration = 3.f;
 };
 
-UCLASS()
-class NEXTGENONE_API UNGUsingItemEffect : public UGameplayEffect
+/** Weapon-specific executor; generic inventory/UI never calls Combat to equip an item. */
+UCLASS(Blueprintable)
+class NEXTGENONE_API UNGEquipWeaponItemAbility : public UNGItemActivateAbility
 {
 	GENERATED_BODY()
 public:
-	UNGUsingItemEffect();
+	virtual void ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+		FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event) override;
+};
+
+UCLASS()
+class NEXTGENONE_API UNGActivatingItemEffect : public UGameplayEffect
+{
+	GENERATED_BODY()
+public:
+	UNGActivatingItemEffect();
 };
 
 UCLASS()
@@ -55,11 +62,11 @@ public:
 };
 
 UCLASS(Blueprintable)
-class NEXTGENONE_API UNGUseMedkitAbility : public UNGItemUseAbility
+class NEXTGENONE_API UNGActivateMedkitAbility : public UNGItemActivateAbility
 {
 	GENERATED_BODY()
 public:
-	UNGUseMedkitAbility();
+	UNGActivateMedkitAbility();
 	virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		const FGameplayTagContainer* SourceTags=nullptr, const FGameplayTagContainer* TargetTags=nullptr,
 		FGameplayTagContainer* RelevantTags=nullptr) const override;
@@ -68,18 +75,18 @@ public:
 	virtual void EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bCancelled) override;
 private:
-	UFUNCTION() void FinishUse();
+	UFUNCTION() void FinishActivation();
 	UFUNCTION() void InventoryChanged();
 	void HealthChanged(const FOnAttributeChangeData& Change);
 	void BlockingTagChanged(FGameplayTag Tag, int32 Count);
-	void CancelUse();
-	TWeakObjectPtr<UAbilitySystemComponent> UseASC;
-	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> UseInventory;
-	TWeakObjectPtr<AActor> UseAvatar;
+	void CancelActivation();
+	TWeakObjectPtr<UAbilitySystemComponent> ActivationASC;
+	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> ActivationInventory;
+	TWeakObjectPtr<AActor> ActivationAvatar;
 	FDelegateHandle HealthHandle;
 	FDelegateHandle TagHandle;
-	int32 UseSlot = INDEX_NONE;
-	int32 UseCount = 0;
+	int32 ActivationSlot = INDEX_NONE;
+	int32 ActivationCount = 0;
 	float HealingAmount = 0.f;
-	FActiveGameplayEffectHandle UsingEffect;
+	FActiveGameplayEffectHandle ActivationEffect;
 };

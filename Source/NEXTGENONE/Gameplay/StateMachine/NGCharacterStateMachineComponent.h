@@ -35,6 +35,7 @@ public:
 	const UNGControlStateDefinition* GetAbilityStateDefinition(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
 	FNGCharacterStateChanged OnStateChanged;
 	FNGCharacterStateResourcesReady OnResourcesReady;
+	FSimpleMulticastDelegate OnResourceFailure;
 	void RegisterResources(UNGCharacterStateResources* Resources);
 	void UnregisterResources(UNGCharacterStateResources* Resources);
 	UAbilitySystemComponent* GetReadyASC() const;

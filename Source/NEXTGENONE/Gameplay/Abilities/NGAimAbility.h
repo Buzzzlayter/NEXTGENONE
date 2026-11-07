@@ -3,11 +3,8 @@
 #include "CoreMinimal.h"
 #include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
 #include "GameplayEffect.h"
-#include "NativeGameplayTags.h"
 #include "NGAimAbility.generated.h"
 
-NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInputAim);
-NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGWeaponAiming);
 
 /** Replicated GAS state, also applied predictively by the owning client. */
 UCLASS()

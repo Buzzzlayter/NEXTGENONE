@@ -1,4 +1,5 @@
 #include "Gameplay/Combat/NGCombat.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Player/NextgenonePlayerState.h"
@@ -6,12 +7,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
-#include "NativeGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 #include "Inventory/NGInventoryManagerComponent.h"
 #include "Inventory/NGInventoryItemDefinition.h"
-#include "Inventory/NGInventoryFragment_ItemActions.h"
-#include "Gameplay/Abilities/NGItemUseAbility.h"
 #include "Inventory/NGInventoryItemInstance.h"
 #include "Gameplay/Combat/NGBallisticProjectile.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -20,11 +18,6 @@
 #include "Gameplay/Combat/NGWeaponVFX.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Abilities/NGAimAbility.h"
-#include "Gameplay/Abilities/NGALSActionAbilities.h"
-
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGFireInput, "Input.Combat.Fire");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDamageAmount, "Data.Damage");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGReloadInput, "Input.Combat.Reload");
 
 
 UNGCombatComponent::UNGCombatComponent()
@@ -91,9 +84,19 @@ void UNGCombatComponent::RequestEquip(bool bEquip)
 {
 	const auto* Pawn = Cast<APawn>(GetOwner());
 	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
-	if (Pawn->HasAuthority()) SetEquippedOnServer(bEquip); else ServerSetEquipped(bEquip);
+	if (bEquip)
+	{
+		const auto* Player = Pawn->GetPlayerState<ANextgenonePlayerState>();
+		if (Player && CurrentItem) Player->Inventory->RequestActivationItem(CurrentItem);
+	}
+	else if (Pawn->HasAuthority()) SetEquippedOnServer(false); else ServerSetEquipped(false);
 }
-void UNGCombatComponent::ServerSetEquipped_Implementation(bool bEquip) { SetEquippedOnServer(bEquip); }
+void UNGCombatComponent::ServerSetEquipped_Implementation(bool bEquip)
+{
+    if (!bEquip) SetEquippedOnServer(false);
+}
+void UNGCombatComponent::UnequipOnServer() { SetEquippedOnServer(false); }
+
 void UNGCombatComponent::SetEquippedOnServer(bool bEquip)
 {
 	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
@@ -111,6 +114,7 @@ void UNGCombatComponent::SetEquippedOnServer(bool bEquip)
 	if (bEquip && (!Weapon || !BoundInventory->Contains(CurrentItem) || !BoundInventory->GetSlotTag(BoundInventory->GetSlotIndex(CurrentItem)).MatchesTag(TAG_NGSlotAction))) return;
 	WeaponHandles.Remove(GrantedASC.Get()); GrantedASC.Reset();
 	Equipment.bEquipped = bEquip; ++Equipment.Revision;
+	if (CurrentItem) CurrentItem->SetEquipped(bEquip);
 	if (bEquip)
 	{
 		Equipment.Definition = Weapon;
@@ -130,7 +134,7 @@ void UNGCombatComponent::SetEquippedOnServer(bool bEquip)
 	}
 	OnRep_CurrentItem(); OnRep_Equipment(); OnRep_Ammo(); Pawn->ForceNetUpdate();
 }
-bool UNGCombatComponent::EquipInventoryItemOnServer(UNGInventoryItemInstance* Item)
+bool UNGCombatComponent::EquipItemFromAbility(UNGInventoryItemInstance* Item)
 {
 	auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
 	BindInventory();
@@ -141,35 +145,6 @@ bool UNGCombatComponent::EquipInventoryItemOnServer(UNGInventoryItemInstance* It
 	SetEquippedOnServer(false); CurrentItem = Item; SetEquippedOnServer(true);
 	return Equipment.bEquipped && CurrentItem == Item;
 }
-void UNGCombatComponent::RequestSelectSlot(int32 Index)
-{
-	const auto* Pawn = Cast<APawn>(GetOwner());
-	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
-	if (Pawn->HasAuthority()) ServerSelectSlot_Implementation(Index); else ServerSelectSlot(Index);
-}
-void UNGCombatComponent::ServerSelectSlot_Implementation(int32 Index)
-{
-	BindInventory();
-	if (!BoundInventory.IsValid()) return;
-	const int32 Slot = BoundInventory->FindSlotByTag(TAG_NGSlotAction, Index);
-	if (auto* Item = BoundInventory->GetItemAtSlot(Slot))
-    {
-        if (Item->FindFragmentByClass<UNGInventoryFragment_ItemActions>())
-        {
-            auto* Pawn = Cast<APawn>(GetOwner());
-            auto* Player = Pawn ? Pawn->GetPlayerState<ANextgenonePlayerState>() : nullptr;
-            if (Player) Player->Inventory->UseItemOnServer(Item, false);
-        }
-        else EquipInventoryItemOnServer(Item); // Existing weapon definitions remain compatible.
-    }
-}
-void UNGCombatComponent::RequestEquipItem(UNGInventoryItemInstance* Item)
-{
-	const auto* Pawn = Cast<APawn>(GetOwner());
-	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
-	if (Pawn->HasAuthority()) EquipInventoryItemOnServer(Item); else ServerEquipItem(Item);
-}
-void UNGCombatComponent::ServerEquipItem_Implementation(UNGInventoryItemInstance* Item) { EquipInventoryItemOnServer(Item); }
 bool UNGCombatComponent::IsAiming() const
 {
 	const auto* Pawn = Cast<ANextgenoneCharacter>(GetOwner());
@@ -256,7 +231,7 @@ bool UNGCombatComponent::FireOnServer()
 	if (!Pawn || !Pawn->HasAuthority() || !ASC || !PS || !Def || !Equipment.bEquipped || Pawn->IsDead() || Pawn->GetHealth() <= 0 || !Pawn->GetController() || GetMagazineAmmo() <= 0 || !PS->Inventory->Contains(CurrentItem)) return false;
 	FString WeaponError;
 	if (!Def->ValidateDefinition(WeaponError)) return false;
-	if (!ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming) || ASC->HasMatchingGameplayTag(TAG_NGUsingItem)) return false;
+	if (!ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming) || ASC->HasMatchingGameplayTag(TAG_NGActivatingItem)) return false;
 	if (ASC->HasMatchingGameplayTag(TAG_NGRagdollActive) || ASC->HasMatchingGameplayTag(TAG_NGRollActive)) return false;
 	if (ASC->HasMatchingGameplayTag(TAG_NGDashActive) || ASC->HasMatchingGameplayTag(TAG_NGMantleActive) || ASC->HasMatchingGameplayTag(TAG_NGPunchActive) || ASC->HasMatchingGameplayTag(TAG_NGReloadActive)) return false;
 	if (!ASC->CanFireNow(Pawn)) return false;
@@ -318,7 +293,7 @@ bool UNGCombatComponent::ApplyDamageToPawn(ANextgenoneCharacter* Target, UAbilit
 	if (Hit) Context.AddHitResult(*Hit);
 	auto Spec = Source->MakeOutgoingSpec(UNGDamageEffect::StaticClass(), 1.f, Context);
 	if (!Spec.IsValid()) return false;
-	Spec.Data->SetSetByCallerMagnitude(TAG_NGDamageAmount, Damage);
+	Spec.Data->SetSetByCallerMagnitude(TAG_NGDamage, Damage);
 	Source->ApplyGameplayEffectSpecToTarget(*Spec.Data, TargetASC);
 	return true;
 }
@@ -379,8 +354,6 @@ void UNGCombatComponent::MulticastReload_Implementation()
 		if (Def->CharacterReloadMontage) Pawn->PlayAnimMontage(Def->CharacterReloadMontage);
 	}
 }
-
-
 
 
 void UNGCombatComponent::MulticastPunchStarted_Implementation(FVector_NetQuantizeNormal Direction, UAnimMontage* Montage)

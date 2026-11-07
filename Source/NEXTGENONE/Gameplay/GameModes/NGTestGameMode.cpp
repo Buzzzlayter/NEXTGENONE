@@ -1,11 +1,13 @@
 #include "Gameplay/GameModes/NGTestGameMode.h"
+#include "Gameplay/Debug/NGCombatSmokeComponent.h"
+#include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Player/NextgenonePlayerState.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Player/NextgenonePlayerController.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Gameplay/Combat/NGCombat.h"
-#include "Gameplay/Abilities/NGAimAbility.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -41,7 +43,9 @@ void ANGCombatTestGameMode::AskClients(int32 Command)
     Request.Command = Command; Request.ExpectedHealth = ExpectedHealth; Request.ExpectedAmmo = ExpectedAmmo;
     Request.Shooter = Cast<ANextgenoneCharacter>(Players[0]->GetPawn());
     Request.Target = Corpse.IsValid() ? Corpse.Get() : Cast<ANextgenoneCharacter>(Players[1]->GetPawn());
-    for (auto PC : Players) if (PC.IsValid()) PC->ClientSmoke(Request);
+    for (auto PC : Players)
+        if (PC.IsValid())
+            if (auto* Smoke = PC->FindComponentByClass<UNGCombatSmokeComponent>()) Smoke->ClientSmoke(Request);
     PhaseTime = GetWorld()->GetTimeSeconds();
 }
 void ANGCombatTestGameMode::SendShooter(int32 Command)
@@ -49,7 +53,7 @@ void ANGCombatTestGameMode::SendShooter(int32 Command)
     FNGCombatSmokeRequest Request;
     Request.Command = Command; Request.ActionSlot = ActionSlot;
     Request.Target = Cast<ANextgenoneCharacter>(Players[1]->GetPawn());
-    Players[0]->ClientSmoke(Request);
+    if (auto* Smoke = Players[0]->FindComponentByClass<UNGCombatSmokeComponent>()) Smoke->ClientSmoke(Request);
 }
 void ANGCombatTestGameMode::SmokeTick()
 {
@@ -60,6 +64,15 @@ void ANGCombatTestGameMode::SmokeTick()
         Players.Reset();
         for (TActorIterator<ANextgenonePlayerController> It(GetWorld()); It; ++It) if (It->GetPawn()) Players.Add(*It);
         if (Players.Num() != 2) return;
+        for (auto PC : Players)
+        {
+            if (!PC->FindComponentByClass<UNGCombatSmokeComponent>())
+            {
+                auto* Smoke = NewObject<UNGCombatSmokeComponent>(PC.Get());
+                PC->AddInstanceComponent(Smoke);
+                Smoke->RegisterComponent();
+            }
+        }
         for (int32 Index = 0; Index < 2; ++Index)
         {
             auto* Pawn = Cast<ANextgenoneCharacter>(Players[Index]->GetPawn());
@@ -121,7 +134,11 @@ void ANGCombatTestGameMode::SmokeTick()
         const float ProbeInterval = FMath::Max(.25f, Def->FireInterval);
         if (!ASC || !ASC->TryCommitFire(A, ProbeInterval) || ASC->TryCommitFire(A, ProbeInterval))
         { Fail(TEXT("immediate limiter reactivation accepted")); return; }
-        A->Combat->SetEquippedOnServer(false); A->Combat->SetEquippedOnServer(true);
+        auto* ProbeItem = A->Combat->GetEquippedItem();
+        A->Combat->UnequipOnServer();
+        auto* Player = A->GetPlayerState<ANextgenonePlayerState>();
+        if (!Player || !Player->Inventory->ActivateItemOnServer(ProbeItem))
+        { Fail(TEXT("configured item equip ability failed")); return; }
         if (ASC->CanFireNow(A)) { Fail(TEXT("reequip reset persistent fire limiter")); return; }
         UE_LOG(LogTemp, Display, TEXT("NG_LIMITER_PASS direct_server_gate reactivation=blocked reequip=blocked"));
         Phase = 10; PhaseTime = Now; Reports.Reset(); ExpectedReport = 7; return;

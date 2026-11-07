@@ -1,4 +1,5 @@
-#include "NGCharacterInputComponent.h"
+#include "Gameplay/Input/NGCharacterInputComponent.h"
+#include "GameplayTags/NGGameplayTags.h"
 
 #include "Input/PlayerInputSubsystem.h"
 #include "AbilitySystem/NGAbilitySystem.h"
@@ -6,28 +7,6 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "Gameplay/Combat/NGCombat.h"
-#include "Gameplay/Abilities/NGALSActionAbilities.h"
-
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputMove, "Input.Move");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookMouse, "Input.Look.Mouse");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLookStick, "Input.Look.Stick");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputSprint, "Input.Sprint");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputStance, "Input.Stance");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputWalk, "Input.Walk");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputCameraTap, "Input.Camera.Tap");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputCameraHeld, "Input.Camera.Held");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputVelocity, "Input.Rotation.Velocity");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputLooking, "Input.Rotation.Looking");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputPrimary, "Input.Combat.Primary");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputEquip, "Input.Equipment.Equip");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputUnequip, "Input.Equipment.Unequip");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot1, "Input.ActionBar.Slot1");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot2, "Input.ActionBar.Slot2");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot3, "Input.ActionBar.Slot3");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot4, "Input.ActionBar.Slot4");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputActionSlot5, "Input.ActionBar.Slot5");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_InputReload, "Input.Equipment.Reload");
 
 void UNGCharacterInputComponent::BindInputPolicy()
 {
@@ -64,7 +43,6 @@ void UNGCharacterInputComponent::HandleNativeInput_Implementation(FGameplayTag T
 {
 	APawn* Pawn = Cast<APawn>(GetOwner());
 	AALSBaseCharacter* ALS = Cast<AALSBaseCharacter>(Pawn);
-	UNGCombatComponent* Combat = Pawn ? Pawn->FindComponentByClass<UNGCombatComponent>() : nullptr;
 	const bool bReleased = Phase == ETriggerEvent::Completed || Phase == ETriggerEvent::Canceled;
 	const bool bStarted = Phase == ETriggerEvent::Triggered && !ActivatedNativeActions.Contains(Tag);
 	if (Phase == ETriggerEvent::Triggered) ActivatedNativeActions.Add(Tag);
@@ -87,39 +65,21 @@ void UNGCharacterInputComponent::HandleNativeInput_Implementation(FGameplayTag T
 		Pawn->AddControllerPitchInput(Look.Y * (bStick ? StickPitchDegreesPerSecond * Delta : 1.f));
 		return;
 	}
-	if (Tag == TAG_InputPrimary && Combat)
-	{
-		if (bStarted) Combat->StartPrimaryInput();
-		else if (bReleased) Combat->StopPrimaryInput();
-		return;
-	}
 	if (Tag == TAG_InputSprint && ALS && (bStarted || bReleased)) { ALS->SprintAction(bStarted); return; }
-	if (Tag == TAG_NGInputRagdoll)
-	{
-		// Compatibility for NativeInputActions; prefer a single AbilityInputActions route.
-		if (auto* ASC = GetInputASC())
-		{
-			if (bStarted) ASC->AbilityInputTagPressed(Tag);
-			else if (bReleased) ASC->AbilityInputTagReleased(Tag);
-		}
-		return;
-	}
-	if (bStarted && Combat)
-	{
-		const FGameplayTag ActionSlots[] = {TAG_InputActionSlot1, TAG_InputActionSlot2, TAG_InputActionSlot3, TAG_InputActionSlot4, TAG_InputActionSlot5};
-		for (int32 Index = 0; Index < UE_ARRAY_COUNT(ActionSlots); ++Index)
-			if (Tag == ActionSlots[Index]) { Combat->StopPrimaryInput(); Combat->RequestSelectSlot(Index); return; }
-		if (Tag == TAG_InputEquip) { Combat->StopPrimaryInput(); Combat->RequestEquip(true); }
-		else if (Tag == TAG_InputUnequip) { Combat->StopPrimaryInput(); Combat->RequestEquip(false); }
-		else if (Tag == TAG_InputReload) Combat->RequestReload();
-	}
 	if (bStarted && ALS)
 	{
-		if (Tag == TAG_InputStance) ALS->StanceAction();
-		else if (Tag == TAG_InputWalk) ALS->WalkAction();
-		else if (Tag == TAG_InputCameraTap) ALS->CameraTapAction();
-		else if (Tag == TAG_InputCameraHeld) ALS->CameraHeldAction();
-		else if (Tag == TAG_InputVelocity) ALS->VelocityDirectionAction();
-		else if (Tag == TAG_InputLooking) ALS->LookingDirectionAction();
+		if (Tag == TAG_InputStance) { ALS->StanceAction(); return; }
+		else if (Tag == TAG_InputWalk) { ALS->WalkAction(); return; }
+		else if (Tag == TAG_InputCameraTap) { ALS->CameraTapAction(); return; }
+		else if (Tag == TAG_InputCameraHeld) { ALS->CameraHeldAction(); return; }
+		else if (Tag == TAG_InputVelocity) { ALS->VelocityDirectionAction(); return; }
+		else if (Tag == TAG_InputLooking) { ALS->LookingDirectionAction(); return; }
 	}
+	// Native compatibility: unknown action tags are forwarded without domain-specific routing.
+	if (UNGAbilitySystemComponent* ASC = GetInputASC(); ASC && ASC->GetAvatarActor() == Pawn)
+	{
+		if (bStarted) ASC->AbilityInputTagPressed(Tag);
+		else if (bReleased) ASC->AbilityInputTagReleased(Tag);
+	}
+
 }

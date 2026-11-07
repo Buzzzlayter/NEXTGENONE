@@ -14,8 +14,6 @@ class ANGItemPickup;
 class UNGInventoryItemInstance;
 class UStaticMeshComponent;
 inline constexpr ECollisionChannel NGInteractionChannel=ECC_GameTraceChannel1;
-NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInteractionBlocked);
-NEXTGENONE_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGInteractionAbility);
 
 UINTERFACE(BlueprintType)
 class NEXTGENONE_API UNGInteractable : public UInterface { GENERATED_BODY() };

@@ -1,4 +1,5 @@
 #include "Gameplay/Abilities/NGALSActionAbilities.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
@@ -7,12 +8,6 @@
 #include "Engine/SkeletalMesh.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputRoll, "Input.Roll");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputRagdoll, "Input.Ragdoll");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGRollActive, "State.Roll");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGRagdollActive, "State.Ragdoll");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_ALSActionCooldown, "Cooldown.Movement.ALSAction");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGRagdollAbility, "Ability.Type.Ragdoll");
 
 namespace
 {

@@ -1,9 +1,8 @@
 #include "Gameplay/Interaction/NGInteraction.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Player/NGPlayerContext.h"
-#include "Gameplay/Abilities/NGALSActionAbilities.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Interaction/NGItemPickup.h"
-#include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
@@ -21,8 +20,6 @@
 #include "Misc/DataValidation.h"
 #endif
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionBlocked, "State.Interaction.Blocked");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionAbility, "Ability.Type.Interaction");
 
 namespace
 {
@@ -120,11 +117,8 @@ bool UNGInteractionSubsystem::TakePickup(ANGItemPickup* Pickup,ANextgenoneCharac
 	// Initial placed items use definition fragments; dropped items restore the exact saved stats.
 	auto* Item=Pickup->HasSavedItemState() ? PS->Inventory->AddItemState(State,false,Slot) : PS->Inventory->AddItemDefinitionDeferred(State.ItemClass,State.Count,Slot);
 	if (!Item) return false;
-	const bool bAutoEquip=Pickup->bAutoEquipWhenHandsEmpty;
 	Pickup->ConsumeForTransfer();
 	PS->Inventory->NotifyInventoryChanged();
-	const auto* Def=GetDefault<UNGInventoryItemDefinition>(State.ItemClass);
-	if (bAutoEquip && UNGCombatComponent::GetWeaponDefinition(Def) && !Pawn->Combat->GetEquipment().bEquipped) Pawn->Combat->EquipInventoryItemOnServer(Item);
 	return true;
 }
 ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* Pawn,UNGInventoryItemInstance* Item,int32 Count)

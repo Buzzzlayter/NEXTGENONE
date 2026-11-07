@@ -5,12 +5,11 @@
 
 class UGameplayAbility;
 
-/** Server-selected ability classes. UI never decides which ability class to execute. */
+/** Server-selected activation ability. UI never decides which ability class to execute. */
 UCLASS(DisplayName="Item Actions")
 class GAMEPLAYFOUNDATION_API UNGInventoryFragment_ItemActions : public UNGInventoryItemFragment
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY(EditDefaultsOnly, Category="Actions") TSubclassOf<UGameplayAbility> PrimaryAbility;
-	UPROPERTY(EditDefaultsOnly, Category="Actions") TSubclassOf<UGameplayAbility> SecondaryAbility;
+	UPROPERTY(EditDefaultsOnly, Category="Actions") TSubclassOf<UGameplayAbility> ActivationAbility;
 };

@@ -88,14 +88,14 @@ bool UNGInventoryItemDefinition::ValidateDefinition(FString& Error) const
         if (!Fragment) { Error = TEXT("Null item fragment."); return false; }
         if (const auto* Actions = Cast<UNGInventoryFragment_ItemActions>(Fragment))
         {
-            if (bActionsFound || (!Actions->PrimaryAbility && !Actions->SecondaryAbility))
-            { Error = TEXT("Item requires at most one nonempty Item Actions fragment."); return false; }
+            if (bActionsFound || !Actions->ActivationAbility)
+            { Error = TEXT("Item requires at most one Item Actions fragment with an ActivationAbility."); return false; }
             bActionsFound = true;
-            for (auto Action : {Actions->PrimaryAbility, Actions->SecondaryAbility})
-                if (Action && (Action->HasAnyClassFlags(CLASS_Abstract)
-                    || Action.GetDefaultObject()->GetNetExecutionPolicy() != EGameplayAbilityNetExecutionPolicy::ServerOnly
-                    || Action.GetDefaultObject()->GetInstancingPolicy() != EGameplayAbilityInstancingPolicy::InstancedPerActor))
-                { Error = TEXT("Item actions require concrete ServerOnly/InstancedPerActor abilities."); return false; }
+            const auto Ability = Actions->ActivationAbility;
+            if (Ability->HasAnyClassFlags(CLASS_Abstract)
+                || Ability.GetDefaultObject()->GetNetExecutionPolicy() != EGameplayAbilityNetExecutionPolicy::ServerOnly
+                || Ability.GetDefaultObject()->GetInstancingPolicy() != EGameplayAbilityInstancingPolicy::InstancedPerActor)
+            { Error = TEXT("ActivationAbility requires a concrete ServerOnly/InstancedPerActor ability."); return false; }
         }
         if (const auto* Equipment = Cast<UNGInventoryFragment_Equipment>(Fragment))
         {

@@ -66,4 +66,5 @@ private:
 	void RequestALSAbility(FGameplayTag InputTag);
 	void HealthChanged(const FOnAttributeChangeData& Data);
 	void StateChanged(FGameplayTag Previous, FGameplayTag Current);
+	void StateResourcesFailed();
 };

@@ -1,8 +1,6 @@
-#include "Gameplay/Abilities/NGItemUseAbility.h"
 #include "Gameplay/Combat/NGCombat.h"
-#include "Gameplay/Abilities/NGAimAbility.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
-#include "Gameplay/Abilities/NGALSActionAbilities.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Inventory/NGInventoryItemInstance.h"
 
@@ -14,7 +12,7 @@ UNGFireAbility::UNGFireAbility()
 	ActivationRequiredTags.AddTag(TAG_NGWeaponAiming);
 	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	ActivationBlockedTags.AddTag(TAG_NGDead);
-	ActivationBlockedTags.AddTag(TAG_NGUsingItem);
+	ActivationBlockedTags.AddTag(TAG_NGActivatingItem);
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
 	ActivationBlockedTags.AddTag(TAG_NGPunchActive);
@@ -28,7 +26,7 @@ UNGReloadAbility::UNGReloadAbility()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
 	ActivationBlockedTags.AddTag(TAG_NGDead);
-	ActivationBlockedTags.AddTag(TAG_NGUsingItem); ActivationBlockedTags.AddTag(TAG_NGPunchActive);
+	ActivationBlockedTags.AddTag(TAG_NGActivatingItem); ActivationBlockedTags.AddTag(TAG_NGPunchActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive); ActivationBlockedTags.AddTag(TAG_NGDashActive); ActivationBlockedTags.AddTag(TAG_NGReloadActive);
 	ActivationOwnedTags.AddTag(TAG_NGReloadActive);
 }

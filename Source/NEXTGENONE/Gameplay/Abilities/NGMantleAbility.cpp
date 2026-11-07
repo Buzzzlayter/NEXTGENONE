@@ -1,5 +1,5 @@
 #include "Gameplay/Abilities/NGMantleAbility.h"
-#include "Gameplay/Abilities/NGALSActionAbilities.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/TimelineComponent.h"
 #include "Components/SkeletalMeshComponent.h"
