@@ -32,6 +32,7 @@ void UNGPlayerInventoryManagerComponent::BeginPlay()
 
 void UNGPlayerInventoryManagerComponent::EndPlay(EEndPlayReason::Type Reason)
 {
+	RequestCallbacks.Reset();
     if (auto* Player = Cast<APlayerState>(GetOwner()))
         Player->OnPawnSet.RemoveDynamic(this, &ThisClass::PawnChanged);
     ClearViewedContext();
@@ -81,10 +82,11 @@ void UNGPlayerInventoryManagerComponent::ClearViewedContext()
     SessionInteraction.Reset();
     if (Interaction) Interaction->ClearContext(ViewedInventory.Get());
 }
-uint32 UNGPlayerInventoryManagerComponent::RequestDropItem(UNGInventoryItemInstance* Item, int32 Count)
+uint32 UNGPlayerInventoryManagerComponent::RequestDropItem(UNGInventoryItemInstance* Item, int32 Count, FNGInventoryRequestCompleted::FDelegate Completion)
 {
     if (!IsLocalController() && !GetOwner()->HasAuthority()) return 0;
     const uint32 Id = AllocateRequestId();
+    if (Completion.IsBound()) RequestCallbacks.Add(Id, MoveTemp(Completion));
     auto* Expected = Cast<ANextgenoneCharacter>(GetInventoryPawn());
     if (GetOwner()->HasAuthority()) ServerDropItem_Implementation(Id, Expected, Item, Count);
     else ServerDropItem(Id, Expected, Item, Count);
@@ -99,6 +101,9 @@ uint32 UNGPlayerInventoryManagerComponent::AllocateRequestId()
 
 void UNGPlayerInventoryManagerComponent::ClientRequestCompleted_Implementation(uint32 RequestId, ENGInventoryRequestResult Result)
 {
+    FNGInventoryRequestCompleted::FDelegate Completion;
+    RequestCallbacks.RemoveAndCopyValue(RequestId, Completion);
+    Completion.ExecuteIfBound(RequestId, Result); // Removed before callback; safe for synchronous/reentrant requests.
     OnRequestCompleted.Broadcast(RequestId, Result);
 }
 
@@ -178,10 +183,11 @@ bool UNGPlayerInventoryManagerComponent::CanAccessInventory(UNGInventoryManagerC
 		&& Inventory->GetOwner()->GetClass()->ImplementsInterface(UNGInteractable::StaticClass())
 		&& INGInteractable::Execute_CanInteract(Inventory->GetOwner(), CharacterPawn);
 }
-uint32 UNGPlayerInventoryManagerComponent::RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
+uint32 UNGPlayerInventoryManagerComponent::RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount, FNGInventoryRequestCompleted::FDelegate Completion)
 {
     if (!IsLocalController() && !GetOwner()->HasAuthority()) return 0;
     const uint32 Id = AllocateRequestId();
+    if (Completion.IsBound()) RequestCallbacks.Add(Id, MoveTemp(Completion));
     auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
     if (GetOwner()->HasAuthority()) ServerInventoryTransfer_Implementation(Id, CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
     else ServerInventoryTransfer(Id, CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);

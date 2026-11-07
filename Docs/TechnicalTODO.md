@@ -101,7 +101,9 @@ R1/R2 реализованы в текущем пакете: ограничен�
 - [x] R2/R3: smoke ждёт CanFireNow после limiter probe и проверяет доступность gate после hip-fire;
   клиент подтверждает попытку только с экипировкой и без ADS. ADS retry выполняет release/press,
   только если ADS ещё не активен. Прогон не выполнялся.
-- [ ] R4: довести inventory completion до UI, включая синхронный listen server.
+- [x] R4: per-request callback регистрируется до отправки; Panel получает server result и ID через
+  OnInventoryRequestCompleted (Blueprint event для оформления отказов). Поддержан синхронный listen server;
+  результат запроса не меняет данные слотов. Runtime не проверен.
 - [ ] R6: явные стартовые записи вместо классификации оружия в PlayerInventory.
 - [ ] R7: упростить общую inventory invalidation до dirty-флага.
 - [ ] R8: убрать повторную валидацию неизменяемого weapon definition.

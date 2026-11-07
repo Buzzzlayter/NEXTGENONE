@@ -11,7 +11,7 @@ class UNGInventoryManagerComponent;
 class UNGInventoryItemInstance;
 class UNGInteractionComponent;
 
-UENUM()
+UENUM(BlueprintType)
 enum class ENGInventoryRequestResult : uint8
 {
     Succeeded, InvalidRequest, StalePawn, RateLimited, AccessDenied, StaleItem, Rejected
@@ -34,15 +34,16 @@ public:
 	void OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
 	void CloseInventoryView();
 	/** Nonzero ID means submitted, not accepted. Completion does not imply replication has arrived. */
-	uint32 RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0);
+	uint32 RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0, FNGInventoryRequestCompleted::FDelegate Completion = {});
 	FNGInventoryRequestCompleted OnRequestCompleted;
 	UPROPERTY(EditDefaultsOnly, Category="Inventory", meta=(ClampMin="0.01")) float InventoryOperationInterval = .05f;
-    uint32 RequestDropItem(UNGInventoryItemInstance* Item, int32 Count=0);
+    uint32 RequestDropItem(UNGInventoryItemInstance* Item, int32 Count=0, FNGInventoryRequestCompleted::FDelegate Completion = {});
     UFUNCTION(Server, Reliable) void ServerDropItem(uint32 RequestId, ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
 
 private:
 	bool TryBeginStarterGrant();
 	uint32 LastRequestId = 0;
+	TMap<uint32, FNGInventoryRequestCompleted::FDelegate> RequestCallbacks;
 	uint32 AllocateRequestId();
 	UFUNCTION(Client, Reliable) void ClientRequestCompleted(uint32 RequestId, ENGInventoryRequestResult Result);
 	double NextDropTime = 0.0;

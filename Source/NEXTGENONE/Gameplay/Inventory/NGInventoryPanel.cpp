@@ -110,7 +110,8 @@ bool UNGInventoryPanel::RequestInventoryOperation_Implementation(const FUIInvent
 	if (Operation == EUIInventoryOperation::Drop)
 		if (auto* Transport = PlayerInventory.Get())
 		{
-			return Transport->RequestDropItem(Item, Amount) != 0;
+			return Transport->RequestDropItem(Item, Amount,
+				FNGInventoryRequestCompleted::FDelegate::CreateUObject(this, &ThisClass::HandleRequestCompleted)) != 0;
 		}
 	return false;
 }
@@ -125,5 +126,11 @@ bool UNGInventoryPanel::MoveInventoryItem_Implementation(const FUIInventorySlotD
 	if (!Transport || !IsValid(SourceInventory) || !IsValid(TargetInventory) || TargetInventory != Inventory.Get()
 		|| !IsValid(Item) || SourceInventory->GetItemAtSlot(Source.SlotIndex) != Item || Amount < 0 || Amount > SourceInventory->GetCount(Item)
 		|| TargetInventory->GetItemAtSlot(Destination.SlotIndex) != ExpectedTarget) return false;
-	return Transport->RequestInventoryTransfer(SourceInventory, Item, Source.SlotIndex, TargetInventory, Destination.SlotIndex, ExpectedTarget, Amount) != 0;
+	return Transport->RequestInventoryTransfer(SourceInventory, Item, Source.SlotIndex, TargetInventory, Destination.SlotIndex, ExpectedTarget, Amount,
+		FNGInventoryRequestCompleted::FDelegate::CreateUObject(this, &ThisClass::HandleRequestCompleted)) != 0;
+}
+
+void UNGInventoryPanel::HandleRequestCompleted(uint32 RequestId, ENGInventoryRequestResult Result)
+{
+	OnInventoryRequestCompleted(static_cast<int64>(RequestId), Result);
 }
