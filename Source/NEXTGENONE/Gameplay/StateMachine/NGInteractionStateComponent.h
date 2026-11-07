@@ -6,6 +6,7 @@
 
 class UNGInteractionComponent;
 class APawn;
+class APlayerController;
 
 /** UI graph routing only. Does not grant access, own inventory or add input bindings. */
 UCLASS(EditInlineNew, meta=(DisplayName="Interaction UI Router"))
@@ -25,6 +26,7 @@ private:
 	void Route();
 	UFUNCTION() void PawnChanged(APawn* OldPawn, APawn* NewPawn);
 	TWeakObjectPtr<UNGInteractionComponent> ObservedInteraction;
+	TWeakObjectPtr<APlayerController> ObservedController;
 	bool bActive = false;
 	bool bClosedSent = false;
 };

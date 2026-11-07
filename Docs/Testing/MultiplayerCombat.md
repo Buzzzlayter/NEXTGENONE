@@ -1,5 +1,25 @@
 # Combat Foundation: фактическая проверка
 
+## Текущий harness — 2026-11-07, не запускался
+
+Код runner обновлён под Action inventory, выбранный item и GAS ADS. Исторические PASS ниже относятся к старым версиям и не подтверждают этот пакет. Сборка и запуск требуют отдельного разрешения.
+
+Клиентские команды и отчётные RPC вынесены из PlayerController в `UNGCombatSmokeComponent` (`Gameplay/Debug`). Тестовый GameMode создаёт реплицируемый компонент на контроллерах участников только внутри включённого smoke-runner; основной Controller не содержит тестовых RPC, проверок или зависимостей на инвентарь/Combat. Перенос проверен только статически, сборка и сетевой запуск не выполнялись.
+
+Подготовка после сборки: создать отдельный Blueprint-наследник `NGCombatTestGameMode`; назначить ему тот же Character/Controller и `PlayerStateClass=BP_NextgenonePlayerState`, что используются игрой. Проверить Layout и явные **Inventory.InitialContents**: оружие с Count=1/SlotTag=Inventory.Slot.Action, отдельные записи патронов с SlotTag=Inventory.Slot.Storage и Count в пределах MaxStackSize. Старые StarterItems больше не выдаются автоматически. Основной GameMode и defaults проекта не переключать.
+
+Fixture: открытый ровный участок возле координат (0,0,100) и (600,0,100), обычная гравитация, Alive/Dead FSM, отсутствие внешнего урона. В Action должно быть оружие с одним projectile и нулевым spread; magazine содержит достаточно патронов, чтобы убить цель без Reload. HP, damage, magazine и ожидание полёта берутся из текущих данных. Неподходящий fixture заканчивается FAIL, оружие автоматически не создаётся. Таймаут сценария — 120 секунд.
+
+После отдельного разрешения runner запускается с явным классом настроенного тестового режима, например:
+
+```powershell
+Tools/Testing/Run-NGCombatSmoke.ps1 -GameMode /Game/Blueprints/BP_CombatTestGameMode.BP_CombatTestGameMode_C
+```
+
+Этот пример не означает, что Blueprint уже создан. Runner не собирает проект. Использует три Editor-процесса с nullrhi, завершает только собственные процессы. Проверяет выбор Action item, отсутствие расхода при обычном RequestFire без ADS, GAS ADS, сходимость camera ray, настоящий клиентский RequestFire, расход магазина, серверный урон, состояние на обоих клиентах и защиту новой жизни от старого Pawn/context. Client snapshots ожидают репликацию в пределах общего deadline.
+
+Persistent fire limiter проверяется отдельным серверным TryCommitFire/CanFireNow probe до и после re-equip. Это не hostile RPC burst test и не доказательство всей защиты при latency/loss. Прямой FireOnServer без свежего remote view больше не используется. Reload/cancel, inventory race, packet loss, произвольная гравитация и визуал ALS требуют отдельных прогонов.
+
 **Статус после последующих изменений:** перечисленные ниже сетевые PASS относятся к Combat Foundation до объединения классов в `Nextgenone*`. После закрытия редактора пользователем рефакторинг собран: UBT PASS, Blueprint/map migration exit 0, 0 errors и 24 warnings. Логи: `Saved/Logs/NGConsolidationBuild.log` и `NGConsolidation.log`. Новые PIE/сетевые тесты не запускались: для этого требуется отдельный апрув.
 
 Дата: 2026-11-01 (Europe/Moscow). Проект NEXTGENONE, ветка `research/gameplay-foundation`.

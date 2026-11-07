@@ -1,8 +1,17 @@
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
+#include "GameplayTags/NGGameplayTags.h"
 
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
+#include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
+
+bool UNGPlayerAbilitySystemComponent::AreAbilityTagsBlocked(const FGameplayTagContainer& InAbilityTags) const
+{
+	const auto* Avatar = GetAvatarActor();
+	const auto* Machine = Avatar ? Avatar->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
+	return (Machine && Machine->HasResourceFailure()) || Super::AreAbilityTagsBlocked(InAbilityTags);
+}
 
 void UNGPlayerAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, AActor* InAvatarActor)
 {
@@ -17,6 +26,8 @@ void UNGPlayerAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor,
 
 bool UNGPlayerAbilitySystemComponent::IsCurrentServerAvatar(const AActor* ExpectedAvatar) const
 {
+	const auto* Machine = IsValid(ExpectedAvatar) ? ExpectedAvatar->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
+	if (Machine && Machine->HasResourceFailure()) return false;
 	return IsValid(ExpectedAvatar) && GetOwnerActor() && GetOwnerActor()->HasAuthority()
 		&& GetAvatarActor() == ExpectedAvatar && GetWorld();
 }

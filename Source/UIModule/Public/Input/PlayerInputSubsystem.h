@@ -10,6 +10,7 @@ class FPreprocessorManager;
 class UWidget;
 class UInputAction;
 class UInputMappingContext;
+class APlayerController;
 
 USTRUCT()
 struct FPlayerMappingRequest
@@ -101,6 +102,7 @@ private:
 	EInputMode PolicyBaseMode = EInputMode::Game;
 	EGamepadCursorMode PolicyBaseCursor = EGamepadCursorMode::Disabled;
 	bool bGameplayBlocked = false;
+	TWeakObjectPtr<APlayerController> AppliedInputController;
 	void ApplyMappingRequests();
 	void ApplyPolicyRequests();
 	TSharedPtr<FPreprocessorManager> PreprocessorManager;

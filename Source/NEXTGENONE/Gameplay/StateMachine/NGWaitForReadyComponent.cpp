@@ -1,4 +1,5 @@
 #include "NGWaitForReadyComponent.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "NGCharacterStateMachineComponent.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "AbilitySystemGlobals.h"

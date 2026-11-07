@@ -1,4 +1,5 @@
 #include "Gameplay/Abilities/NGJumpAbility.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
@@ -22,6 +23,7 @@ UNGJumpAbility::UNGJumpAbility()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	ActivationBlockedTags.AddTag(TAG_NGDead);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive);
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
 	ActivationBlockedTags.AddTag(TAG_NGPunchActive);

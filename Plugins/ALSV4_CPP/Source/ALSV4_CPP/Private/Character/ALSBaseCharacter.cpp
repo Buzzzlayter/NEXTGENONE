@@ -14,6 +14,7 @@
 #include "Curves/CurveFloat.h"
 #include "Character/ALSCharacterMovementComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -60,7 +61,7 @@ void AALSBaseCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION(AALSBaseCharacter, RotationMode, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(AALSBaseCharacter, OverlayState, COND_SkipOwner);
 	DOREPLIFETIME_CONDITION(AALSBaseCharacter, ViewMode, COND_SkipOwner);
-	DOREPLIFETIME_CONDITION(AALSBaseCharacter, VisibleMesh, COND_SkipOwner);
+	DOREPLIFETIME(AALSBaseCharacter, VisibleMesh);
 }
 
 void AALSBaseCharacter::OnBreakfall_Implementation()
@@ -70,13 +71,9 @@ void AALSBaseCharacter::OnBreakfall_Implementation()
 
 void AALSBaseCharacter::Replicated_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate)
 {
-	// Roll: Simply play a Root Motion Montage.
-	if (GetMesh()->GetAnimInstance())
-	{
-		GetMesh()->GetAnimInstance()->Montage_Play(Montage, PlayRate);
-	}
-
-	Server_PlayMontage(Montage, PlayRate);
+	// Legacy presentation helper: no client-selected asset/rate may cross the network.
+	if (!HasAuthority() || !IsValid(Montage) || !FMath::IsFinite(PlayRate) || PlayRate <= 0.f) return;
+	Multicast_PlayMontage(Montage, PlayRate);
 }
 
 void AALSBaseCharacter::BeginPlay()
@@ -122,6 +119,9 @@ void AALSBaseCharacter::BeginPlay()
 void AALSBaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Apply the latest validated intents after temporary action gates reopen.
+	ProcessPendingClientStateCommands();
 
 	// Set required values
 	SetEssentialValues(DeltaTime);
@@ -241,10 +241,7 @@ void AALSBaseCharacter::RagdollEnd()
 	}
 }
 
-void AALSBaseCharacter::Server_SetMeshLocationDuringRagdoll_Implementation(FVector MeshLocation)
-{
-	TargetRagdollLocation = MeshLocation;
-}
+
 
 void AALSBaseCharacter::SetMovementState(const EALSMovementState NewState, bool bForce)
 {
@@ -303,7 +300,8 @@ void AALSBaseCharacter::SetDesiredStance(EALSStance NewStance)
 
 void AALSBaseCharacter::Server_SetDesiredStance_Implementation(EALSStance NewStance)
 {
-	SetDesiredStance(NewStance);
+	if ((NewStance != EALSStance::Standing && NewStance != EALSStance::Crouching)) return;
+	QueueClientStateCommand(0, static_cast<uint8>(NewStance));
 }
 
 void AALSBaseCharacter::SetDesiredGait(const EALSGait NewGait)
@@ -317,7 +315,8 @@ void AALSBaseCharacter::SetDesiredGait(const EALSGait NewGait)
 
 void AALSBaseCharacter::Server_SetDesiredGait_Implementation(EALSGait NewGait)
 {
-	SetDesiredGait(NewGait);
+	if ((NewGait != EALSGait::Walking && NewGait != EALSGait::Running && NewGait != EALSGait::Sprinting)) return;
+	QueueClientStateCommand(1, static_cast<uint8>(NewGait));
 }
 
 void AALSBaseCharacter::SetDesiredRotationMode(EALSRotationMode NewRotMode)
@@ -331,7 +330,9 @@ void AALSBaseCharacter::SetDesiredRotationMode(EALSRotationMode NewRotMode)
 
 void AALSBaseCharacter::Server_SetDesiredRotationMode_Implementation(EALSRotationMode NewRotMode)
 {
-	SetDesiredRotationMode(NewRotMode);
+	// Aiming is derived from the project's GAS state, never from a locomotion RPC.
+	if ((NewRotMode != EALSRotationMode::VelocityDirection && NewRotMode != EALSRotationMode::LookingDirection)) return;
+	QueueClientStateCommand(2, static_cast<uint8>(NewRotMode));
 }
 
 void AALSBaseCharacter::SetRotationMode(const EALSRotationMode NewRotationMode, bool bForce)
@@ -342,18 +343,11 @@ void AALSBaseCharacter::SetRotationMode(const EALSRotationMode NewRotationMode, 
 		RotationMode = NewRotationMode;
 		OnRotationModeChanged(Prev);
 
-		if (GetLocalRole() == ROLE_AutonomousProxy)
-		{
-			Server_SetRotationMode(NewRotationMode, bForce);
-		}
 	}
 }
 
 
-void AALSBaseCharacter::Server_SetRotationMode_Implementation(EALSRotationMode NewRotationMode, bool bForce)
-{
-	SetRotationMode(NewRotationMode, bForce);
-}
+
 
 void AALSBaseCharacter::SetViewMode(const EALSViewMode NewViewMode, bool bForce)
 {
@@ -372,7 +366,8 @@ void AALSBaseCharacter::SetViewMode(const EALSViewMode NewViewMode, bool bForce)
 
 void AALSBaseCharacter::Server_SetViewMode_Implementation(EALSViewMode NewViewMode, bool bForce)
 {
-	SetViewMode(NewViewMode, bForce);
+	if ((NewViewMode != EALSViewMode::FirstPerson && NewViewMode != EALSViewMode::ThirdPerson)) return;
+	QueueClientStateCommand(3, static_cast<uint8>(NewViewMode));
 }
 
 void AALSBaseCharacter::SetOverlayState(const EALSOverlayState NewState, bool bForce)
@@ -383,10 +378,6 @@ void AALSBaseCharacter::SetOverlayState(const EALSOverlayState NewState, bool bF
 		OverlayState = NewState;
 		OnOverlayStateChanged(Prev);
 
-		if (GetLocalRole() == ROLE_AutonomousProxy)
-		{
-			Server_SetOverlayState(NewState, bForce);
-		}
 	}
 }
 
@@ -396,10 +387,7 @@ void AALSBaseCharacter::SetGroundedEntryState(EALSGroundedEntryState NewState)
 }
 
 
-void AALSBaseCharacter::Server_SetOverlayState_Implementation(EALSOverlayState NewState, bool bForce)
-{
-	SetOverlayState(NewState, bForce);
-}
+
 
 void AALSBaseCharacter::EventOnLanded()
 {
@@ -439,20 +427,11 @@ void AALSBaseCharacter::EventOnJumped()
 	OnJumpedDelegate.Broadcast();
 }
 
-void AALSBaseCharacter::Server_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate)
-{
-	if (GetMesh()->GetAnimInstance())
-	{
-		GetMesh()->GetAnimInstance()->Montage_Play(Montage, PlayRate);
-	}
 
-	ForceNetUpdate();
-	Multicast_PlayMontage(Montage, PlayRate);
-}
 
 void AALSBaseCharacter::Multicast_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate)
 {
-	if (GetMesh()->GetAnimInstance() && !IsLocallyControlled())
+	if (IsValid(Montage) && FMath::IsFinite(PlayRate) && PlayRate > 0.f && GetMesh()->GetAnimInstance())
 	{
 		GetMesh()->GetAnimInstance()->Montage_Play(Montage, PlayRate);
 	}
@@ -466,22 +445,16 @@ void AALSBaseCharacter::Multicast_OnJumped_Implementation()
 	}
 }
 
-void AALSBaseCharacter::Server_RagdollStart_Implementation()
-{
-	Multicast_RagdollStart();
-}
+
 
 void AALSBaseCharacter::Multicast_RagdollStart_Implementation()
 {
 	RagdollStart();
 }
 
-void AALSBaseCharacter::Server_RagdollEnd_Implementation(FVector CharacterLocation)
-{
-	Multicast_RagdollEnd(CharacterLocation);
-}
 
-void AALSBaseCharacter::Multicast_RagdollEnd_Implementation(FVector CharacterLocation)
+
+void AALSBaseCharacter::Multicast_RagdollEnd_Implementation()
 {
 	RagdollEnd();
 }
@@ -599,23 +572,18 @@ float AALSBaseCharacter::GetAnimCurveValue(FName CurveName) const
 
 void AALSBaseCharacter::SetVisibleMesh(USkeletalMesh* NewVisibleMesh)
 {
+	if (!HasAuthority() || !IsValid(NewVisibleMesh)) return;
 	if (VisibleMesh != NewVisibleMesh)
 	{
 		const USkeletalMesh* Prev = VisibleMesh;
 		VisibleMesh = NewVisibleMesh;
 		OnVisibleMeshChanged(Prev);
 
-		if (GetLocalRole() != ROLE_Authority)
-		{
-			Server_SetVisibleMesh(NewVisibleMesh);
-		}
+
 	}
 }
 
-void AALSBaseCharacter::Server_SetVisibleMesh_Implementation(USkeletalMesh* NewVisibleMesh)
-{
-	SetVisibleMesh(NewVisibleMesh);
-}
+
 
 void AALSBaseCharacter::SetRightShoulder(bool bNewRightShoulder)
 {
@@ -656,6 +624,7 @@ void AALSBaseCharacter::RagdollUpdate(float DeltaTime)
 
 	// Set the Last Ragdoll Velocity.
 	const FVector NewRagdollVel = GetMesh()->GetPhysicsLinearVelocity(NAME_root);
+	if (NewRagdollVel.ContainsNaN()) return;
 	LastRagdollVelocity = (NewRagdollVel != FVector::ZeroVector || IsLocallyControlled())
 		                      ? NewRagdollVel
 		                      : LastRagdollVelocity / 2;
@@ -676,18 +645,17 @@ void AALSBaseCharacter::RagdollUpdate(float DeltaTime)
 
 void AALSBaseCharacter::SetActorLocationDuringRagdoll(float DeltaTime)
 {
-	if (IsLocallyControlled())
+	if (HasAuthority())
 	{
-		// Set the pelvis as the target location.
-		TargetRagdollLocation = GetMesh()->GetSocketLocation(NAME_Pelvis);
-		if (!HasAuthority())
-		{
-			Server_SetMeshLocationDuringRagdoll(TargetRagdollLocation);
-		}
+		// Server physics owns the capsule target; clients never supply body coordinates.
+		const FVector PelvisLocation = GetMesh()->GetSocketLocation(NAME_Pelvis);
+		if (!PelvisLocation.ContainsNaN()) TargetRagdollLocation = PelvisLocation;
 	}
 
+	if (TargetRagdollLocation.ContainsNaN()) return;
 	// Determine whether the ragdoll is facing up or down and set the target rotation accordingly.
 	const FRotator PelvisRot = GetMesh()->GetSocketRotation(NAME_Pelvis);
+	if (PelvisRot.ContainsNaN()) return;
 
 	if (bReversedPelvis) {
 		bRagdollFaceUp = PelvisRot.Roll > 0.0f;
@@ -735,7 +703,7 @@ void AALSBaseCharacter::SetActorLocationDuringRagdoll(float DeltaTime)
 		const float ImpactDistZ = FMath::Abs(HitResult.ImpactPoint.Z - HitResult.TraceStart.Z);
 		NewRagdollLoc.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - ImpactDistZ + 2.0f;
 	}
-	if (!IsLocallyControlled())
+	if (!HasAuthority())
 	{
 		ServerRagdollPull = FMath::FInterpTo(ServerRagdollPull, 750.0f, DeltaTime, 0.6f);
 		float RagdollSpeed = FVector(LastRagdollVelocity.X, LastRagdollVelocity.Y, 0).Size();
@@ -1419,21 +1387,13 @@ void AALSBaseCharacter::ReplicatedRagdollStart()
 	{
 		Multicast_RagdollStart();
 	}
-	else
-	{
-		Server_RagdollStart();
-	}
 }
 
 void AALSBaseCharacter::ReplicatedRagdollEnd()
 {
 	if (HasAuthority())
 	{
-		Multicast_RagdollEnd(GetActorLocation());
-	}
-	else
-	{
-		Server_RagdollEnd(GetActorLocation());
+		Multicast_RagdollEnd();
 	}
 }
 
@@ -1455,4 +1415,63 @@ void AALSBaseCharacter::OnRep_OverlayState(EALSOverlayState PrevOverlayState)
 void AALSBaseCharacter::OnRep_VisibleMesh(const USkeletalMesh* PreviousSkeletalMesh)
 {
 	OnVisibleMeshChanged(PreviousSkeletalMesh);
+}
+
+
+bool AALSBaseCharacter::CanAcceptClientLocomotion() const
+{
+	return HasAuthority() && GetController() && GetMovementState() != EALSMovementState::Ragdoll
+		&& GetMovementState() != EALSMovementState::Mantling;
+}
+
+bool AALSBaseCharacter::AcceptClientStateCommand(uint8 Command)
+{
+	if (Command >= UE_ARRAY_COUNT(NextClientStateCommandTime) || !CanAcceptClientLocomotion()
+		|| !GetWorld() || !FMath::IsFinite(ClientStateCommandInterval) || ClientStateCommandInterval < .01f) return false;
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextClientStateCommandTime[Command]) return false;
+	NextClientStateCommandTime[Command] = Now + ClientStateCommandInterval;
+	return true;
+}
+
+
+void AALSBaseCharacter::QueueClientStateCommand(uint8 Command, uint8 Value)
+{
+	if (!HasAuthority() || !GetController() || Command >= UE_ARRAY_COUNT(PendingClientStateCommands)) return;
+	if (PendingClientStateController.Get() != GetController())
+	{
+		for (auto& Pending : PendingClientStateCommands) Pending.Reset();
+		PendingClientStateController = GetController();
+	}
+	// Fixed-size coalescing: clients cannot grow a queue while an action blocks locomotion.
+	PendingClientStateCommands[Command] = Value;
+	ProcessPendingClientStateCommands();
+}
+
+void AALSBaseCharacter::ProcessPendingClientStateCommands()
+{
+	if (!HasAuthority()) return;
+	if (!GetController() || PendingClientStateController.Get() != GetController())
+	{
+		for (auto& Pending : PendingClientStateCommands) Pending.Reset();
+		PendingClientStateController.Reset();
+		return;
+	}
+	for (uint8 Command = 0; Command < UE_ARRAY_COUNT(PendingClientStateCommands); ++Command)
+	{
+		auto& Pending = PendingClientStateCommands[Command];
+		if (!Pending.IsSet() || !AcceptClientStateCommand(Command)) continue;
+		const uint8 Value = Pending.GetValue();
+		Pending.Reset(); // State callbacks must not apply this intent twice.
+		switch (Command)
+		{
+		case 0: SetDesiredStance(static_cast<EALSStance>(Value)); break;
+		case 1: SetDesiredGait(static_cast<EALSGait>(Value)); break;
+		case 2:
+			SetDesiredRotationMode(static_cast<EALSRotationMode>(Value));
+			if (GetRotationMode() != EALSRotationMode::Aiming) SetRotationMode(static_cast<EALSRotationMode>(Value));
+			break;
+		case 3: SetViewMode(static_cast<EALSViewMode>(Value)); break;
+		}
+	}
 }

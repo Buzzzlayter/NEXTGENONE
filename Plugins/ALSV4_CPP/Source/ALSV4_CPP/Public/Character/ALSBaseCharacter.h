@@ -60,9 +60,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ALS|Ragdoll System")
 	virtual void RagdollEnd();
 
-	UFUNCTION(BlueprintCallable, Server, Unreliable, Category = "ALS|Ragdoll System")
-	void Server_SetMeshLocationDuringRagdoll(FVector MeshLocation);
-
 	/** Character States */
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Character States")
@@ -104,9 +101,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ALS|Character States")
 	void SetRotationMode(EALSRotationMode NewRotationMode, bool bForce = false);
 
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = "ALS|Character States")
-	void Server_SetRotationMode(EALSRotationMode NewRotationMode, bool bForce);
-
 	UFUNCTION(BlueprintGetter, Category = "ALS|Character States")
 	EALSRotationMode GetRotationMode() const { return RotationMode; }
 
@@ -124,9 +118,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Character States")
 	void SetGroundedEntryState(EALSGroundedEntryState NewState);
-
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = "ALS|Character States")
-	void Server_SetOverlayState(EALSOverlayState NewState, bool bForce);
 
 	UFUNCTION(BlueprintGetter, Category = "ALS|Character States")
 	EALSOverlayState GetOverlayState() const { return OverlayState; }
@@ -150,30 +141,21 @@ public:
 	void Multicast_OnJumped();
 
 	/** Rolling Montage Play Replication*/
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = "ALS|Character States")
-	void Server_PlayMontage(UAnimMontage* Montage, float PlayRate);
-
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = "ALS|Character States")
 	void Multicast_PlayMontage(UAnimMontage* Montage, float PlayRate);
 
 	/** Ragdolling*/
 	UFUNCTION(BlueprintCallable, Category = "ALS|Character States")
-	void ReplicatedRagdollStart();
-
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = "ALS|Character States")
-	void Server_RagdollStart();
+	virtual void ReplicatedRagdollStart();
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = "ALS|Character States")
 	void Multicast_RagdollStart();
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Character States")
-	void ReplicatedRagdollEnd();
-
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = "ALS|Character States")
-	void Server_RagdollEnd(FVector CharacterLocation);
+	virtual void ReplicatedRagdollEnd();
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = "ALS|Character States")
-	void Multicast_RagdollEnd(FVector CharacterLocation);
+	void Multicast_RagdollEnd();
 
 	/** Input */
 
@@ -253,9 +235,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Utility")
 	void SetVisibleMesh(USkeletalMesh* NewSkeletalMesh);
-
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category = "ALS|Utility")
-	void Server_SetVisibleMesh(USkeletalMesh* NewSkeletalMesh);
 
 	/** Camera System */
 
@@ -349,6 +328,7 @@ public:
 
 protected:
 	/** Ragdoll System */
+	virtual bool CanAcceptClientLocomotion() const;
 
 	void RagdollUpdate(float DeltaTime);
 
@@ -619,6 +599,15 @@ protected:
 	bool bEnableNetworkOptimizations = false;
 
 private:
+	// Bounded client locomotion intents only. Actions/assets/transforms have no client RPC.
+	bool AcceptClientStateCommand(uint8 Command);
+	void QueueClientStateCommand(uint8 Command, uint8 Value);
+	void ProcessPendingClientStateCommands();
+	TOptional<uint8> PendingClientStateCommands[4];
+	TWeakObjectPtr<AController> PendingClientStateController;
+	double NextClientStateCommandTime[4] = {};
+	UPROPERTY(EditDefaultsOnly, Category="ALS|Networking", meta=(ClampMin="0.01"))
+	float ClientStateCommandInterval = .03f;
 	UPROPERTY()
 	TObjectPtr<UALSDebugComponent> ALSDebugComponent = nullptr;
 };

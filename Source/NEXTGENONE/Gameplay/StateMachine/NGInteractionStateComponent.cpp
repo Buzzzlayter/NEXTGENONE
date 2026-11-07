@@ -1,4 +1,5 @@
 #include "NGInteractionStateComponent.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -10,11 +11,15 @@ UNGInteractionStateComponent::UNGInteractionStateComponent() { bIsTickEnabled = 
 
 void UNGInteractionStateComponent::Enter()
 {
+	if (auto* PC = ObservedController.Get()) PC->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	ObservedController.Reset();
+	BindPawn(nullptr);
 	bActive = true;
 	bClosedSent = false;
 	Super::Enter();
 	if (auto* PC = GetPlayerController())
 	{
+		ObservedController = PC;
 		PC->OnPossessedPawnChanged.AddUniqueDynamic(this, &ThisClass::PawnChanged);
 		BindPawn(PC->GetPawn());
 	}
@@ -42,7 +47,7 @@ void UNGInteractionStateComponent::Route()
 	const APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;
 	const auto* Machine = PlayerPawn ? PlayerPawn->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
 	if (!Interaction || Interaction->GetOwner() != PlayerPawn || !Interaction->GetContext().IsValid()
-		|| (Machine && Machine->HasStateTag(TAG_NGDead)))
+		|| (Machine && (Machine->HasStateTag(TAG_NGDead) || Machine->HasResourceFailure())))
 	{
 		if (!bClosedSent && !ClosedEvent.IsNone()) UHFSMLibrary::QueueNamedEvent(GetState(), ClosedEvent);
 		bClosedSent = true;
@@ -64,14 +69,15 @@ void UNGInteractionStateComponent::Tick(float DeltaTime)
 		const APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;
 		const auto* Machine = PlayerPawn ? PlayerPawn->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
 		if (!Interaction || Interaction->GetOwner() != PlayerPawn || !Interaction->GetContext().IsValid()
-			|| (Machine && Machine->HasStateTag(TAG_NGDead))) Route();
+			|| (Machine && (Machine->HasStateTag(TAG_NGDead) || Machine->HasResourceFailure()))) Route();
 	}
 }
 
 void UNGInteractionStateComponent::Exit(FName Event)
 {
 	bActive = false;
-	if (auto* PC = GetPlayerController()) PC->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	if (auto* PC = ObservedController.Get()) PC->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	ObservedController.Reset();
 	if (ObservedInteraction.IsValid()) ObservedInteraction->OnContextChanged.RemoveAll(this);
 	ObservedInteraction.Reset();
 	Super::Exit(Event);

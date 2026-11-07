@@ -14,9 +14,6 @@ public:
     virtual void AddPitchInput(float Value) override;
     virtual void OnPossess(APawn* ControlledPawn) override;
     virtual void OnRep_Pawn() override;
-    // Existing test transport remains opt-in; no input bindings or tests are installed here.
-    UFUNCTION(Client, Reliable) void ClientSmoke(int32 Command);
-    UFUNCTION(Server, Reliable) void ServerSmokeResult(int32 Command, bool bPassed);
 private:
 	TWeakObjectPtr<APawn> PreviousInputPawn;
     void RefreshPawnPresentation();

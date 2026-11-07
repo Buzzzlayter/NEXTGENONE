@@ -9,6 +9,8 @@
 
 void UUIWidgetMounterComponent::Enter()
 {
+	ResetBlueprintInput();
+	DemountWidget(true);
 	if (!ensureMsgf(GetState(), TEXT("Widget Mounter has no owning state."))) return;
 	if (!ensureMsgf(WidgetClass, TEXT("Widget Mounter has no widget class."))) return;
 	if (!ensureMsgf(PlaceholderID.IsValid(), TEXT("Widget Mounter has no PlaceholderID."))) return;
@@ -70,7 +72,9 @@ bool UUIWidgetMounterComponent::MountWidget()
 			return false;
 		}
 
-		return MountedLayout->MountWidgetTo(Widget, PlaceholderID);
+		if (!MountedLayout->MountWidgetTo(Widget, PlaceholderID)) return false;
+		MountedPlaceholderID = PlaceholderID;
+		return true;
 	}
 	
 	ensureMsgf(false, TEXT("Widget Mounter has no layout target or viewport fallback."));
@@ -79,13 +83,14 @@ bool UUIWidgetMounterComponent::MountWidget()
 
 void UUIWidgetMounterComponent::DemountWidget(bool bImmediate)
 {
-	if (!Widget) return;
+	if (!Widget) { MountedLayout = nullptr; MountedPlaceholderID = {}; return; }
+	Widget->SetIsEnabled(false); // Deferred fade must not keep an exited state's controls interactive.
 	
-	if (MountedLayout && PlaceholderID.IsValid())
+	if (MountedLayout && MountedPlaceholderID.IsValid())
 	{
 		if (bImmediate)
 		{
-			if (UWidget* const* Placeholder = MountedLayout->GetPlaceholders().Find(PlaceholderID))
+			if (UWidget* const* Placeholder = MountedLayout->GetPlaceholders().Find(MountedPlaceholderID))
 			{
 				if (*Placeholder)
 				{
@@ -96,7 +101,7 @@ void UUIWidgetMounterComponent::DemountWidget(bool bImmediate)
 		}
 		else
 		{
-			MountedLayout->DemountWidget(Widget, PlaceholderID);
+			MountedLayout->DemountWidget(Widget, MountedPlaceholderID);
 		}
 	}
 	else
@@ -106,4 +111,5 @@ void UUIWidgetMounterComponent::DemountWidget(bool bImmediate)
 
 	Widget = nullptr;
 	MountedLayout = nullptr;
+	MountedPlaceholderID = {};
 }

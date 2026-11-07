@@ -9,10 +9,12 @@
 #include "Inventory/NGInventoryManagerComponent.h"
 
 
-
 #include UE_INLINE_GENERATED_CPP_BY_NAME(NGInventoryItemInstance)
 
-
+bool FNGItemState::CanMergeStackWith(const FNGItemState& Other) const
+{
+	return ItemClass == Other.ItemClass && CanSplitStack() && Other.CanSplitStack();
+}
 
 UNGInventoryItemInstance::UNGInventoryItemInstance(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -40,9 +42,18 @@ void UNGInventoryItemInstance::GetLifetimeReplicatedProps(TArray<FLifetimeProper
 
 	DOREPLIFETIME(ThisClass, StatTags);
 	DOREPLIFETIME(ThisClass, ItemDef);
+	DOREPLIFETIME(ThisClass, bEquipped);
 }
 
+void UNGInventoryItemInstance::SetEquipped(bool bValue)
+{
+	const auto* Owner = GetTypedOuter<AActor>();
+	if (!Owner || !Owner->HasAuthority() || bEquipped == bValue) return;
+	bEquipped = bValue;
+	OnRep_Equipped();
+}
 
+void UNGInventoryItemInstance::OnRep_Equipped() { OnStatsChanged.Broadcast(); }
 
 void UNGInventoryItemInstance::AddStatTagStack(FGameplayTag Tag, int32 StackCount)
 {
@@ -81,9 +92,7 @@ void UNGInventoryItemInstance::OnRep_ItemDef()
 		Owner->GetComponents(Managers);
 		for (auto* Manager : Managers) if (Manager->Contains(this))
 		{
-			FNGInventoryChangeMessage Change; Change.InventoryOwner = Manager; Change.Instance = this;
-			Change.NewCount = Manager->GetCount(this); Change.SlotIndex = Manager->GetSlotIndex(this);
-			Manager->OnInventoryChanged.Broadcast(Change);
+			Manager->NotifyInventoryChanged();
 		}
 	}
 }

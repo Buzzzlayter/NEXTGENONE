@@ -105,6 +105,7 @@ bool UHFSMState::GetClosestComponentInHierarchyUp(
 	TSubclassOf<UHFSMStateComponent> ComponentClass,
 	UHFSMStateComponent*& OutComponent)
 {
+	OutComponent = nullptr;
 	if (const UClass* TargetClass = ComponentClass.Get())
 	{
 		IterateUpConditional(

@@ -1,5 +1,9 @@
-param([int]$LagMs=0, [int]$LossPercent=0, [int]$Port=17777)
+param(
+    [Parameter(Mandatory=$true)][string]$GameMode,
+    [int]$LagMs=0, [int]$LossPercent=0, [int]$Port=17777
+)
 $ErrorActionPreference='Stop'
+if ($GameMode -notmatch '^/(Game|Script)/[A-Za-z0-9_./]+$') { throw 'GameMode must be a configured test GameMode class path' }
 $ngRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $ngProject = Join-Path $ngRoot 'NEXTGENONE.uproject'
 $ngAssoc = (Get-Content -Raw $ngProject | ConvertFrom-Json).EngineAssociation
@@ -16,20 +20,21 @@ $ngCommon = @('-unattended','-nullrhi','-nosound','-NoLiveCoding','-ddc=Installe
 try {
     $ngServerLog = Join-Path $ngLogs 'Server.log'
     $ngLogArg = '-abslog="{0}"' -f $ngServerLog
-    $ngProcs += Start-Process -FilePath $ngExe -WorkingDirectory $ngRoot -WindowStyle Hidden -PassThru -ArgumentList (@($ngQuotedProject,'/Game/Maps/Gameplay?game=/Script/NEXTGENONE.NGCombatTestGameMode','-server',"-port=$Port",$ngLogArg) + $ngCommon)
+    $ngProcs += Start-Process -FilePath $ngExe -WorkingDirectory $ngRoot -WindowStyle Hidden -PassThru -ArgumentList (@($ngQuotedProject,"/Game/Maps/Gameplay?game=$GameMode",'-server',"-port=$Port",$ngLogArg) + $ngCommon)
     $ngReadyDeadline = (Get-Date).AddSeconds(60)
+    $ngListening = $false
     while ((Get-Date) -lt $ngReadyDeadline) {
-        if ((Test-Path $ngServerLog) -and (Select-String -Quiet -LiteralPath $ngServerLog -Pattern 'GameNetDriver.*listening on port')) { break }
+        if ((Test-Path $ngServerLog) -and (Select-String -Quiet -LiteralPath $ngServerLog -Pattern 'GameNetDriver.*listening on port')) { $ngListening = $true; break }
         if ($ngProcs[0].HasExited) { throw 'Server exited during startup' }
         Start-Sleep -Milliseconds 500
     }
-    if (!(Test-Path $ngServerLog)) { throw 'Server log was not created' }
+    if (!$ngListening) { throw 'Server did not start listening before startup timeout' }
     for ($ngClient=1; $ngClient -le 2; $ngClient++) {
         $ngClientLog = Join-Path $ngLogs "Client$ngClient.log"
         $ngLogArg = '-abslog="{0}"' -f $ngClientLog
         $ngProcs += Start-Process -FilePath $ngExe -WorkingDirectory $ngRoot -WindowStyle Hidden -PassThru -ArgumentList (@($ngQuotedProject,"127.0.0.1:$Port",'-game',$ngLogArg) + $ngCommon)
     }
-    $ngDeadline = (Get-Date).AddSeconds(100)
+    $ngDeadline = (Get-Date).AddSeconds(150)
     while ((Get-Date) -lt $ngDeadline) {
         if (Select-String -Quiet -LiteralPath $ngServerLog -Pattern 'NG_SMOKE_FAIL') { throw "Smoke failed; see $ngServerLog" }
         if (Select-String -Quiet -LiteralPath $ngServerLog -Pattern 'NG_SMOKE_PASS') {

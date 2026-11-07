@@ -4,12 +4,15 @@
 #include "Input/PlayerInputSubsystem.h"
 #include "Inventory/UIInventoryDragDropOperation.h"
 #include "Components/Image.h"
+#include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 
 FReply UUIInventorySlotWidget::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	const FReply BlueprintReply = Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+    if (!BlueprintReply.IsEventHandled() && InMouseEvent.GetEffectingButton() == SecondaryActionButton && ContainsItem())
+        return RequestOperation(EUIInventoryOperation::SecondaryAction) ? FReply::Handled() : BlueprintReply;
 	if (BlueprintReply.IsEventHandled() || InMouseEvent.GetEffectingButton() != DragButton || !ContainsItem()
 		|| !OperationHandler.IsValid() || !GetOwningLocalPlayer()) return BlueprintReply;
 	ReleaseDragPress();
@@ -80,10 +83,24 @@ bool UUIInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDr
 
 void UUIInventorySlotWidget::SetData(const FUIInventorySlotData& InData, UObject* InOperationHandler)
 {
+	if (OperationHandler.Get() == InOperationHandler && Data.HasSamePresentation(InData)) return;
+	const bool bIconChanged = Data.Item != InData.Item || Data.Icon != InData.Icon || (Data.Count > 0) != (InData.Count > 0);
 	Data = InData;
 	OperationHandler = InOperationHandler;
-	UpdateItemIcon();
+	if (bIconChanged) UpdateItemIcon();
 	OnSlotUpdated();
+	UpdateItemTextVisibility();
+}
+
+void UUIInventorySlotWidget::UpdateItemTextVisibility()
+{
+	const bool bHasItem = ContainsItem();
+	for (UTextBlock* Label : {txt_name.Get(), txt_count.Get()})
+	{
+		if (!Label) continue;
+		Label->SetVisibility(bHasItem ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+		if (!bHasItem) Label->SetText(FText::GetEmpty());
+	}
 }
 
 void UUIInventorySlotWidget::UpdateItemIcon()
@@ -123,6 +140,7 @@ void UUIInventorySlotWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	UpdateItemIcon();
+	UpdateItemTextVisibility();
 	InputSubsystem = UPlayerInputSubsystem::GetInputSubsystem(this);
 	if (auto* Input = InputSubsystem.Get())
 	{

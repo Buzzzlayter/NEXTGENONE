@@ -5,7 +5,7 @@
 
 class UPlayerInputSubsystem;
 
-/** Project input adapter for ALS/combat. No physical keys or runtime-created input assets. */
+/** Project input adapter for ALS movement; other actions are routed through GAS. No physical keys or runtime-created input assets. */
 UCLASS(ClassGroup=Input, meta=(BlueprintSpawnableComponent))
 class NEXTGENONE_API UNGCharacterInputComponent : public UNGGameplayInputComponent
 {

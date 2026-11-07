@@ -22,6 +22,7 @@ public:
 	bool OwnsAbility(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
 	bool IsEntryReady() const { return bEntered && bEntryReady; }
 private:
+	void FailEntry(const FString& Reason);
 	bool AcquireGASResources();
 	bool ActivateEntryAbilities();
 	void ReleaseLocalResources();

@@ -20,4 +20,9 @@ struct UIMODULE_API FUIInventorySlotData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) TSoftObjectPtr<UTexture2D> Icon;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Count = 0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bEquipped = false;
+	bool HasSamePresentation(const FUIInventorySlotData& Other) const
+	{
+		return Inventory == Other.Inventory && Item == Other.Item && SlotIndex == Other.SlotIndex
+			&& Name.EqualTo(Other.Name) && Icon == Other.Icon && Count == Other.Count && bEquipped == Other.bEquipped;
+	}
 };

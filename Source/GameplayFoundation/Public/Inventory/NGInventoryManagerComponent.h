@@ -13,6 +13,7 @@
 class UNGInventoryItemDefinition;
 class UNGInventoryItemInstance;
 class UNGInventoryManagerComponent;
+class UNGInventoryLayoutDefinition;
 class UObject;
 struct FFrame;
 struct FNGInventoryList;
@@ -22,6 +23,17 @@ struct FReplicationFlags;
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGSlotStorage);
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGSlotAction);
 
+/** Explicit starting item: use an exact index or the first compatible slot in a tagged group. */
+USTRUCT()
+struct GAMEPLAYFOUNDATION_API FNGInventoryStarterEntry
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere) TSubclassOf<UNGInventoryItemDefinition> ItemClass;
+	UPROPERTY(EditAnywhere, meta=(ClampMin="1")) int32 Count = 1;
+	UPROPERTY(EditAnywhere) FGameplayTag SlotTag;
+	UPROPERTY(EditAnywhere, meta=(ClampMin="-1")) int32 SlotIndex = INDEX_NONE;
+};
+
 USTRUCT(BlueprintType)
 struct GAMEPLAYFOUNDATION_API FNGInventorySlotState
 {
@@ -30,25 +42,20 @@ struct GAMEPLAYFOUNDATION_API FNGInventorySlotState
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FNGItemState Item;
 };
 
-/** A message when an item is added to the inventory */
+/** Legacy serialized type targeted by Core Redirects. Not used by runtime notifications. */
 USTRUCT(BlueprintType)
 struct GAMEPLAYFOUNDATION_API FNGInventoryChangeMessage
 {
 	GENERATED_BODY()
-
-	//@TODO: Tag based names+owning actors for inventories instead of directly exposing the component?
-	UPROPERTY(BlueprintReadOnly, Category=Inventory)
-	TObjectPtr<UActorComponent> InventoryOwner = nullptr;
-
-	UPROPERTY(BlueprintReadOnly, Category = Inventory)
-	TObjectPtr<UNGInventoryItemInstance> Instance = nullptr;
-
+	UPROPERTY(BlueprintReadOnly, Category=Inventory) TObjectPtr<UActorComponent> InventoryOwner = nullptr;
+	UPROPERTY(BlueprintReadOnly, Category=Inventory) TObjectPtr<UNGInventoryItemInstance> Instance = nullptr;
 	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 NewCount = 0;
 	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 Delta = 0;
 	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 SlotIndex = INDEX_NONE;
 };
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGInventoryChanged, FNGInventoryChangeMessage, Change);
+/** Final inventory invalidation. Observers read a fresh snapshot; no per-slot delta is promised. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNGInventoryChanged);
 
 /** One persistent slot: rules and optional contents share one replicated record. */
 USTRUCT(BlueprintType)
@@ -59,8 +66,8 @@ struct GAMEPLAYFOUNDATION_API FNGInventoryEntry : public FFastArraySerializerIte
 	FNGInventoryEntry()
 	{}
 
-	UPROPERTY(EditAnywhere) FGameplayTag SlotTag;
-	UPROPERTY(EditAnywhere) FGameplayTagQuery AcceptedItems;
+	UPROPERTY() FGameplayTag SlotTag;
+	UPROPERTY() FGameplayTagQuery AcceptedItems;
 	FString GetDebugString() const;
 
 private:
@@ -74,8 +81,6 @@ private:
 	int32 StackCount = 0;
 	UPROPERTY() int32 SlotIndex = INDEX_NONE;
 
-	UPROPERTY(NotReplicated)
-	int32 LastObservedCount = INDEX_NONE;
 };
 
 /** Single replicated array of persistent slots, including empty ones. */
@@ -98,16 +103,11 @@ struct GAMEPLAYFOUNDATION_API FNGInventoryList : public FFastArraySerializer
 
 public:
 	//~FFastArraySerializer contract
-	void PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize);
-	void PostReplicatedAdd(const TArrayView<int32> AddedIndices, int32 FinalSize);
-	void PostReplicatedChange(const TArrayView<int32> ChangedIndices, int32 FinalSize);
 	void PostReplicatedReceive(const FFastArraySerializer::FPostReplicatedReceiveParameters& Parameters);
 	//~End of FFastArraySerializer contract
 
 	bool NetDeltaSerialize(FNetDeltaSerializeInfo& DeltaParms)
 	{
-		// Defaults are authoring data, not received FastArray records. Clear them once on first read.
-		if (DeltaParms.Reader && !bReceivedSnapshot) { Entries.Reset(); bReceivedSnapshot = true; }
 		return FFastArraySerializer::FastArrayDeltaSerialize<FNGInventoryEntry, FNGInventoryList>(Entries, DeltaParms, *this);
 	}
 
@@ -117,17 +117,13 @@ public:
 	void RemoveEntry(UNGInventoryItemInstance* Instance, bool bNotify=true);
 
 private:
-	void BroadcastChangeMessage(FNGInventoryEntry& Entry, int32 OldCount, int32 NewCount);
-
-private:
 	friend UNGInventoryManagerComponent;
 
 private:
-	// Persistent slots, including empty ones. Only the slot rules are editable.
-	UPROPERTY(EditAnywhere, meta=(TitleProperty="SlotTag"))
+	// Runtime slots, including empty ones. Authoring rules belong to Layout.
+	UPROPERTY()
 	TArray<FNGInventoryEntry> Entries;
 
-	bool bReceivedSnapshot = false;
 	UPROPERTY(NotReplicated)
 	TObjectPtr<UActorComponent> OwnerComponent;
 };
@@ -137,15 +133,6 @@ struct TStructOpsTypeTraits<FNGInventoryList> : public TStructOpsTypeTraitsBase2
 {
 	enum { WithNetDeltaSerializer = true };
 };
-
-
-
-
-
-
-
-
-
 
 /**
  * Manages an inventory
@@ -160,15 +147,15 @@ public:
 	UPROPERTY() FNGInventoryChanged OnInventoryChanged;
 	/** Fixed per component template; do not change the visibility policy during replication. */
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|Replication") bool bOwnerOnly = true;
-	/** Append empty slots to the component defaults before BeginPlay. */
-	void AddSlots(int32 Count, FGameplayTag SlotTag);
-	virtual void BeginPlay() override;
+	/** Idempotent server initialization; an assigned layout may intentionally contain zero slots. */
+	bool InitializeInventory();
+	virtual void InitializeComponent() override;
 	virtual void GetReplicatedCustomConditionState(FCustomPropertyConditionState& OutActiveState) const override;
 	int32 GetSlotCount() const { return InventoryList.Entries.Num(); }
 	UNGInventoryItemInstance* GetItemAtSlot(int32 SlotIndex) const;
 	int32 GetSlotIndex(UNGInventoryItemInstance* Item) const;
 	int32 FindFirstEmptySlot() const;
-	int32 FindFirstAvailableSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass) const;
+	int32 FindFirstAvailableSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 StackCount = 1, FGameplayTag SlotTag = {}) const;
 	FGameplayTag GetSlotTag(int32 SlotIndex) const;
 	int32 FindSlotByTag(FGameplayTag SlotTag, int32 Ordinal) const;
 	bool CanPlaceItemAtSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 SlotIndex) const;
@@ -183,11 +170,13 @@ public:
 	int32 GetCount(UNGInventoryItemInstance* Item) const;
 	// Internal transfer primitives: subsystem publishes notifications after both owners have committed.
 	UNGInventoryItemInstance* AddItemState(const FNGItemState& State, bool bNotify=true, int32 SlotIndex=INDEX_NONE);
-	UNGInventoryItemInstance* AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 Count);
+	UNGInventoryItemInstance* AddItemDefinitionDeferred(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 Count, int32 SlotIndex=INDEX_NONE);
 	bool RemoveQuantity(UNGInventoryItemInstance* Item, int32 Count, bool bNotify=true);
-	void NotifyItemChange(UNGInventoryItemInstance* Item, int32 OldCount, int32 NewCount, int32 SlotIndex=INDEX_NONE);
+	/** Debit one owned instance and execute a trusted synchronous credit before publishing. */
+	bool ConsumeItem(UNGInventoryItemInstance* Item, int32 Count, TFunctionRef<void()> OnConsumed);
+	void NotifyInventoryChanged();
 
-	bool CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1);
+	bool CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1) const;
 
 	UNGInventoryItemInstance* AddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount = 1);
 	UNGInventoryItemInstance* AddItemDefinitionToSlot(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 SlotIndex, int32 StackCount = 1);
@@ -202,6 +191,8 @@ public:
 
 	int32 GetTotalItemCountByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef) const;
 	bool ConsumeItemsByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 NumToConsume);
+	/** Trusted synchronous credit after all debits, before inventory notifications. */
+	bool ConsumeItemsByDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 NumToConsume, TFunctionRef<void()> OnConsumed);
 
 	//~UObject interface
 	virtual bool ReplicateSubobjects(class UActorChannel* Channel, class FOutBunch* Bunch, FReplicationFlags* RepFlags) override;
@@ -210,9 +201,17 @@ public:
 
 private:
 	friend struct FNGInventoryList;
+	struct FMutationScope;
+	UNGInventoryItemInstance* AddItemInternal(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 Count, const TMap<FGameplayTag, int32>* Stats, bool bNotify, int32 SlotIndex);
+	bool RemoveQuantityInternal(UNGInventoryItemInstance* Item, int32 Count, bool bNotify);
+	void PublishChanges();
+	bool bInventoryDirty = false;
 	bool bTransferring = false;
+	bool bSlotsInitialized = false;
 	FNGInventoryEntry* FindSlot(int32 SlotIndex);
 	const FNGInventoryEntry* FindSlot(int32 SlotIndex) const;
-	UPROPERTY(EditDefaultsOnly, Replicated, Category=Inventory, meta=(ShowOnlyInnerProperties))
+	UPROPERTY(EditDefaultsOnly, Category=Inventory)
+	TObjectPtr<UNGInventoryLayoutDefinition> Layout;
+	UPROPERTY(Transient, Replicated)
 	FNGInventoryList InventoryList;
 };

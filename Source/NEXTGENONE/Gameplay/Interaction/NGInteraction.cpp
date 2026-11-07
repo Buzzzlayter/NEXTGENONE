@@ -1,7 +1,8 @@
 #include "Gameplay/Interaction/NGInteraction.h"
+#include "GameplayTags/NGGameplayTags.h"
+#include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Interaction/NGItemPickup.h"
-#include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
@@ -15,9 +16,10 @@
 #include "Net/UnrealNetwork.h"
 #include "Misc/ScopeExit.h"
 #include "Engine/World.h"
+#if WITH_EDITOR
+#include "Misc/DataValidation.h"
+#endif
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionBlocked, "State.Interaction.Blocked");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionAbility, "Ability.Type.Interaction");
 
 namespace
 {
@@ -27,16 +29,16 @@ namespace
         Tags.AddTag(TAG_NGInteractionBlocked); Tags.AddTag(TAG_NGDead);
         Tags.AddTag(TAG_NGDashActive); Tags.AddTag(TAG_NGMantleActive);
         Tags.AddTag(TAG_NGPunchActive); Tags.AddTag(TAG_NGReloadActive);
+		Tags.AddTag(TAG_NGRollActive); Tags.AddTag(TAG_NGRagdollActive);
         return Tags;
     }
 }
 
 bool UNGInteractionSubsystem::IsCurrentInteractor(const ANextgenoneCharacter* Pawn,bool bAuthority) const
 {
-	if (!IsValid(Pawn) || (Pawn->Interaction && Pawn->Interaction->IsInteractionBlocked()) || Pawn->GetWorld()!=GetWorld() || (bAuthority && !Pawn->HasAuthority()) || Pawn->IsDead() || !Pawn->GetController() || Pawn->GetController()->GetPawn()!=Pawn) return false;
-	const auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
-	const auto* ASC=Pawn->GetAbilitySystemComponent();
-	return PS && ASC && ASC==PS->GetAbilitySystemComponent() && ASC->GetAvatarActor()==Pawn && Pawn->GetHealth()>0.f;
+    auto* ASC = NGPlayerContext::GetCurrentASC(Pawn, bAuthority);
+    return ASC && Pawn->GetWorld() == GetWorld() && !Pawn->IsDead() && Pawn->GetHealth() > 0.f
+        && (!Pawn->Interaction || !Pawn->Interaction->IsInteractionBlocked());
 }
 AActor* UNGInteractionSubsystem::FindTarget(ANextgenoneCharacter* Pawn,float MaxDistance,float CaptureRadius) const
 {
@@ -109,15 +111,14 @@ bool UNGInteractionSubsystem::TakePickup(ANGItemPickup* Pickup,ANextgenoneCharac
 	ActivePickups.Add(Pickup); ON_SCOPE_EXIT { ActivePickups.Remove(Pickup); };
 	auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
 	const auto State=Pickup->GetStateForTransfer();
-	if (!PS->Inventory->CanAddItemDefinition(State.ItemClass,State.Count)) return false;
+	if (!PS->Inventory->InitializeInventory()) return false;
+	const int32 Slot = Pickup->FindDestinationSlot(Pawn);
+	if (Slot == INDEX_NONE) return false;
 	// Initial placed items use definition fragments; dropped items restore the exact saved stats.
-	auto* Item=Pickup->HasSavedItemState() ? PS->Inventory->AddItemState(State,false) : PS->Inventory->AddItemDefinitionDeferred(State.ItemClass,State.Count);
+	auto* Item=Pickup->HasSavedItemState() ? PS->Inventory->AddItemState(State,false,Slot) : PS->Inventory->AddItemDefinitionDeferred(State.ItemClass,State.Count,Slot);
 	if (!Item) return false;
-	const bool bAutoEquip=Pickup->bAutoEquipWhenHandsEmpty;
 	Pickup->ConsumeForTransfer();
-	PS->Inventory->NotifyItemChange(Item,0,State.Count);
-	const auto* Def=GetDefault<UNGInventoryItemDefinition>(State.ItemClass);
-	if (bAutoEquip && UNGCombatComponent::GetWeaponDefinition(Def) && !Pawn->Combat->GetEquipment().bEquipped) Pawn->Combat->EquipInventoryItemOnServer(Item);
+	PS->Inventory->NotifyInventoryChanged();
 	return true;
 }
 ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* Pawn,UNGInventoryItemInstance* Item,int32 Count)
@@ -129,7 +130,7 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 	const auto State=Item->CaptureState(Count);
 	if (!State.ItemClass) return nullptr;
 	// Stateful stacks need an explicit split policy; do not duplicate ammo/charges into two instances.
-	if (Count<OldCount && !State.StatStacks.IsEmpty()) return nullptr;
+	if (Count<OldCount && !State.CanSplitStack()) return nullptr;
 	ActiveDrops.Add(Item); ON_SCOPE_EXIT { ActiveDrops.Remove(Item); };
 	const FVector Up=-Pawn->GetCharacterMovement()->GetGravityDirection();
 	const FVector Forward=FVector::VectorPlaneProject(Pawn->GetActorForwardVector(),Up).GetSafeNormal();
@@ -140,8 +141,8 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 	Position=Ground.ImpactPoint+Up*28.f;
 	if (GetWorld()->OverlapBlockingTestByChannel(Position,FQuat::Identity,ECC_Visibility,FCollisionShape::MakeSphere(24.f),Params)) return nullptr;
 	if (FVector::DistSquared(Position,Pawn->GetActorLocation())>FMath::Square(650.f)) return nullptr;
-	UClass* Class=LoadClass<ANGItemPickup>(nullptr,TEXT("/Game/Gameplay/Interaction/BP_ItemPickup.BP_ItemPickup_C"));
-	if (!Class) Class=ANGItemPickup::StaticClass();
+	UClass* Class = Pawn->Interaction ? Pawn->Interaction->DroppedPickupClass.Get() : nullptr;
+	if (!Class || Class->HasAnyClassFlags(CLASS_Abstract)) return nullptr;
 	const FTransform Transform(FRotationMatrix::MakeFromXZ(Forward,Up).Rotator(),Position);
 	auto* Pickup=GetWorld()->SpawnActorDeferred<ANGItemPickup>(Class,Transform,nullptr,nullptr,ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!Pickup) return nullptr;
@@ -151,14 +152,27 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 		!Item->CaptureState(Count).StatStacks.OrderIndependentCompareEqual(State.StatStacks) || !PS->Inventory->RemoveQuantity(Item,Count,false))
 	{ if (IsValid(Pickup)) Pickup->Destroy(); return nullptr; }
 	Pickup->PublishDrop();
-	PS->Inventory->NotifyItemChange(Item,OldCount,OldCount-Count);
+	PS->Inventory->NotifyInventoryChanged();
 	return Pickup;
 }
 UNGInteractionComponent::UNGInteractionComponent()
 {
+	DroppedPickupClass = ANGItemPickup::StaticClass();
 	InterruptingTags = DefaultInteractionInterruptions();
 	SetIsReplicatedByDefault(true); PrimaryComponentTick.bCanEverTick=true; PrimaryComponentTick.TickInterval=.1f;
 }
+#if WITH_EDITOR
+EDataValidationResult UNGInteractionComponent::IsDataValid(FDataValidationContext& ValidationContext) const
+{
+	const auto Parent = Super::IsDataValid(ValidationContext);
+	if (!DroppedPickupClass || DroppedPickupClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		ValidationContext.AddError(FText::FromString(TEXT("Interaction requires a concrete DroppedPickupClass; assign its Blueprint here to include it in cook.")));
+		return EDataValidationResult::Invalid;
+	}
+	return Parent == EDataValidationResult::Invalid ? Parent : EDataValidationResult::Valid;
+}
+#endif
 void UNGInteractionComponent::BindAbilitySystem(UAbilitySystemComponent* ASC)
 {
     if (BoundASC.Get() == ASC) return;

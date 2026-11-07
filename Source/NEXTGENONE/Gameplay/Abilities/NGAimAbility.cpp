@@ -1,12 +1,11 @@
 #include "Gameplay/Abilities/NGAimAbility.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 #include "GameFramework/Pawn.h"
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputAim, "Input.Aim");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGWeaponAiming, "State.Weapon.Aiming");
 
 UNGAimingEffect::UNGAimingEffect()
 {
@@ -22,10 +21,13 @@ UNGAimAbility::UNGAimAbility()
 {
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	ActivationBlockedTags.AddTag(TAG_NGDead);
+	ActivationBlockedTags.AddTag(TAG_NGActivatingItem);
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
 	ActivationBlockedTags.AddTag(TAG_NGPunchActive);
 	ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive);
+	ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 }
 
 bool UNGAimAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

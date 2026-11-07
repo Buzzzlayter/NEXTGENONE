@@ -36,16 +36,16 @@ void UPlayerInputSubsystem::SetInputMode(UObject* WCO, EInputMode Mode, bool bFl
 bool UPlayerInputSubsystem::SetPlayerInputMode(EInputMode Mode, bool bFlushInput)
 {
 	ULocalPlayer* LocalPlayer = GetLocalPlayer();
-	if (!ensureMsgf(LocalPlayer, TEXT("Input subsystem has no local player."))) return false;
+	if (!IsValid(LocalPlayer)) return false;
 	
 	UWorld* World = GetWorld();
-	if (!ensureMsgf(World, TEXT("Input subsystem has no world."))) return false;
+	// LocalPlayerSubsystem outlives the world during travel/PIE shutdown.
+	if (!IsValid(World) || World->bIsTearingDown || World->IsBeingCleanedUp()) return false;
 	
 	APlayerController* PlayerController = LocalPlayer->GetPlayerController(World);
-	if (!ensureMsgf(PlayerController, TEXT("Input subsystem has no player controller."))) return false;
+	if (!IsValid(PlayerController) || PlayerController->IsActorBeingDestroyed()) return false;
 	
-	if (!ensureMsgf(LocalPlayer->ViewportClient && LocalPlayer->ViewportClient->GetGameViewportWidget().IsValid(),
-		TEXT("Input subsystem has no game viewport widget."))) return false;
+	if (!LocalPlayer->ViewportClient || !LocalPlayer->ViewportClient->GetGameViewportWidget().IsValid()) return false;
 	
 	switch (Mode)
 	{
@@ -72,6 +72,7 @@ bool UPlayerInputSubsystem::SetPlayerInputMode(EInputMode Mode, bool bFlushInput
 			return false;
 	}
 	PlayerController->SetShowMouseCursor(Mode != EInputMode::Game);
+	AppliedInputController = PlayerController;
 	InputModeChanged(Mode);
 
 	if (bFlushInput)
@@ -137,7 +138,10 @@ void UPlayerInputSubsystem::Deinitialize()
 {
 	MappingRequests.Reset();
 	ApplyMappingRequests();
+	OriginalContexts.Reset();
+	ManagedContexts.Reset();
 	PolicyRequests.Reset();
+	AppliedInputController.Reset();
 	if (PreprocessorManager)
 	{
 		PreprocessorManager->Shutdown();
@@ -203,7 +207,8 @@ void UPlayerInputSubsystem::ToggleCursorModes()
 
 FGuid UPlayerInputSubsystem::AcquireMappingContext(UObject* Owner, UInputMappingContext* Context, int32 Priority, bool bGameplay)
 {
-	auto* Enhanced = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	auto* Enhanced = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
 	if (!IsValid(Owner) || !Context || !Enhanced || Priority < 0) return FGuid();
 	if (!OriginalContexts.Contains(Context))
 	{
@@ -228,7 +233,8 @@ void UPlayerInputSubsystem::ReleaseMappingContext(FGuid Handle)
 
 void UPlayerInputSubsystem::ApplyMappingRequests()
 {
-	auto* Enhanced = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	auto* Enhanced = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
 	if (!Enhanced) return;
 	MappingRequests.RemoveAll([](const auto& Request) { return !Request.Owner.IsValid(); });
 	TMap<UInputMappingContext*, int32> Desired;
@@ -287,6 +293,7 @@ void UPlayerInputSubsystem::ReleaseInputPolicy(FGuid Handle)
 void UPlayerInputSubsystem::ApplyPolicyRequests()
 {
 	PolicyRequests.RemoveAll([](const auto& Request) { return !Request.Owner.IsValid(); });
+	const UWorld* World = GetWorld();
 	EInputMode Mode = PolicyBaseMode;
 	EGamepadCursorMode Cursor = PolicyBaseCursor;
 	bool bBlocked = false;
@@ -296,6 +303,16 @@ void UPlayerInputSubsystem::ApplyPolicyRequests()
 		if (Request.Policy.bSetInputMode) Mode = Request.Policy.InputMode;
 		if (Request.Policy.bSetCursorMode) Cursor = Request.Policy.CursorMode;
 	}
+	if (!IsValid(World) || World->bIsTearingDown || World->IsBeingCleanedUp())
+	{
+		// Preserve the logical restoration without touching a disappearing controller/viewport.
+		bGameplayBlocked = bBlocked;
+		InputMode = Mode;
+		GamepadInputMode = Cursor;
+		AppliedInputController.Reset();
+		if (PreprocessorManager) PreprocessorManager->SetInputMode(Mode);
+		return;
+	}
 	if (bGameplayBlocked != bBlocked)
 	{
 		bGameplayBlocked = bBlocked;
@@ -303,12 +320,15 @@ void UPlayerInputSubsystem::ApplyPolicyRequests()
 		OnGameplayInputBlockedChanged.Broadcast(bBlocked);
 		ApplyMappingRequests();
 	}
-	if (InputMode != Mode) SetPlayerInputMode(Mode, true);
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	const APlayerController* PlayerController = LocalPlayer ? LocalPlayer->GetPlayerController(World) : nullptr;
+	if (InputMode != Mode || AppliedInputController.Get() != PlayerController) SetPlayerInputMode(Mode, true);
 	SetGamepadCursorMode(Cursor);
 }
 
 bool UPlayerInputSubsystem::IsKeyMappedToAction(FKey Key, const UInputAction* Action) const
 {
-	const auto* Enhanced = GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	const auto* Enhanced = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
 	return Action && Enhanced && Enhanced->QueryKeysMappedToAction(Action).Contains(Key);
 }

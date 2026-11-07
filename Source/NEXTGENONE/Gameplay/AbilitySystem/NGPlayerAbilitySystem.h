@@ -11,6 +11,7 @@ class NEXTGENONE_API UNGPlayerAbilitySystemComponent : public UNGAbilitySystemCo
 
 public:
 	virtual void InitAbilityActorInfo(AActor* InOwnerActor, AActor* InAvatarActor) override;
+	virtual bool AreAbilityTagsBlocked(const FGameplayTagContainer& InAbilityTags) const override;
 	uint32 GetAvatarGeneration() const { return AvatarGeneration; }
 	bool CanFireNow(const AActor* ExpectedAvatar) const;
 	bool TryCommitFire(const AActor* ExpectedAvatar, float Interval);

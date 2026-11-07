@@ -27,7 +27,7 @@ public:
 protected:
 	UPROPERTY(EditAnywhere, Category=Input)
 	bool bBlockGameplayInput = false;
-	UPROPERTY(EditDefaultsOnly, Category = MappingContext)
+	UPROPERTY(EditAnywhere, Category = MappingContext)
 	bool bSetupMappingContext = true;
 
 	UPROPERTY(EditAnywhere, Category = MappingContext, meta = (EditCondition = "bSetupMappingContext"))
@@ -36,16 +36,16 @@ protected:
 	UPROPERTY(EditAnywhere, Category = MappingContext, meta = (EditCondition = "bSetupMappingContext"))
 	int32 Priority = 1;
 
-	UPROPERTY(EditDefaultsOnly, Category = Input)
+	UPROPERTY(EditAnywhere, Category = Input)
 	bool bSetupInputMode = false;
 
-	UPROPERTY(EditDefaultsOnly, Category = Input, meta = (EditCondition = "bSetupInputMode"))
+	UPROPERTY(EditAnywhere, Category = Input, meta = (EditCondition = "bSetupInputMode"))
 	EInputMode InputMode;
 	
-	UPROPERTY(EditDefaultsOnly, Category = Gamepad)
+	UPROPERTY(EditAnywhere, Category = Gamepad)
 	bool bSetupCursorMode = false;
 
-	UPROPERTY(EditDefaultsOnly, Category = Gamepad, meta = (EditCondition = "bSetupCursorMode"))
+	UPROPERTY(EditAnywhere, Category = Gamepad, meta = (EditCondition = "bSetupCursorMode"))
 	EGamepadCursorMode DefaultCursorMode = EGamepadCursorMode::Grid;
 
 private:

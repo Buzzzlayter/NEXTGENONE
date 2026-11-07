@@ -44,6 +44,7 @@ public:
 	virtual bool IsTickEnabled();
 
 protected:
+	void ResetBlueprintInput();
 	virtual void BeginDestroy() override;
 	UPROPERTY(EditDefaultsOnly)
 	bool bIsTickEnabled = false;

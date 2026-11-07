@@ -4,7 +4,14 @@
 
 void UHFSMInputComponent::Enter()
 {
+    ResetBlueprintInput();
+    RestoreInput();
     AppliedInputSubsystem = GetPlayerInputSubsystem();
+    if (!AppliedInputSubsystem.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("%s: cannot enter input state without a local PlayerInputSubsystem."), *GetPathName());
+        return;
+    }
     if (bSetupMappingContext)
     {
         MappingHandle = AppliedInputSubsystem->AcquireMappingContext(this, MappingContext, Priority, false);

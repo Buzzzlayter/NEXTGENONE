@@ -1,25 +1,8 @@
 #include "AbilitySystem/NGAbilitySystem.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "GameplayEffectExtension.h"
-#include "NativeGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDamage, "Data.Damage");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGDead, "State.Dead");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGAlive, "State.Alive");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputJump, "Input.Jump");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputDash, "Input.Dash");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputMantle, "Input.Mantle");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPickup, "Input.Interaction.PickupWeapon");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGDashActive, "State.Action.Dash");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGMantleActive, "State.Action.Mantle");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPunch, "Input.Combat.Punch");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGPunchActive, "State.Action.Punch");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGMovementAbility, "Ability.Type.Movement");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadActive, "State.Action.Reload");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGMagazineAmmo, "Weapon.MagazineAmmo");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGReserveAmmo, "Weapon.ReserveAmmo");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputInteract, "Input.Interaction.Interact");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractEvent, "Event.Interaction.Request");
 
 bool UNGAbilitySystemComponent::TryActivateAbilityByInputTag(FGameplayTag InputTag)
 {

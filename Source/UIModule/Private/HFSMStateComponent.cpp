@@ -12,8 +12,7 @@ void UHFSMStateComponent::Init(UHFSMState* StateOwner)
 
 void UHFSMStateComponent::Enter()
 {
-	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
-	BlueprintInputComponent = nullptr;
+	ResetBlueprintInput();
 	if (!ensureMsgf(IsValid(State) && IsValid(GetContextOwner()), TEXT("State component has no valid context owner.")))
 	{
 		return;
@@ -34,21 +33,25 @@ void UHFSMStateComponent::Tick(float DeltaTime)
 
 void UHFSMStateComponent::Exit(FName Event)
 {
-	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
-	BlueprintInputComponent = nullptr;
+	ResetBlueprintInput();
 	OnExit(Event);
 }
 
 void UHFSMStateComponent::BeginDestroy()
 {
-	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
-	BlueprintInputComponent = nullptr;
+	ResetBlueprintInput();
 	Super::BeginDestroy();
 }
 
 bool UHFSMStateComponent::IsTickEnabled()
 {
 	return bIsTickEnabled;
+}
+
+void UHFSMStateComponent::ResetBlueprintInput()
+{
+	UHFSMLibrary::UnbindBlueprintInput(BlueprintInputComponent);
+	BlueprintInputComponent = nullptr;
 }
 
 UHFSMState* UHFSMStateComponent::GetState() const

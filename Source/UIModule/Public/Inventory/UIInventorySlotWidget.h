@@ -10,6 +10,7 @@
 
 class UButton;
 class UImage;
+class UTextBlock;
 class UInputAction;
 class UPlayerInputSubsystem;
 
@@ -39,9 +40,12 @@ protected:
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|DragDrop") FKey DragButton = EKeys::LeftMouseButton;
+	UPROPERTY(EditDefaultsOnly, Category="Inventory") FKey SecondaryActionButton = EKeys::RightMouseButton;
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UButton> btn_Root;
 	/** Optional item image. Updated for every slot snapshot, including empty slots. */
 	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UImage> img_item;
+	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> txt_name;
+	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> txt_count;
 	UPROPERTY(BlueprintReadOnly, Category="Inventory") FUIInventorySlotData Data;
 	UPROPERTY(BlueprintReadOnly, Category="Inventory") TObjectPtr<UInputAction> InputAction;
 private:
@@ -49,6 +53,7 @@ private:
 	bool bDragPending = false;
 	void ReleaseDragPress();
 	void UpdateItemIcon();
+	void UpdateItemTextVisibility();
 	TWeakObjectPtr<UObject> OperationHandler;
 	TWeakObjectPtr<UPlayerInputSubsystem> InputSubsystem;
 	UFUNCTION() void PrimaryAction();

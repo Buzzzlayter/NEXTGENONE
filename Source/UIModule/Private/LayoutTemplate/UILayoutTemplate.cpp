@@ -38,6 +38,7 @@ void UUILayoutTemplate::DemountWidget(UUserWidget* Widget, FGameplayTag Placehol
 	{
 		if (!*Placeholder)
 		{
+			if (Widget) Widget->RemoveFromParent();
 			return;
 		}
 
@@ -56,6 +57,7 @@ void UUILayoutTemplate::DemountWidget(UUserWidget* Widget, FGameplayTag Placehol
 			DemountWidgetsImmediate({ DemountData });
 		}
 	}
+	else if (Widget) Widget->RemoveFromParent();
 }
 
 void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIWidgetDemountData>& WidgetsAwaitingDemount)
@@ -64,9 +66,10 @@ void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIWidgetDemountDat
 	{
 		UWidget* Placeholder = DemountData.Placeholder.Get();
 		UUserWidget* Widget = DemountData.Widget.Get();
-		if (Placeholder && Widget)
+		if (Widget)
 		{
-			IWidgetPlaceholder::Execute_DemountWidget(Placeholder, Widget);
+			if (Placeholder) IWidgetPlaceholder::Execute_DemountWidget(Placeholder, Widget);
+			Widget->RemoveFromParent();
 		}
 	}
 }
@@ -113,6 +116,16 @@ const TMap<FGameplayTag, UWidget*>& UUILayoutTemplate::GetPlaceholders()
 
 void UUILayoutTemplate::Enter()
 {
+	ResetBlueprintInput();
+	if (TemplateWidget)
+	{
+		if (auto* Sorter = GetLayoutSorter(State)) Sorter->RemoveLayout(this);
+		DemountWidgetsImmediate(WidgetsAwaitingDemount);
+		TemplateWidget->RemoveFromParent();
+		TemplateWidget = nullptr;
+	}
+	WidgetsAwaitingDemount.Reset();
+	Placeholders.Reset();
 	if (!ensureMsgf(Template, TEXT("Layout has no template class.")))
 	{
 		return;
@@ -154,7 +167,14 @@ void UUILayoutTemplate::Enter()
 					const FGameplayTag ID = IWidgetPlaceholder::Execute_GetID(Widget);
 					if (ID.IsValid())
 					{
-						Placeholders.Add(ID, Widget);
+						if (Placeholders.Contains(ID))
+						{
+							UE_LOG(LogTemp, Error, TEXT("Layout %s has duplicate placeholder ID %s (%s). Keeping the first widget."), *GetNameSafe(TemplateWidget), *ID.ToString(), *GetNameSafe(Widget));
+						}
+						else
+						{
+							Placeholders.Add(ID, Widget);
+						}
 					}
 				}
 			});
@@ -186,6 +206,9 @@ void UUILayoutTemplate::Exit(FName event)
 
 	if (!TemplateWidget)
 	{
+		DemountWidgetsImmediate(WidgetsAwaitingDemount);
+		WidgetsAwaitingDemount.Reset();
+		Placeholders.Reset();
 		Super::Exit(event);
 		return;
 	}
@@ -222,5 +245,7 @@ void UUILayoutTemplate::Exit(FName event)
 		WidgetsAwaitingDemount.Reset();
 		TemplateWidget->RemoveFromParent();
 	}
+	TemplateWidget = nullptr;
+	Placeholders.Reset();
 	Super::Exit(event);
 }

@@ -1,4 +1,5 @@
 #include "Gameplay/Abilities/NGDeathAbility.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Character/NGControlStateDefinition.h"

@@ -1,5 +1,11 @@
 # Конфиги персонажа и ввода — этап 1
 
+Актуальный перенос боевого ввода и Action Bar в GAS: [EquipmentInput.md](EquipmentInput.md). Ниже есть исторические настройки; новые grants и маршруты требуется назначить вручную после сборки.
+
+## Освобождение ввода при завершении мира — 2026-11-07
+
+LocalPlayerSubsystem может переживать World. ReleaseInputPolicy снимает handle и восстанавливает логические значения даже при teardown, но не вызывает смену режима, cursor/focus или input callbacks для исчезающего мира. SetPlayerInputMode возвращает false без ensure, если живые World/Controller/viewport отсутствуют. При следующем применении политики к новому Controller режим применяется снова, даже если логическое значение не изменилось. Deinitialize очищает оставшиеся mapping/context ссылки. Исправление проверено статически; сборка и runtime агентом не запускались.
+
 ## Заполнено через MCP — 2026-11-03
 
 DA_Input_Character теперь заполнен: 13 NativeInputActions, 3 AbilityInputActions, IMC_NG_Character с приоритетом 10 и 35 mappings, подключаемый только состоянием Alive. Созданы 17 новых IA и 3 IMC в `/Game/Gameplay/Input/Configured`; существующие IA_Dash, IA_Mantle, IA_PickupWeapon переиспользованы без изменения. ALS plugin и старые IMC не менялись.

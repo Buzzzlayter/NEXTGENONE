@@ -4,7 +4,7 @@
 
 Baseline: 2026-10-31, утверждён пользователем 2026-11-01. GAS и Combat Foundation реализованы. Ниже сохранено исходное обоснование; фактическая реализация и уточнения перечислены в разделе 13. Результаты запуска: [MultiplayerCombat.md](../Testing/MultiplayerCombat.md).
 
-Исследование: [LyraAnalysis.md](../Research/LyraAnalysis.md). Ветка: `research/gameplay-foundation`. Существующие незакоммиченные изменения пользователя сохранены. Оригинальный ALS plugin и defaults карт не изменялись реализацией.
+Исследование: [LyraAnalysis.md](../Research/LyraAnalysis.md). Ветка: `research/gameplay-foundation`. Существующие незакоммиченные изменения пользователя сохранены. При первоначальной реализации ALS plugin и defaults карт не менялись. Последующие изменения сетевой границы ALS разрешены пользователем и описаны в [ALSAuthority.md](../Networking/ALSAuthority.md).
 
 ## 1. Аудит исходного состояния до реализации (2026-10-31)
 

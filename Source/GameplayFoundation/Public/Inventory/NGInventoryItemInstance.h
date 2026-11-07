@@ -9,7 +9,6 @@
 #include "NGInventoryItemInstance.generated.h"
 
 
-
 class UNGInventoryItemDefinition;
 class UNGInventoryItemFragment;
 struct FFrame;
@@ -23,6 +22,10 @@ struct GAMEPLAYFOUNDATION_API FNGItemState
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) TSubclassOf<UNGInventoryItemDefinition> ItemClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Count = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) TMap<FGameplayTag, int32> StatStacks;
+
+	// Stats belong to the entire instance, not to each unit of Count.
+	bool CanSplitStack() const { return StatStacks.IsEmpty(); }
+	bool CanMergeStackWith(const FNGItemState& Other) const;
 };
 
 /**
@@ -35,6 +38,8 @@ class GAMEPLAYFOUNDATION_API UNGInventoryItemInstance : public UObject
 
 public:
 	UNGInventoryItemInstance(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+	bool IsEquipped() const { return bEquipped; }
+	void SetEquipped(bool bValue);
 	virtual void PostInitProperties() override;
 	UFUNCTION(BlueprintPure, Category=Inventory) FNGItemState CaptureState(int32 Count = 1) const;
 	UPROPERTY(BlueprintAssignable, Category=Inventory) FNGItemStatsChanged OnStatsChanged;
@@ -84,6 +89,8 @@ private:
 private:
 	UPROPERTY(Replicated)
 	FNGGameplayTagStackContainer StatTags;
+	UPROPERTY(ReplicatedUsing=OnRep_Equipped) bool bEquipped = false;
+	UFUNCTION() void OnRep_Equipped();
 
 	// The item definition
 	UPROPERTY(ReplicatedUsing=OnRep_ItemDef)

@@ -53,10 +53,21 @@ FText ANGItemPickup::GetInteractionPrompt_Implementation(ANextgenoneCharacter* I
 bool ANGItemPickup::CanInteract_Implementation(ANextgenoneCharacter* Interactor) const
 {
 	if (!bAvailable || !ItemClass || StackCount<1 || !Interactor || Interactor->IsDead()) return false;
+	return FindDestinationSlot(Interactor) != INDEX_NONE;
+}
+int32 ANGItemPickup::FindDestinationSlot(const ANextgenoneCharacter* Interactor) const
+{
+	if (!Interactor || !ItemClass) return INDEX_NONE;
 	const auto* PS=Interactor->GetPlayerState<ANextgenonePlayerState>();
-	if (!PS) return false;
-	if (HasAuthority()) return PS->Inventory->CanAddItemDefinition(ItemClass,StackCount);
-	return PS->Inventory->GetAllItems().Num()<PS->Inventory->GetSlotCount() && StackCount<=GetDefault<UNGInventoryItemDefinition>(ItemClass)->MaxStackSize;
+	if (!PS) return INDEX_NONE;
+	if (bAutoEquipWhenHandsEmpty && Interactor->Combat && !Interactor->Combat->GetEquipment().bEquipped
+		&& UNGCombatComponent::GetWeaponDefinition(GetDefault<UNGInventoryItemDefinition>(ItemClass)))
+	{
+		const int32 ActionSlot = PS->Inventory->FindFirstAvailableSlot(ItemClass, StackCount, TAG_NGSlotAction);
+		if (ActionSlot != INDEX_NONE) return ActionSlot;
+	}
+	// Full Action bar: store the pickup without auto-equipping or replacing another weapon.
+	return PS->Inventory->FindFirstAvailableSlot(ItemClass, StackCount, TAG_NGSlotStorage);
 }
 bool ANGItemPickup::Interact_Implementation(ANextgenoneCharacter* Interactor)
 {

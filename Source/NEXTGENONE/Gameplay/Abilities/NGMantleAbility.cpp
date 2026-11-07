@@ -1,4 +1,5 @@
 #include "Gameplay/Abilities/NGMantleAbility.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/TimelineComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -68,7 +69,7 @@ bool UNGALSMantleExecutor::StartFromAbility()
 	GetWorld()->GetTimerManager().SetTimer(ExecutionTimer, this, &ThisClass::MonitorExecution, .05f, true);
 	return true;
 }
-void UNGALSMantleExecutor::Server_MantleStart_Implementation(float Height, const FALSComponentAndTransform& Ledge, EALSMantleType Type)
+void UNGALSMantleExecutor::ReplicateMantleStart(float Height, const FALSComponentAndTransform& Ledge, EALSMantleType Type)
 {
 	// Only accept the synchronous result of our server-side ALS check, never a client-supplied ledge.
 	if (GetOwner()->HasAuthority() && bCheckingOnServer && bRunning) MulticastAbilityStart(Height, Ledge, Type);
@@ -142,6 +143,7 @@ UNGMantleAbility::UNGMantleAbility()
 	ActivationBlockedTags.AddTag(TAG_NGDead); ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive); ActivationBlockedTags.AddTag(TAG_NGPunchActive);
 	ActivationOwnedTags.AddTag(TAG_NGMantleActive);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	FGameplayTagContainer Tags; Tags.AddTag(TAG_NGMovementAbility); SetAssetTags(Tags);
 }
 bool UNGMantleAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

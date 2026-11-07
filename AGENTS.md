@@ -1,117 +1,76 @@
-# NEXTGENONE — проектная памятка для Codex
+﻿# NEXTGENONE — правила работы
 
-UE **5.8.4** C++ проект (EngineAssociation 5.8).
+UE 5.8.4, C++; EngineAssociation `5.8`, движок `S:\UE_5.8`.
 
-## Структура
-- Переход 5.8.4: S:/UE_5.8, CL58902052; ветка upgrade/ue-5.8.4. Полная Editor-пересборка выявила 40 ранее подавленных shadowing-диагностик GCFSM; исправлены имена в .cpp, подавление снято. Финальная Editor-сборка PASS, 0 compiler warnings/deprecated. ALS/GameplayMessageRouter не менялись; runtime/PIE/сеть не проверялись.
-- Interaction Session (UNGInteractionSessionStateComponent) ставится на родительский UI Interaction вместо обычного Router; его Exit завершает общий контекст/серверную storage-сессию. Маунтеры только монтируют, bCloseInteractionOnExit удалён. InterruptingTags у Interaction — единый набор для CanActivate GA_Interact и событийного прерывания: defaults State.Interaction.Blocked/Dead/Dash/Mantle/Punch/Reload. EndInteraction на сервере отменяет abilities с asset-тегом Ability.Type.Interaction; Manager реагирует на общий OnInteractionEnded, закрывает только свою сессию и уведомляет owning client. Нет новых input bindings/BP API. Сборка/runtime не проверены.
-- PlayerState.AbilitySystem и HealthSet — private native subobjects без BlueprintReadOnly. Внешний доступ к ASC только через IAbilitySystemInterface/GetAbilitySystemComponent; Character читает Health/MaxHealth через атрибуты своего привязанного ASC. Без текущего Avatar возвращает 0, старый Pawn не читает максимум новой жизни. Сборка/runtime правки не проверены.
-- Публичные NextAllowed*/LifeSerial/bStarterInventoryGranted из PlayerState удалены. Приватные server fire/interaction gates и AvatarGeneration принадлежат постоянному проектному ASC (CanFireNow/TryCommitFire/TryCommitInteraction/GetAvatarGeneration); инкремент поколения только внутри InitAbilityActorInfo для нового непустого server Avatar. Drop/transfer timers и однократность стартовой выдачи приватны в PlayerInventory Manager (TryBeginStarterGrant). Лимиты не сбрасываются переэкипировкой/отменой GA/сменой Pawn; снаряд читает поколение ASC для защиты от старой жизни. Сборка/сеть не проверены.
-- Старые GA_PickupWeapon (удалён пользователем) и UNGPickupWeaponAbility удалены; способность взаимодействия только GA_Interact/UNGInteractionAbility. IA_PickupWeapon ещё используется DA_Input_Character/IMC_NG_Character, не удалять без замены ссылок. TAG_NGInputPickup пока маршрутизируется в общий RequestInteract для совместимости настроенного ввода.
-- UI Storage: общий FNGInteractionContext(Type/Target/Source) на Interaction заполняется после server-confirmed ClientShowInventory. UI Router UNGInteractionStateComponent маршрутизирует по настраиваемым Routes; Inventory Manager содержит только storage-сессию/RPC. NGInventoryPanel больше не выбирает источник (bUseViewedInventory удалён); UNGInventoryStateComponent монтирует панель и задаёт Source=Player/Interaction. В Storage нужны два мounter; на внешнем bCloseInteractionOnExit=true. Input/policy задаёт пользователь. Сетап/ограничения Docs/Gameplay/InteractionUI.md; сборка/runtime не проверены.
-- Инвентарь: один FastArray InventoryList.Entries со всеми слотами (правила SlotTag/AcceptedItems + Instance/StackCount + стабильный SlotIndex). Пустые слоты остаются; remove очищает содержимое, swap не перемещает правила. SlotDefinitions/MaxEntries/OnRep_SlotDefinitions удалены. В Details настраивать Inventory → Entries; старые overrides пользователь переносит вручную, ассеты агент не менял. Defaults: 20 Storage, игрок 20 Storage + 5 Action. BeginPlay помечает все серверные слоты, первый клиентский read убирает template-записи. Динамический resize занятого контейнера не реализован; сборка/runtime не проверены.
-- Runtime API по умолчанию C++: не добавлять BlueprintCallable/BlueprintPure/BlueprintAssignable/BlueprintImplementableEvent без конкретной потребности пользователя. У inventory Manager эти экспозиции убраны; InventoryUIRequested/OnInventoryRequested удалены, UI использует общий InteractionContext. Сохранять отражение для RPC, RepNotify, GC/сериализации, dynamic delegate callbacks и редакторских настроек. Нужные Blueprint-точки пользователь помечает явно.
-- Единственный Inventory на PlayerState — UNGPlayerInventoryManagerComponent, проектный наследник общего UNGInventoryManagerComponent. Общий класс хранит/переносит предметы, наследник содержит player RPC, проверки доступа и сессию контейнера с привязкой к Pawn и очисткой OnPawnSet. Native subobject сохранил имя Inventory. Отдельный PawnInventory удалён; Controller и Interaction не содержат инвентарных RPC/сессии. Blueprint-вызовы перенести на PlayerState.Inventory. UI-политика — UPlayerInputSubsystem.IsGameplayInputBlocked, без bInventoryUIOpen/bSettingsUIOpen. Сборка/runtime не проверены.
-- Концепция глобального сценарного слоя зафиксирована в Docs/Architecture/ScenarioFlow.md: графы/сабграфы логина, подключения, загрузки, режима и будущих квестов; компоненты действий/наблюдателей координируют существующие системы. Character FSM и UI FSM сохраняются. Клиентский flow — долгоживущий GameInstance-контекст, серверные сценарии — отдельное authority-исполнение с явным сетевым мостом. Поддержка GCFSM требует проверки; реализация и отдельный Scenario-модуль пока не начаты/не утверждены. Виджеты не должны независимо отслеживать готовность PlayerState/GAS.
-- Стартовая выдача Combat.StarterItems: оружие в Action по порядку списка, прочие предметы/резервные патроны в Storage через AddItemDefinitionToSlot (сохраняет item fragment stats). Выдача однократная на PlayerState, нужна новая сессия для нового распределения. /Game/Gameplay/Input/ActionBar: 5 Boolean IA_NG_ActionSlot1..5 + IMC_NG_ActionBar (One..Five, старые DPad Left/Up/Right сохранены для 1..3). Native маршруты Input.ActionBar.Slot1..5 в DA_Input_Character, IMC включён Alive priority20. Старый SelectSlot route/mappings удалены, asset сохранён. Клавиши только в IMC, UI блокирует через PlayerInputSubsystem. Ассеты сохранены/read-back MCP; C++ не собран, игра не проверялась.
-- Универсальный инвентарь: ядро перенесено в Source/GameplayFoundation/{Public,Private}/Inventory (10 файлов). ItemDefinition не знает WeaponDefinition: общий UNGInventoryFragment_Equipment.Definition(UDataAsset), тип распознаёт Combat.GetWeaponDefinition. Weapon_DEPRECATED скрыто и PostLoad переводит старые значения в фрагмент; оставлены 12 точечных Core Redirects NEXTGENONE→GameplayFoundation, assets ещё не пересохранены/не проверены. NetCore — public dependency GF.
-- Контейнеры: стабильные SlotIndex, MaxEntries по умолчанию 20, SlotDefinitions(SlotTag/AcceptedItems query). Игрок: один контейнер 25 ячеек (20 Storage + 5 Action); панель Action — реальное хранение. Selection/Equip только из Action-ячеек, UI фильтрует по тегу. TransferTo — общий серверный перенос/split/merge и swap внутри контейнера; межконтейнерный swap занятых разных предметов отклоняется. Manager поддерживает несколько контейнеров на одном Actor; один instance не добавляется повторно в другой. ImportItemState/CaptureInventoryState — точки для будущего server backend, самого backend/persistent IDs/вложенности сумок нет.
-- UI R5: адаптированы slot/list/window + operation interface в Source/UIModule/{Public,Private}/Inventory без R5BL/NEXTGENONE зависимостей. NGInventoryPanel — проектный adapter, больше не строит WidgetTree. Пользователь создаёт BP-наследники: Slot(btn_Root optional), List(WrapBox + SlotClass), Panel(SlotsList). SlotFilter Storage/Action, bUseViewedInventory для коробки. Обычный mounter, IMC/input mode принадлежат UI FSM. SetFirstSlotFocused/OnInputTypeChanged используют существующий PlayerInputSubsystem без новых input bindings. Docs/Gameplay/InventoryContainers.md.
-- ANGInventoryBox: общий Manager(bOwnerOnly=false), INGInteractable, server InitialContents/ImportItemState; Mesh/Collision настраивает пользователь. Содержимое коробки реплицируется всем relevant clients, личный inventory owner-only. PC — транспорт открытого контейнера и transfer RPC с ExpectedPawn/ожидаемыми item pointers; сервер проверяет доступ/дистанцию/LOS/теги/количество/rate limit. При закрытии UI вызвать CloseInventoryView; смена Pawn очищает session. Код не собран/не проверен в игре, Blueprint/assets не менялись.
-- Editor: HFSMComponentCustomization ?????????? IPropertyTypeCustomization ??? UHFSMStateComponent: ??????????? inline selector + ???? ? ????? ??????. CustomizeChildren ???????? ???????? instanced-??????? ????? EnumerateConstRawData ? ????????? ?? editable-???? ????? AddExternalObjectProperty (?? GetNumChildren ? ?? CDO). Global row extension ?????: ???????????? ?? ????? ??????. Blueprint ?????????? ? Content Browser, native-????? ??????????? ????? SourceCodeNavigation. ??? Source/UIModule/Private/Editor/, ?????? WITH_EDITOR; UnrealEd/PropertyEditor ?????? Target.bBuildEditor. ???????????? ?????????? ?????? ???? ? ?????????????? instanced-?????. ????? ????????????? ?????? ???????? ??????????? ????????? (??????????? delegates ?????? ????????? lambda); ???? ??????????? ?? ?????????/?? ?????????? ???????.
-- Combat presentation больше не опрашивается в Character.Tick. Обновления — Equipment/ADS events, OnOverlayStateChanged после ALS demo-held-object, конец BeginPlay, RagdollEnd после Super, project mantle TimelineFinished после оригинального MantleEnd и mantle cancel. Проверка IsDead в Tick сохранена для обхода сетевого ALS RagdollUpdate. ALS plugin не изменён; сборка/runtime событийного восстановления ещё не проверены.
-- Встроенный Combat.TestWeapon и куб из конструктора Character удалены. Equip не создаёт предметы: CurrentItem должен быть выбран через слот/RequestEquipItem и присутствовать в инвентаре. StarterItems на Combat задаётся пользователем, native список пуст. WeaponDefinition не содержит зашитых /Game-путей к Fire/Reload/ID_TestWeapon; пустые Fire/Reload используют существующие native fallback классы, Projectile/Aim имеют native defaults. Не возвращать автоматическую выдачу тестового оружия.
-- HitReaction.ApplyImpact общий для пули/кулака. Смертельный импульс reliable multicast сохраняется в компоненте того же Pawn до ALS-регдолла и потребляется ReleaseToRagdoll после отделения меша; при уже активном регдолле применяется сразу. DeathImpulseMultiplier/DeathPushSpeed на HitReaction, BodyImpactImpulse отдельно у WeaponDefinition и GA_Punch. Живой knockback кулака сохранён. Поза тела не синхронизируется, late join/relevancy не восстанавливают импульс. Сборка/визуальный тюнинг не проверены; Docs/Gameplay/BulletBodyImpact.md.
-- Прыжок: только AbilityInputActions Input.Jump → GA_Jump (Alive grant). Native Jump-маршрут и override Character.JumpAction_Implementation удалены; bJumpInputHeld отсутствует. GA сохраняет подъём из приседа/живого ragdoll на одном нажатии (ragdoll get-up только с authority через ALS multicast). Старые Blueprint-вызовы ALS JumpAction пользователь удаляет вручную, InputConfig переносит из Native в Ability. Сборка/runtime переноса не проверены.
-- ADS: UNGAimAbility (LocalPredicted, источник — Combat equipment) выдаётся оружием вместе с Fire/Reload. Способность удерживает Infinite UNGAimingEffect с State.Weapon.Aiming до WaitInputRelease/отмены; GE реплицирует тег и simulated proxies. Combat.IsAiming читает тег текущего Avatar, BindAbilitySystem подписывает ALS/UI на изменения. bAiming/ServerSetAiming удалены. RequestAim — только совместимый input→GAS переходник для старого Native Input.Aim; предпочтительный конфиг — AbilityInputActions Input.Aim (только один маршрут). Новые GE/GA в Gameplay/Abilities/NGAimAbility.*; AimAbilityClass задаётся в WeaponDefinition, в Alive их повторно не выдавать. Разброс не менялся. Сборка/сеть переноса не проверены.
-- Aim: общий GetTargetingOrigin проецирует начало camera ray вперёд к Pawn (подход Lyra); клиентский aim trace и серверный shot trace используют его одинаково. Сервер проверяет также sphere sweep по ALS GetThirdPersonTraceParams. Точного восстановления ALS Camera AnimBP на сервере нет; исходный plugin не изменён, клиентский origin остаётся ограниченно доверенным. Детали/ограничения: Docs/Gameplay/BallisticsAndAmmo.md.
-- Стрельба игрока: Combat.RequestFire передаёт луч NGAimComponent.GetViewRay и revision экипировки через ServerRequestFire. Сервер валидирует луч и синхронно запускает ServerOnly GA_Fire; RequestedShotView действует только внутри этой активации. Для remote Pawn FireOnServer без свежего луча отклоняется, latent-задержки GA_Fire не поддержаны. Цель — серверный trace камеры, старт снаряда пока прежний якорь капсулы. Лимиты камеры на AimComponent; Docs/Gameplay/BallisticsAndAmmo.md. Сборка/runtime этого пакета не проверены.
-- UI прицела и интеракции разделены: UNGReticleWidget (BindWidget Image AimDot) и UNGInteractionPrompt (BindWidget TextBlock InteractionText). Оба компактные, дерево/размер/позицию задаёт пользователь в UMG/layout, монтируются обычным UUIWidgetMounterComponent. UNGInteractionPromptMounter удалён. Настройка: Docs/Gameplay/Interaction.md.
-- `Source/NEXTGENONE/Gameplay/` разбит по подсистемам: Character, Player, GameModes, Abilities, AbilitySystem, Combat, Interaction, UI, Networking, Editor; существующие Input, Inventory, StateMachine сохранены. Include-пути проектных классов — от корня модуля (`Gameplay/Combat/NGCombat.h` и т.п.). Editor содержит authoring/commandlet-файлы в том же модуле, не отдельный Editor-модуль.
-- FSM персонажа: native CharacterStateMachine (GCFSM replication component) на Pawn; граф должен находиться в Pawn Blueprint, потому что GCFSM replicated context требует Actor. Core StateDefinition в GameplayFoundation, HFSM resource adapter в NEXTGENONE/Gameplay/StateMachine. Сетап: `Docs/Gameplay/CharacterStateMachine.md`. MachineName по умолчанию пуст — без Blueprint-сетапа машина не запущена. Здоровье фиксирует смерть, FSM Dead через общий Character State Resources выдаёт и активирует NGDeathAbility из UNGControlStateDefinition.Abilities (bActivateOnEnter); отдельный death-state компонент и UNGAbilitySet удалены; способность включает обычный локальный ALS-регдолл. По решению пользователя поза/движение тела не синхронизируются; сетевой компонент якоря удалён. Character не хранит death/phase флаги и протокол GA_Death: IsDead читает FSM StateTag; DeadStateEffect выдаёт GAS State.Dead, GA_Death вызывает PresentationCue обычного ALS-регдолла. Proxies восстанавливают cue из FSM даже после отвязки PlayerState. ASC удерживается при раннем UnPossess до общей готовности ресурсов перехода (CanReleaseAvatar/OnResourcesReady); StartLife следующего Pawn возобновляется через PendingLifePawn. Presentation немедленный; отложенные montage требуют отдельных фаз FSM. GA_Death находится только в Dead definition, без InputTag; runtime/сеть пакета ещё не проверены.
-- Ввод персонажа — GameplayInputComponent на Pawn (общий в GameplayFoundation, ALS/Combat адаптер в NEXTGENONE). Controller не подключает старые ALS/Combat bindings. Перед игровым запуском обязательно назначить CharacterDefinition/InputConfig и UI IA/IMC по `Docs/Gameplay/CharacterInputSetup.md`. Context/policy handles проходят через существующий UPlayerInputSubsystem; UI инвентаря/настроек блокирует Gameplay. CharacterDefinition содержит InputConfig, без базовых GAS grants. UNGControlStateDefinition содержит Abilities (FNGAbilityGrant), Effects и input policy; общий resource adapter выдаёт/снимает их по Enter/Exit/Unbind. DA_PlayerAbilities удалён; обычные способности находятся в Alive, GA_Death — в Dead с bActivateOnEnter. По умолчанию Pawn без способностей. Gameplay IMC включает состояние через ControlStateDefinition.MappingContexts: IMC_NG_Character назначен Alive (priority 10); Из UNGGameplayInputConfig полностью удалены MappingContexts/StateMappingContexts; он хранит только IA→тег. Связь IMC с маршрутами Pawn проверяет ControlStateDefinition.ValidateInputMappings при входе состояния. UI IMC остаются у UI FSM.
-- Mantle: GA_Mantle — только ServerOnly GAS-обёртка (Commit/start/end/cancel). Единственный executor — BP_ALSMantleExecutor на Pawn, наследник UNGALSMantleExecutor : UALSMantleComponent. Геометрия/движение/Timeline/монтаж/кривые и выбор overlay исполняются исходным ALS; проектный наследник содержит только GAS/network bridge и запрос автозахвата. MantleAdapter и самостоятельный Root Motion Source/cue удалены. Настройки находятся в BP_ALSMantleExecutor, не в GA_Mantle. Плагин/AnimBP не менялись. Сетап и ограничения: Docs/Gameplay/MantleAbility.md; runtime/сеть восстановления ещё не проверены.
-- HFSM lifecycle: UHFSMStateComponent и все наследники — void Enter/Exit, без общего отказа/rollback и AbortEnter. State вызывает весь Components, проверки и частичная очистка локальны в компонентах. OnEnterFailed/HasEnteredSuccessfully/ActiveComponents удалены; старые Blueprint-узлы пользователь убирает вручную. GAS handles/валидация/ресурсная готовность для ASC handoff сохранены.
-- HFSM: UHFSMPlayerStateComponent удалён; UI/layout/inventory наследуют общий UHFSMStateComponent. GetPlayerController/GetLocalPlayer доступны у State и StateComponent и разрешают игрока из контекста владельца без first-player fallback. Blueprint input events автоматически подключаются на Enter и снимаются на Exit/Abort; каждый Blueprint-приёмник имеет изолированный transient EnhancedInputComponent в стеке своего локального Controller. Привязка однократная на Enter, снятие на Exit/Abort; без bHasBlueprintInputEvents и refresh в Tick. После появления/смены Controller нужен повторный вход. IMC/policy по-прежнему принадлежат UPlayerInputSubsystem. Точный ClassRedirect старого промежуточного типа сохранён. Сборка/авторинг прошли; runtime не проверен. Контракт: Docs/Gameplay/CharacterInputSetup.md.
-- Общие GAS-классы и конфиги персонажа/ввода — `Source/GameplayFoundation/` (Runtime). `NEXTGENONE` зависит от него; обратных зависимостей на NEXTGENONE/ALS/UI нет. Единственный ASC на PlayerState — проектный `UNGPlayerAbilitySystemComponent`, наследник общего `UNGAbilitySystemComponent`. Детали: `Docs/Architecture/GameplayFoundationModule.md`.
-- Модули проекта: основной `NEXTGENONE` (Runtime) — `Source/NEXTGENONE/`; UI — `Source/UIModule/`. Шаблонный модуль `ALSv4_Community` и `Content/ThirdPerson` полностью удалены. Реальная ALS-интеграция находится в плагине `Plugins/ALSV4_CPP` и сохранена.
-- Единая игровая цепочка: `ANextgenoneGameMode`, `ANextgenoneCharacter`, `ANextgenonePlayerController`, `ANextgenonePlayerState` в `Source/NEXTGENONE/Gameplay/`. `ANGCombatTestGameMode` наследует основной режим и добавляет только тестовый harness.
-- Перенесённое ядро инвентаря Lyra — `Source/NEXTGENONE/Gameplay/Inventory/`, владелец — существующий PlayerState. Боезапас хранится в stat tags item instance; текущая экипировка остаётся в NGCombatComponent. Второй ASC/Character/инвентарь не добавлять. Инвентарь UI: UNGInventoryStateComponent наследует UUIWidgetMounterComponent и использует его WidgetClass/PlaceholderID/Layer и lifecycle монтажа. CloseEvent (FName) запрашивает переход FSM; окно демонтируется базовым мounter при Exit/Abort. Отдельный InventoryWindowMounter удалён; проектный Controller и input-системы компонент не использует. Blueprint placement/input/policy/focus настраивает пользователь (старый инстанс из Runtime убрать); provenance и ограничения — `Docs/Research/LyraPort.md`.
-- Рабочая карта проекта: `/Game/Maps/Gameplay`, Blueprint режима: `/Game/Blueprints/BP_NextgenoneGameMode`. Отдельная combat-карта удалена переносом в Gameplay; тестовый runner выбирает свой режим через URL override.
-- Таргеты: `Source/NEXTGENONE.Target.cs`, `Source/NEXTGENONEEditor.Target.cs`.
-- Включённые плагины (`NEXTGENONE.uproject`): `ModelContextProtocol`, `Terminal`,
-  `EditorToolset`, `ModelingToolsEditorMode`.
+## Порядок работы
 
-- NGSettingsAssets.cpp удалён. NGSetupCommandlet оставлен только как явный dispatcher -ImportWeaponVFX / -WeaponVFXOnly. Одноразовые setup/migration флаги (SettingsOnly, RemoveALSMenu, Consolidate, StateLifecycleOnly, MantleAbilityOnly и создание gameplay assets) удалены; исторические команды в Docs не повторять. Blueprint пользователь настраивает сам.
+- Делать одну ограниченную задачу с наблюдаемым результатом. До существенных изменений кратко назвать затрагиваемые системы и способ проверки.
+- Сначала найти причину в существующем коде. Не создавать новую подсистему, адаптер или framework без конкретной необходимости.
+- Сохранять пользовательские изменения. Не совмещать задачу с посторонним рефакторингом, массовым переносом или импортом Lyra.
+- Доводить согласованный пакет до завершения; новые идеи предлагать отдельно. Не менять архитектурные границы по ходу мелкого исправления.
+- Агент отвечает за C++, GAS и сетевую логику. Blueprint-графы, UMG, визуал и анимации пользователь обычно настраивает сам; давать точные классы, поля и события. Редактировать ассеты, когда это входит в поручение.
+- В итоге кратко сообщать: что изменено, что фактически проверено, что требует действий пользователя. Не выдавать компиляцию или сохранение ассета за проверку в игре.
 
-## Движок и сборка
-- По указанию пользователя от 2026-11-04 сборку выполняет пользователь. Агент не запускает UBT/Live Coding без отдельного запроса.
-- Движок UE **5.8.4**, установлен в `S:\UE_5.8` (резолвится из реестра по EngineAssociation 5.8).
-- Фактически выбранный UBT toolchain при проверке 5.8.4: **MSVC 14.44.35228** (tools directory 14.44.35207), SDK 10.0.22621.0; не считать прежнее значение 14.50.35717 подтверждённым для текущей сборки.
+## Сборка и тестирование
 
-### Батники в корне (self-contained, движок берут из реестра)
-- `Build.bat` — собрать `NEXTGENONEEditor Win64 Development`.
-- `RunEditor.bat` — запустить редактор с проектом.
-- `GenerateProjectFiles.bat` — пересоздать .sln/проектные файлы.
-- `DeepClean.bat` — удалить `Binaries`/`Intermediate`/`DerivedDataCache`/`Saved` (+ `Binaries`/`Intermediate`
-  в плагинах) и `*.sln`/`*.slnx` в корне. `Content`/`Config`/`Source` не трогает.
-  Откажется работать при открытом редакторе, спрашивает подтверждение. После — `GenerateProjectFiles.bat`.
+- **Сборку выполняет пользователь. Не запускать UBT или Live Coding без отдельного запроса.**
+- **Не начинать тестирование без отдельного явного апрува на этот этап:** автотесты, PIE, smoke/regression, сетевые прогоны, latency/packet loss. Не расширять согласованный объём. Запуск игры пользователем не является апрувом агенту.
+- Обычное чтение кода, diff и статический просмотр входят в реализацию.
+- При необходимости закрытого редактора согласовать одно окно на весь пакет. Не закрывать и не перезапускать редактор самостоятельно.
+- Не запускать длительные командлеты, серверы или очистку проекта без необходимости и разрешения на соответствующий этап.
+- Для разрешённой сборки использовать skill `ue-build`; для редактора — `ue`, для логов — `ue-logs`. Результаты брать из фактического вывода инструментов.
 
-## Верификация для агента (компиляция C++ + логи)
-Цель: агент видит **реальный** вывод компилятора и логи редактора текстом, а не угадывает API.
-Оформлено двумя скиллами; скрипты лежат рядом с ними в `.Codex/skills/ue-build/`.
+## Архитектурные границы
 
-### Скилл `ue-build` — компиляция C++ → текст
-- `Verify-Build.ps1` — полная офлайн-сборка UBT (редактор **закрыт**). Печатает `RESULT` +
-  ошибки `файл(строка): error Cxxxx` + warnings; полный вывод в `Saved/Logs/AgentBuild.log`.
-  Запуск: `powershell -NoProfile -ExecutionPolicy Bypass -File .Codex/skills/ue-build/Verify-Build.ps1`
-  (`-Game` — game-таргет; `-Config Debug|DebugGame|Shipping`).
-  **Exit:** `0`=PASS (код компилируется; сюда же link-lock при открытом редакторе),
-  `3`=BLOCKED (Live Coding активен, **ничего не собралось** — не ошибка кода), иное=реальная ошибка.
-- `Trigger-LiveCoding.ps1` — при **открытом** редакторе шлёт Ctrl+Alt+F11 (best-effort, SendKeys,
-  крадёт фокус). Результат компиляции читается из лога (см. ниже). UBT при активном Live Coding
-  собирать отказывается (`Unable to build while Live Coding is active`).
-- В MCP **нет** инструмента «выполнить консольную команду» → headless-запуск самой компиляции
-  невозможен; компиляцию инициирует UBT (редактор закрыт) либо Ctrl+Alt+F11 (редактор открыт).
+- `GameplayFoundation` — общее runtime-ядро GAS, конфигов, ввода и инвентаря. Не зависит от `NEXTGENONE`, ALS или UI.
+- `UIModule` — общие UI/HFSM-механизмы; без зависимости на проектные игровые классы.
+- `NEXTGENONE` — конкретные способности, правила игры и интеграция ALS/UI/Combat. Gameplay-код группировать по подсистемам; include-пути — от корня модуля.
+- Единственная игровая цепочка: `ANextgenoneGameMode`, `ANextgenonePlayerController`, `ANextgenonePlayerState`, `ANextgenoneCharacter`. Не вводить параллельные системы здоровья, инвентаря или управления персонажем.
+- Controller не владеет логикой инвентаря, интеракции или персонажных способностей. Для общего кода предпочитать базовые типы и узкие интерфейсы вместо зависимости на `ANextgenoneCharacter`.
+- У состояния один владелец. Изменение — через его API; не дублировать производные значения и не открывать поля для внешней мутации.
+- Общие GAS-теги объявлять в `GameplayFoundation/Public/GameplayTags/NGGameplayTags.h`, определять в соответствующем `.cpp`. Для доступа к тегу подключать этот контракт, а не заголовок конкретной способности или компонента.
+- Input-компоненты не знают Combat и Inventory и не вызывают их операции. Боевые и инвентарные команды проходят через GAS-способности; input передаёт только press/release по тегу.
 
-### Скилл `ue-logs` — логи редактора → текст (редактор открыт, через MCP)
-- Тулсет `EditorToolset.LogsToolset`, вызов `GetLogEntries`.
-  **ВАЖНО:** всегда передавай `category:""` для поиска по всем категориям — дефолт `"LogsToolset"`
-  это несуществующая категория и даёт ошибку.
-- Ошибки/warnings/ассерты: `{category:"", pattern:"(?i)error|warning|fatal|assert", maxEntries:50}`.
-- Результат Live Coding: `{category:"LogLiveCoding", pattern:"", maxEntries:30}`.
-- Список категорий: `GetLogCategories {filter:"..."}`; детальность: `SetVerbosity {category, verbosity}`.
-- Редактор закрыт (MCP недоступен) → лог прошлой сессии `Saved/Logs/NEXTGENONE.log` (Read/Grep).
+## GAS, состояния и сеть
 
-## Интеграция Codex ↔ UE (главное)
-Связь идёт через плагин `ModelContextProtocol` — Epic-native **MCP по HTTP на
-`127.0.0.1:8000/mcp`**, авто-старт включён, сервер зарегистрирован как `unreal-editor`.
-- Управление редактором — через навык `ue` (discovery → `call_tool`); `mcp__unreal-editor`
-  уже в allow-листе, так что вызовы идут без подтверждений.
-- **MCP отвечает только когда редактор запущен** (порт 8000 слушает). Если закрыт —
-  сначала `RunEditor.bat`.
-- Можно просить вживую: ставить/двигать актёры, править блюпринты/материалы/Niagara,
-  PCG-графы, запускать PIE, читать лог редактора (`Saved/Logs/NEXTGENONE.log`).
+- ASC и HealthSet принадлежат PlayerState; доступ к ASC через `IAbilitySystemInterface`/геттер. Pawn — текущий Avatar, а не второй владелец GAS.
+- Учитывать possession, `OnRep_PlayerState`, UnPossess и смену жизни. Старые Pawn, снаряды и callbacks не должны менять состояние новой жизни. Выдача/снятие способностей и эффектов — по принадлежащим источнику handles, без повторной выдачи.
+- Character FSM и UI FSM раздельны. FSM управляет состояниями и временем жизни ресурсов; GAS исполняет способности; компоненты хранят длительно живущие данные и механизмы.
+- Character FSM-граф находится в Pawn Blueprint. `UNGControlStateDefinition` задаёт grants, эффекты и gameplay IMC; по умолчанию у Pawn нет базового набора способностей. Смерть: Dead state → GA_Death → ALS ragdoll. Поза трупа пока локальная, без синхронизации тела.
+- HFSM-компоненты используют `void Enter/Exit`; проверки и очистка локальны, без общего rollback-протокола. Получать игрока из контекста, без `GetFirstPlayerController` fallback.
+- Сервер авторитетен для урона, выстрелов, экипировки, переноса предметов и доступа к контейнеру. Клиентские параметры проверять; GAS сам по себе не защищает RPC.
+- Серверные ограничения частоты нельзя сбрасывать повторной активацией способности или переэкипировкой. Постоянные ограничения хранить у соответствующего постоянного владельца.
+- ALS сохраняем; не заменять AnimBP и не дублировать его locomotion/mantle в способностях. Изменения плагина — только в рамках задачи с учётом контракта authority.
 
-## Git и бэкап (важно)
-- Remote: `github.com/Buzzzlayter/NEXTGENONE`, ветка `main` (солопроект, коммиты прямо в main).
-- Бинарники — через **Git LFS** (`.gitattributes`): `.uasset`, `.umap`, `.fbx`, текстуры и т.д.
-- `.Codex/settings.local.json` — личные права (allow/deny/ask), в `.gitignore`, НЕ бэкапится.
-- В коммитах отключена приписка Клода (`attribution.commit: ""`) — автор только пользователь.
+## Ввод, UI и инвентарь
 
-## Апрув перед тестированием (правило пользователя, 2026-11-01)
-- Не начинать этап тестирования без отдельного явного апрува пользователя на этот этап.
-- Это относится к автотестам, PIE, сетевым проверкам, smoke/regression и прогонам с latency/packet loss.
-- После реализации сообщить о готовности к тестированию и ждать апрува. Общее поручение реализовать функциональность не заменяет отдельный апрув на тестовый этап.
-- Не расширять и не повторять тестовые прогоны инициативно за пределами согласованного объёма.
+- Использовать существующий `UPlayerInputSubsystem`, учитывать клавиатуру/мышь и геймпад. Клавиши задавать в IMC, маршруты IA → tag — в InputConfig; не зашивать клавиши в C++/Blueprint-логике.
+- Gameplay IMC принадлежат состояниям персонажа, UI IMC и input policy — UI FSM. Не вводить Controller-флаги вида `bInventoryUIOpen` для блокировки gameplay.
+- Виджеты не должны самостоятельно отслеживать готовность PlayerState/GAS/Pawn или зависеть от Pawn для операций инвентаря. Готовность координировать вне виджетов; Alive не равнозначен готовности репликации.
+- UI монтировать существующим `UUIWidgetMounterComponent`; размещение и размеры задаются в UMG. Маунтер не владеет interaction-сессией.
+- Общий `UNGInventoryManagerComponent` хранит и переносит предметы; `UNGPlayerInventoryManagerComponent` на PlayerState содержит player RPC и storage-сессию. Interaction остаётся общей функциональностью, без отдельной способности подбора оружия.
+- Схема слотов — `UNGInventoryLayoutDefinition`; стартовое содержимое задаётся отдельно. Runtime-источник состояния — один FastArray слотов со стабильными индексами; item instances реплицируются subobjects. Пустой слот сохраняется, правила слота не перемещаются вместе с предметом.
+- Оружие связано с общим предметом через equipment fragment; ядро инвентаря не зависит от WeaponDefinition. Equip не создаёт предметы; не возвращать автоматическое тестовое оружие.
 
-## Экономная работа и консолидация (правило пользователя, 2026-11-01)
-- Экономить токены, вычисления и время пользователя. Брать одну ограниченную задачу с конкретным результатом; новые идеи фиксировать отдельно, не расширять реализацию инициативно.
-- Для кода сначала использовать локальные файлы/CLI. MCP применять адресно для редакторских задач; сохранять найденные схемы инструментов и возвращать только нужные поля, без повторных больших discovery/schema dumps.
-- Собирать согласованный пакет C++-изменений после статического просмотра. Не запускать сборку после каждой мелкой правки; повторять её при ошибке или последующих необходимых изменениях C++. Не повторять успешные проверки без новой причины.
-- Заранее согласовать одно окно закрытого редактора на пакет работ. Не запускать редактор, серверы или длительные командлеты без необходимости. Не путать сборку/авторинг с доказанной работой в игре.
-- Тестирование — исключительно по отдельному апруву и в согласованном объёме. Обычный игровой запуск пользователя не является разрешением агенту на тесты.
-- Пока приоритет — консолидация существующей основы: владельцы состояния, конфигурация, зависимости, устранение дублей. Не переносить новые подсистемы из Lyra по собственной инициативе.
-- Избегать новых жёстко заданных /Game-путей, клавиш и чисел в runtime. Пользовательские настройки держать в существующих definition/config/input assets; одноразовые миграции отделять от игрового кода. Не создавать новую универсальную framework-систему ради рефакторинга.
-- Пользователь быстрее выполняет визуальную работу в Blueprint/UMG/анимациях. Давать короткий контракт: класс/ассет, нужные поля/события, ожидаемый результат. Агент отвечает за C++, GAS, сеть и серверные инварианты.
-- Итог краткий: что изменено, что реально проверено, что осталось. Производительность MCP/игры не объявлять установленной причиной тормозов без замеров.
+## Код, инструменты и Git
+
+- Не делать коммиты без нового явного запроса пользователя; прежнее разрешение на автоматические коммиты отозвано.
+- Runtime API по умолчанию C++. Не добавлять BlueprintCallable/Pure/Assignable/ImplementableEvent без конкретной потребности. Сохранять reflection для GC, сериализации, RPC, RepNotify, callback и редакторских настроек.
+- Настройки и ссылки на контент хранить в существующих definition/config assets. Не добавлять жёсткие `/Game`-пути в runtime. Одноразовые миграции отделять от игрового кода.
+- Для анализа сначала локальные файлы и CLI. MCP применять адресно, переиспользовать найденные схемы; не повторять большие discovery и успешные проверки без причины. Причины тормозов подтверждать замерами.
+- Core Redirects не удалять до миграции и проверки ссылок. Для переноса native типов использовать skill `ue-core-redirect-migration`.
+- Git: проверять текущую ветку; коммит, push и PR делать по запросу пользователя. Бинарные ассеты — Git LFS. Не выполнять reset/clean и массовое пересохранение ассетов без явной необходимости.
+- Эта памятка содержит устойчивые правила, а не журнал сессий. Детали реализации, результаты проверок и миграции хранить в профильных Docs или PR. Не накапливать здесь историю изменений.
+
+## Документация по задаче
+
+Читать нужный документ, а не весь каталог. Исторические инструкции и статусы сверять с текущим кодом.
+
+- [Границы GameplayFoundation](Docs/Architecture/GameplayFoundationModule.md)
+- [Ввод персонажа и UI](Docs/Gameplay/CharacterInputSetup.md)
+- [Character FSM](Docs/Gameplay/CharacterStateMachine.md), [готовность](Docs/Gameplay/WaitForReady.md)
+- [Инвентарь](Docs/Gameplay/InventoryContainers.md), [Interaction UI](Docs/Gameplay/InteractionUI.md)
+- [ALS authority](Docs/Networking/ALSAuthority.md), [Mantle](Docs/Gameplay/MantleAbility.md)
+- [Баллистика](Docs/Gameplay/BallisticsAndAmmo.md), [физическая реакция](Docs/Gameplay/BulletBodyImpact.md)
+- [Dedicated server](Docs/Networking/DedicatedServer.md), [сетевые проверки](Docs/Testing/MultiplayerCombat.md)
+- [Scenario Flow](Docs/Architecture/ScenarioFlow.md) — концепция; отдельная реализация требует согласованной задачи.

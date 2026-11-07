@@ -9,6 +9,9 @@
 
 void UResolutionObserver::Enter()
 {
+	ResetBlueprintInput();
+	FViewport::ViewportResizedEvent.Remove(ViewportResizedHandle);
+	ViewportResizedHandle.Reset();
 	const ULocalPlayer* Player = GetLocalPlayer();
 	if (!ensureMsgf(Player && Player->ViewportClient, TEXT("Resolution observer has no owning player's viewport.")))
 	{

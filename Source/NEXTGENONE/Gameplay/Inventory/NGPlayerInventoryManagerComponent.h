@@ -11,26 +11,35 @@ class UNGInventoryManagerComponent;
 class UNGInventoryItemInstance;
 class UNGInteractionComponent;
 
-
 /** PlayerState-owned storage, player requests and external-container session. */
 UCLASS(Blueprintable, ClassGroup=Inventory, meta=(BlueprintSpawnableComponent))
 class NEXTGENONE_API UNGPlayerInventoryManagerComponent : public UNGInventoryManagerComponent
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 public:
-    UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
-    virtual void BeginPlay() override;
-    virtual void EndPlay(EEndPlayReason::Type Reason) override;
-	bool TryBeginStarterGrant();
+	UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+	virtual void BeginPlay() override;
+	virtual void EndPlay(EEndPlayReason::Type Reason) override;
+	UPROPERTY(EditDefaultsOnly, Category="Inventory|Starter") TArray<FNGInventoryStarterEntry> InitialContents;
+	/** Serialized for manual migration only; runtime grants use InitialContents. */
+	UPROPERTY(EditDefaultsOnly, Category="Inventory|Legacy", meta=(DisplayName="Legacy Starter Items (Migration Only)")) TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
+	void GrantStarterInventory();
 	UNGInventoryManagerComponent* GetViewedInventory() const;
 	void OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
 	void CloseInventoryView();
-	void RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0);
+	/** True means dispatched; inventory changes arrive through replication. */
+	bool RequestActivationItem(UNGInventoryItemInstance* Item);
+	bool RequestActivationSlot(int32 ActionSlot);
+	bool ActivateItemOnServer(UNGInventoryItemInstance* Item);
+	bool RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0);
 	UPROPERTY(EditDefaultsOnly, Category="Inventory", meta=(ClampMin="0.01")) float InventoryOperationInterval = .05f;
-    void RequestDropItem(UNGInventoryItemInstance* Item, int32 Count=0);
-    UFUNCTION(Server, Reliable) void ServerDropItem(ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
+	bool RequestDropItem(UNGInventoryItemInstance* Item, int32 Count=0);
+	UFUNCTION(Server, Reliable) void ServerDropItem(ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
 
 private:
+	UFUNCTION(Server, Reliable) void ServerActivationItem(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 ExpectedSlot);
+	double NextActivationTime = 0.;
+	bool TryBeginStarterGrant();
 	double NextDropTime = 0.0;
 	double NextOperationTime = 0.0;
 	bool bStarterGrantStarted = false;
@@ -50,5 +59,5 @@ private:
 	APawn* GetInventoryPawn() const;
 	bool IsLocalController() const;
 
-    UFUNCTION() void PawnChanged(APlayerState* Player, APawn* NewPawn, APawn* OldPawn);
+	UFUNCTION() void PawnChanged(APlayerState* Player, APawn* NewPawn, APawn* OldPawn);
 };

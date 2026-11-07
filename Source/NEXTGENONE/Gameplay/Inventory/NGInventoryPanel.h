@@ -6,11 +6,8 @@
 #include "Inventory/NGInventoryManagerComponent.h"
 #include "NGInventoryPanel.generated.h"
 
-class UNGCombatComponent;
 class UNGPlayerInventoryManagerComponent;
-struct FNGEquipmentState;
 
-/** Project adapter for the reusable R5-style UI. Owns no input, layout, or inventory state. */
 UCLASS(Abstract, Blueprintable)
 class NEXTGENONE_API UNGInventoryPanel : public UUIInventoryWidget, public IUIInventoryOperationInterface
 {
@@ -28,12 +25,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Inventory") FGameplayTag SlotFilter;
 private:
 	TWeakObjectPtr<UNGInventoryManagerComponent> Inventory;
-	TWeakObjectPtr<UNGCombatComponent> Combat;
-	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> PlayerInventory;
 	TArray<TWeakObjectPtr<UNGInventoryItemInstance>> ObservedItems;
 	UFUNCTION() void Refresh();
-	UFUNCTION() void Changed(FNGInventoryChangeMessage Change);
-	UFUNCTION() void EquipmentChanged(FNGEquipmentState Equipment);
-	UFUNCTION() void PawnChanged(APawn* OldPawn, APawn* NewPawn);
+	UFUNCTION() void Changed();
+	UNGPlayerInventoryManagerComponent* ResolvePlayerInventory() const;
 	void UnbindItems();
 };
