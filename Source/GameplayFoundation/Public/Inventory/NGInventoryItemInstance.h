@@ -23,6 +23,13 @@ struct GAMEPLAYFOUNDATION_API FNGItemState
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) TSubclassOf<UNGInventoryItemDefinition> ItemClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Count = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) TMap<FGameplayTag, int32> StatStacks;
+
+	// Stats belong to the entire instance, not to each unit of Count.
+	bool CanSplitStack() const { return StatStacks.IsEmpty(); }
+	bool CanMergeStackWith(const FNGItemState& Other) const
+	{
+		return ItemClass == Other.ItemClass && CanSplitStack() && Other.CanSplitStack();
+	}
 };
 
 /**

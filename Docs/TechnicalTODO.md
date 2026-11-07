@@ -13,12 +13,17 @@ R1/R2 реализованы в текущем пакете: ограничен�
 
 ## P1 — корректность и надёжность
 
-- [ ] Единая политика split/merge stateful stacks для TransferTo и DropInventoryItem.
-  Сейчас частичный transfer копирует полный StatStacks, а drop запрещает такое разделение.
-  Зафиксировать семантику stats на instance/единицу и исключить дублирование зарядов.
-- [ ] Обработка неуспешного FSM-перехода: ошибка Definition/mappings/entry ability не должна
-  бессрочно удерживать RequestedStateTag и блокировать освобождение Avatar/следующую жизнь.
-  Нужны явная диагностика и определённый исход ошибки без нового универсального FSM framework.
+- [x] Единая политика split/merge stateful stacks для TransferTo и DropInventoryItem.
+  StatStacks принадлежат instance целиком, не единице Count. Общие CanSplitStack/CanMergeStackWith
+  запрещают split и merge при непустых stats; полный перенос/drop разрешён, swap внутри контейнера сохранён.
+  Transfer повторно проверяет snapshot stats после инициализации фрагментов. Статический просмотр выполнен;
+  сборка и runtime не проверены. Регрессии split/merge ниже остаются открытыми.
+- [x] Обработка неуспешного входа ресурсов FSM: ошибки Definition/mappings/GAS grants/entry ability
+  сообщаются машине, очищают RequestedStateTag/Event и ресурсы, освобождают барьер Avatar handoff.
+  Ошибка терминальна для данного Pawn: IsGameplayReady=false, без автоматического повторного входа;
+  логический тег отказавшего перехода сохранён отдельно (в том числе Dead). Новый Pawn начинает независимо.
+  Статический просмотр выполнен, сборка/runtime не проверены. Отсутствующий переход в самом Blueprint-графе
+  без вызова resource Enter этим обработчиком не обнаруживается; это отдельная проверка настройки графа.
 
 ## P2 — инвентарь, взаимодействия и бой
 
@@ -44,8 +49,6 @@ R1/R2 реализованы в текущем пакете: ограничен�
 
 ## P2 — UI и lifecycle
 
-- [ ] Реализовать контракт Back у NGSettingsScreenMounter: сейчас подписанный обработчик пуст.
-- [ ] Подтверждать смену видеорежима с таймером и откатом; не вызывать ConfirmVideoMode немедленно.
 - [ ] Безопасный повторный Enter/Exit UI-компонентов: освобождение старых policy/mapping handles,
   подписок и виджетов; очистка Placeholders при смене layout template; диагностика дубликатов ID.
 - [ ] Обнулять OutComponent перед GetClosestComponentInHierarchyUp: отсутствие результата
@@ -53,19 +56,9 @@ R1/R2 реализованы в текущем пакете: ограничен�
 
 ## P2/P3 — плагины, зависимости и проверки
 
-- [ ] GameplayMessageRuntime: удалять невалидный listener из текущего Tag, а не исходного Channel,
-  при обходе родительских каналов BroadcastMessageInternal.
 - [ ] GCFSMEditor: снимать три зарегистрированных Details class layout в ShutdownModule.
-- [ ] Убрать повтор DeveloperSettings в UIModule.Build.cs; согласовать прямую public-зависимость
-  NEXTGENONE от GCFSM с публичным заголовком NGCharacterStateMachineComponent.
 - [ ] Обновить Combat smoke harness под выбор предмета, Action inventory, ADS и текущие оружейные
   настройки; убрать зависимость от старой неявной выдачи и фиксированных ammo/damage.
-- [ ] После отдельного разрешения: сборки Editor/Game/Server, Blueprint compilation,
-  Data Validation, отдельная сборка без Unity/PCH и поддерживаемый UE 5.8.4 static analyzer.
-- [ ] После отдельного разрешения: адресные регрессии null-context, split/merge, pickup,
-  повторный UI lifecycle и неуспешный FSM transition.
-- [ ] После отдельного разрешения: dedicated server + 2 clients, latency/loss, get-up/roll,
-  смерть/respawn, late join/relevancy GCFSM, отмена Reload, закрытие/повторное открытие контейнера.
 
 Порядок: P1 → инварианты инвентаря → UI lifecycle → консолидация → проверки качества.
 Сборки и игровые проверки требуют отдельного разрешения по AGENTS.md.

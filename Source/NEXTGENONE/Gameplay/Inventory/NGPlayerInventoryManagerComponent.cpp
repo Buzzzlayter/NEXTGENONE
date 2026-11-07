@@ -10,13 +10,11 @@
 UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
 {
-    AddSlots(20, TAG_NGSlotStorage);
-    AddSlots(5, TAG_NGSlotAction);
 }
 
 bool UNGPlayerInventoryManagerComponent::TryBeginStarterGrant()
 {
-    if (!GetOwner() || !GetOwner()->HasAuthority() || bStarterGrantStarted) return false;
+    if (!GetOwner() || !GetOwner()->HasAuthority() || bStarterGrantStarted || !InitializeInventory()) return false;
     bStarterGrantStarted = true;
     return true;
 }

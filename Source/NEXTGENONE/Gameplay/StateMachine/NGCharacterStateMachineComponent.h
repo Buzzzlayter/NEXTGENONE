@@ -29,6 +29,8 @@ public:
 	UFUNCTION(BlueprintPure, Category="Character FSM") bool HasStateTag(FGameplayTag StateTag) const;
 	bool CanReleaseAvatar() const;
 	void NotifyResourcesReady(UNGCharacterStateResources* Resources);
+	void NotifyResourceFailure(FGameplayTag StateTag, const FString& Reason);
+	bool HasResourceFailure() const { return bResourcesFailed; }
 	void RestorePresentation() const;
 	const UNGControlStateDefinition* GetAbilityStateDefinition(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
 	FNGCharacterStateChanged OnStateChanged;
@@ -47,8 +49,10 @@ private:
 	FGameplayTag GetCurrentStateTag() const;
 	FGameplayTag RequestedStateTag;
 	FGameplayTag RequestedStateEvent;
+	FGameplayTag FailedStateTag;
 	FGameplayTag LastNotifiedStateTag;
 	bool bEnding = false;
+	bool bResourcesFailed = false;
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyASC;
 	TArray<TWeakObjectPtr<UNGCharacterStateResources>> ActiveResources;
 };

@@ -2,6 +2,12 @@
 
 Актуализация lifecycle: UHFSMStateComponent и все наследники используют **void Enter/Exit**, как UHFSMState. Общий отказ/откат входа, AbortEnter, OnEnterFailed, HasEnteredSuccessfully и отдельный ActiveComponents удалены по решению пользователя. State вызывает все настроенные компоненты; каждый проверяет свои данные, освобождает собственные частичные ресурсы и делает return при ошибке. Ошибка одного компонента не откатывает остальные. Внутренние GAS validation/grant/handle проверки и барьер готовности ресурсов для смены Avatar сохранены. Blueprint пользователь настраивает сам: удалить старые узлы OnEnterFailed/HasEnteredSuccessfully и ненужный переход ResourceFailure, если он обслуживал только общий rollback. Более ранние описания rollback ниже исторические.
 
+## Ошибка входа ресурсов персонажа
+
+При ошибке Definition, input mappings, выдачи GAS-ресурсов или активации entry ability `UNGCharacterStateResources` очищается и сообщает отказ CharacterStateMachine. Машина снимает остальные свои GAS/input-ресурсы, очищает RequestedStateTag/Event и разрешает Avatar handoff через существующее OnResourcesReady. Здесь уведомление означает снятие барьера смены Avatar; успешную готовность проверяет только IsGameplayReady, которая при ошибке возвращает false.
+
+Ошибка терминальна для данного Pawn, без автоматических повторов. Логический тег отказавшего перехода сохраняется отдельно, чтобы запрос Dead не превратил тело обратно в Alive. Это локальный исход ошибки, а не репликация нового состояния графа. Новый Pawn имеет независимую машину. Лог содержит Pawn, MachineName, StateTag и причину; для grants также класс ability/effect. Общий void Enter/Exit HFSM и Blueprint-граф не получают rollback-протокола. Отсутствие самого перехода в Blueprint, при котором resource Enter не вызывается, этот обработчик не диагностирует. Сборка и runtime правки не проверены.
+
 Актуальный контракт — 2026-11-03. Персонаж не получает базовых способностей при создании/possession. Их единственный источник — активные UNGControlStateDefinition. UNGAbilitySet и DA_PlayerAbilities удалены. CharacterDefinition содержит InputConfig, без базовых GAS grants.
 
 ## Граф и владельцы
@@ -21,7 +27,7 @@ FSM_CharacterAlive и FSM_CharacterDead — существующие UHFSMState 
 - **MappingContexts** — gameplay IMC и приоритеты, принадлежащие только состоянию.
 - **bBlockGameplayInput** — политика через существующий UPlayerInputSubsystem. UI IA/IMC остаются отдельными.
 
-Enter на сервере проверяет конфиг/текущий Avatar, выдаёт все способности, применяет эффекты, сохраняет handles и регистрирует scope. Затем запускает grants с bActivateOnEnter=true. Ошибка приводит к cleanup и существующему OnEnterFailed/ResourceFailure. Клиенты не выдают GAS grants; owning client подключает IMC/input policy. Exit/Abort/Unbind снимают только handles этого состояния. Перекрытие классов/input tags с другим активным scope (родительское состояние, оборудование) считается ошибкой, а не второй копией способности.
+Enter на сервере проверяет конфиг/текущий Avatar, выдаёт все способности, применяет эффекты, сохраняет handles и регистрирует scope. Затем запускает grants с bActivateOnEnter=true. Ошибка обрабатывается по контракту выше, без OnEnterFailed/ResourceFailure. Клиенты не выдают GAS grants; owning client подключает IMC/input policy. Exit/Unbind снимают только handles этого состояния. Перекрытие классов/input tags с другим активным scope (родительское состояние, оборудование) считается ошибкой, а не второй копией способности.
 
 Refresh после possession восстанавливает ресурсы активного состояния. После UnPossess обычное состояние не выдаёт их повторно без Controller; Dead может получить ресурсы непосредственно при Enter без Controller. Cleanup старого Pawn не снимает ресурсы нового Avatar. При отмене способностей handles предварительно извлекаются из scope для защиты от повторного cleanup из callbacks.
 

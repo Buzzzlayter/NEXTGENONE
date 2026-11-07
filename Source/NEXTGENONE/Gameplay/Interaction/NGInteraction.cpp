@@ -131,7 +131,7 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 	const auto State=Item->CaptureState(Count);
 	if (!State.ItemClass) return nullptr;
 	// Stateful stacks need an explicit split policy; do not duplicate ammo/charges into two instances.
-	if (Count<OldCount && !State.StatStacks.IsEmpty()) return nullptr;
+	if (Count<OldCount && !State.CanSplitStack()) return nullptr;
 	ActiveDrops.Add(Item); ON_SCOPE_EXIT { ActiveDrops.Remove(Item); };
 	const FVector Up=-Pawn->GetCharacterMovement()->GetGravityDirection();
 	const FVector Forward=FVector::VectorPlaneProject(Pawn->GetActorForwardVector(),Up).GetSafeNormal();

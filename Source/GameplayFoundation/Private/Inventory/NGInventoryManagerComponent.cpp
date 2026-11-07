@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryItemInstance.h"
+#include "Inventory/NGInventoryLayoutDefinition.h"
 #include "NativeGameplayTags.h"
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotStorage, "Inventory.Slot.Storage");
@@ -159,6 +160,7 @@ UNGInventoryManagerComponent::UNGInventoryManagerComponent(const FObjectInitiali
 	, InventoryList(this)
 {
 	SetIsReplicatedByDefault(true);
+	bWantsInitializeComponent = true;
 }
 
 void UNGInventoryManagerComponent::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
@@ -170,7 +172,7 @@ void UNGInventoryManagerComponent::GetLifetimeReplicatedProps(TArray< FLifetimeP
 
 bool UNGInventoryManagerComponent::CanAddItemDefinition(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount)
 {
-	return GetOwner() && GetOwner()->HasAuthority() && ItemDef && StackCount > 0
+	return GetOwner() && GetOwner()->HasAuthority() && InitializeInventory() && ItemDef && StackCount > 0
 		&& StackCount <= GetDefault<UNGInventoryItemDefinition>(ItemDef)->MaxStackSize && FindFirstAvailableSlot(ItemDef) != INDEX_NONE;
 }
 
@@ -202,6 +204,7 @@ UNGInventoryItemInstance* UNGInventoryManagerComponent::AddItemDefinitionToSlot(
 
 void UNGInventoryManagerComponent::AddItemInstance(UNGInventoryItemInstance* ItemInstance)
 {
+	if (!InitializeInventory()) return;
 	if (!GetOwner()->HasAuthority() || !ItemInstance || ItemInstance->GetOuter() != GetOwner() || Contains(ItemInstance) || FindFirstAvailableSlot(ItemInstance->GetItemDef()) == INDEX_NONE) return;
 	TArray<UNGInventoryManagerComponent*> Containers;
 	GetOwner()->GetComponents(Containers);
@@ -390,29 +393,36 @@ void UNGInventoryManagerComponent::GetReplicatedCustomConditionState(FCustomProp
 	DOREPDYNAMICCONDITION_INITCONDITION_FAST(ThisClass, InventoryList, bOwnerOnly ? COND_OwnerOnly : COND_None);
 }
 
-void UNGInventoryManagerComponent::AddSlots(int32 Count, FGameplayTag SlotTag)
+void UNGInventoryManagerComponent::InitializeComponent()
 {
-    if (HasBegunPlay() || Count <= 0) return;
-    const int32 FirstIndex = InventoryList.Entries.AddDefaulted(Count);
-    for (int32 Index = FirstIndex; Index < InventoryList.Entries.Num(); ++Index)
-    {
-        auto& Entry = InventoryList.Entries[Index];
-        Entry.SlotIndex = Index;
-        Entry.SlotTag = SlotTag;
-    }
+	Super::InitializeComponent();
+	if (GetOwner()->HasAuthority()) InitializeInventory();
 }
 
-void UNGInventoryManagerComponent::BeginPlay()
+bool UNGInventoryManagerComponent::InitializeInventory()
 {
-    Super::BeginPlay();
-    InventoryList.OwnerComponent = this;
-    if (!GetOwner()->HasAuthority()) return;
-    for (int32 Index = 0; Index < InventoryList.Entries.Num(); ++Index)
-    {
-        auto& Entry = InventoryList.Entries[Index];
-        Entry.SlotIndex = Index; // Includes entries authored directly in Details.
-        InventoryList.MarkItemDirty(Entry); // Empty slots must be sent in the initial snapshot too.
-    }
+	if (!GetOwner() || !GetOwner()->HasAuthority()) return false;
+	if (bSlotsInitialized) return true;
+	if (!Layout)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: assign an Inventory Layout before initializing slots."), *GetPathName());
+		return false;
+	}
+	InventoryList.OwnerComponent = this;
+	InventoryList.Entries.Reset();
+	InventoryList.Entries.SetNum(Layout->Slots.Num());
+	for (int32 Index = 0; Index < Layout->Slots.Num(); ++Index)
+	{
+		auto& Entry = InventoryList.Entries[Index];
+		Entry.SlotIndex = Index;
+		Entry.SlotTag = Layout->Slots[Index].SlotTag;
+		Entry.AcceptedItems = Layout->Slots[Index].AcceptedItems;
+		InventoryList.MarkItemDirty(Entry); // Replicate empty slots and their rules too.
+	}
+	bSlotsInitialized = true; // Empty layouts are initialized too; never rebuild an occupied inventory.
+	FNGInventoryChangeMessage Message; Message.InventoryOwner = this;
+	OnInventoryChanged.Broadcast(Message);
+	return true;
 }
 
 FNGInventoryEntry* UNGInventoryManagerComponent::FindSlot(int32 SlotIndex)
@@ -515,8 +525,8 @@ bool UNGInventoryManagerComponent::TransferTo(UNGInventoryManagerComponent* Targ
 	if (Target == this && SourceSlot == TargetSlot) return true;
 	auto* Other = Target->GetItemAtSlot(TargetSlot);
 	FNGItemState State = Item->CaptureState(Count);
-	const bool bMerge = Other && Other->GetItemDef() == Item->GetItemDef()
-		&& State.StatStacks.OrderIndependentCompareEqual(Other->CaptureState().StatStacks);
+	if (Count < OldCount && !State.CanSplitStack()) return false;
+	const bool bMerge = Other && State.CanMergeStackWith(Other->CaptureState());
 	if (!bMerge && Target == this && Count == OldCount) return MoveItemToSlot(Item, TargetSlot);
 	// Cross-container swapping is intentionally rejected; move to an empty slot or merge compatible stacks.
 	if (Other && !bMerge) return false;
@@ -531,7 +541,9 @@ bool UNGInventoryManagerComponent::TransferTo(UNGInventoryManagerComponent* Targ
 		if (!DestinationItem) return false;
 	}
 	// Revalidate after fragment initialization before committing the source removal.
-	if (GetItemAtSlot(SourceSlot) != Item || GetCount(Item) != OldCount || !RemoveQuantity(Item, Count, false))
+	if (GetItemAtSlot(SourceSlot) != Item || GetCount(Item) != OldCount
+		|| !Item->CaptureState(Count).StatStacks.OrderIndependentCompareEqual(State.StatStacks)
+		|| !RemoveQuantity(Item, Count, false))
 	{
 		if (!bMerge) Target->RemoveQuantity(DestinationItem, Count, false);
 		return false;

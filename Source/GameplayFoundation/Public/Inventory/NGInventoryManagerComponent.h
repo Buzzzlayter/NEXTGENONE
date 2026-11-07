@@ -13,6 +13,7 @@
 class UNGInventoryItemDefinition;
 class UNGInventoryItemInstance;
 class UNGInventoryManagerComponent;
+class UNGInventoryLayoutDefinition;
 class UObject;
 struct FFrame;
 struct FNGInventoryList;
@@ -59,8 +60,8 @@ struct GAMEPLAYFOUNDATION_API FNGInventoryEntry : public FFastArraySerializerIte
 	FNGInventoryEntry()
 	{}
 
-	UPROPERTY(EditAnywhere) FGameplayTag SlotTag;
-	UPROPERTY(EditAnywhere) FGameplayTagQuery AcceptedItems;
+	UPROPERTY() FGameplayTag SlotTag;
+	UPROPERTY() FGameplayTagQuery AcceptedItems;
 	FString GetDebugString() const;
 
 private:
@@ -106,8 +107,6 @@ public:
 
 	bool NetDeltaSerialize(FNetDeltaSerializeInfo& DeltaParms)
 	{
-		// Defaults are authoring data, not received FastArray records. Clear them once on first read.
-		if (DeltaParms.Reader && !bReceivedSnapshot) { Entries.Reset(); bReceivedSnapshot = true; }
 		return FFastArraySerializer::FastArrayDeltaSerialize<FNGInventoryEntry, FNGInventoryList>(Entries, DeltaParms, *this);
 	}
 
@@ -123,11 +122,10 @@ private:
 	friend UNGInventoryManagerComponent;
 
 private:
-	// Persistent slots, including empty ones. Only the slot rules are editable.
-	UPROPERTY(EditAnywhere, meta=(TitleProperty="SlotTag"))
+	// Runtime slots, including empty ones. Authoring rules belong to Layout.
+	UPROPERTY()
 	TArray<FNGInventoryEntry> Entries;
 
-	bool bReceivedSnapshot = false;
 	UPROPERTY(NotReplicated)
 	TObjectPtr<UActorComponent> OwnerComponent;
 };
@@ -160,9 +158,9 @@ public:
 	UPROPERTY() FNGInventoryChanged OnInventoryChanged;
 	/** Fixed per component template; do not change the visibility policy during replication. */
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|Replication") bool bOwnerOnly = true;
-	/** Append empty slots to the component defaults before BeginPlay. */
-	void AddSlots(int32 Count, FGameplayTag SlotTag);
-	virtual void BeginPlay() override;
+	/** Idempotent server initialization; an assigned layout may intentionally contain zero slots. */
+	bool InitializeInventory();
+	virtual void InitializeComponent() override;
 	virtual void GetReplicatedCustomConditionState(FCustomPropertyConditionState& OutActiveState) const override;
 	int32 GetSlotCount() const { return InventoryList.Entries.Num(); }
 	UNGInventoryItemInstance* GetItemAtSlot(int32 SlotIndex) const;
@@ -211,8 +209,11 @@ public:
 private:
 	friend struct FNGInventoryList;
 	bool bTransferring = false;
+	bool bSlotsInitialized = false;
 	FNGInventoryEntry* FindSlot(int32 SlotIndex);
 	const FNGInventoryEntry* FindSlot(int32 SlotIndex) const;
-	UPROPERTY(EditDefaultsOnly, Replicated, Category=Inventory, meta=(ShowOnlyInnerProperties))
+	UPROPERTY(EditDefaultsOnly, Category=Inventory)
+	TObjectPtr<UNGInventoryLayoutDefinition> Layout;
+	UPROPERTY(Transient, Replicated)
 	FNGInventoryList InventoryList;
 };
