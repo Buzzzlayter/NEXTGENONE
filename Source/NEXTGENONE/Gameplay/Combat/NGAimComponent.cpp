@@ -1,5 +1,6 @@
 #include "Gameplay/Combat/NGAimComponent.h"
-#include "Gameplay/Character/NextgenoneCharacter.h"
+#include "Gameplay/Player/NGPlayerContext.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "GameFramework/PlayerController.h"
 #include "Input/PlayerInputSubsystem.h"
 #include "Gameplay/Interaction/NGInteraction.h"
@@ -70,14 +71,16 @@ FVector UNGAimComponent::GetTargetingOrigin(const FVector& ViewOrigin, const FVe
 }
 bool UNGAimComponent::ShouldShowReticle() const
 {
-	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); const auto* PC=Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	const auto* Pawn=Cast<APawn>(GetOwner()); const auto* PC=Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	const auto* ASC = NGPlayerContext::GetCurrentASC(Pawn, false);
 	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
-	return bShowReticle && PC && PC->IsLocalController() && PC->GetPawn()==Pawn && !Pawn->IsDead() && !(Input && Input->IsGameplayInputBlocked());
+	return bShowReticle && PC && PC->IsLocalController() && PC->GetPawn()==Pawn && ASC
+		&& !ASC->HasMatchingGameplayTag(TAG_NGDead) && !(Input && Input->IsGameplayInputBlocked());
 }
 FLinearColor UNGAimComponent::GetReticleColor() const
 {
-	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner());
-	if (Pawn && Pawn->Interaction && Pawn->Interaction->GetFocusedActor()) return Pawn->Interaction->CanUseFocusedActor() ? InteractionColor : UnavailableColor;
+	const auto* Interaction = GetOwner() ? GetOwner()->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	if (Interaction && Interaction->GetFocusedActor()) return Interaction->CanUseFocusedActor() ? InteractionColor : UnavailableColor;
 	return IdleColor;
 }
 void UNGAimComponent::TickComponent(float Delta,ELevelTick Tick,FActorComponentTickFunction* ThisTick)

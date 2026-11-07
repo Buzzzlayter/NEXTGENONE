@@ -3,11 +3,11 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "AbilitySystem/NGAbilitySystem.h"
-#include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
 #include "Library/ALSCharacterEnumLibrary.h"
 #include "NGCombat.generated.h"
 
 class ANextgenoneCharacter;
+class APawn;
 class UStaticMeshComponent;
 class USkeletalMeshComponent;
 class UNGInventoryItemInstance;
@@ -92,7 +92,6 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	UPROPERTY(EditDefaultsOnly, Category="Weapon|Legacy", meta=(DisplayName="Legacy Starter Items (Migration Only)")) TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
 	UPROPERTY(BlueprintAssignable) FNGEquipmentChanged OnEquipmentChanged;
 	UPROPERTY(BlueprintAssignable) FNGAmmoChanged OnAmmoChanged;
 	// Weapon-pack adapters subscribe here; cosmetic events never apply damage.
@@ -124,7 +123,7 @@ public:
 	UFUNCTION(NetMulticast, Unreliable) void MulticastPunchStarted(FVector_NetQuantizeNormal Direction, UAnimMontage* Montage);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastPunchHit(ANextgenoneCharacter* Target, FVector_NetQuantize ImpactPoint);
 	// Shared damage entry point rejects stale Pawn/ASC pairings, including corpses.
-	static bool ApplyDamageToPawn(class ANextgenoneCharacter* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit = nullptr);
+	static bool ApplyDamageToPawn(APawn* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit = nullptr);
 private:
 	friend class UNGEquipWeaponItemAbility;
 	bool EquipItemFromAbility(UNGInventoryItemInstance* Item);
@@ -150,27 +149,4 @@ private:
 	void AimingTagChanged(FGameplayTag Tag, int32 Count);
 	UFUNCTION() void InventoryChanged();
 	UFUNCTION() void HandleDeath(bool bDead);
-};
-
-UCLASS(Blueprintable)
-class NEXTGENONE_API UNGReloadAbility : public UNGGameplayAbilityFromEquipment
-{
-	GENERATED_BODY()
-public:
-	UNGReloadAbility();
-	virtual void ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event) override;
-	virtual void EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bCancelled) override;
-private:
-	TWeakObjectPtr<UNGCombatComponent> ReloadCombat;
-	TWeakObjectPtr<UNGInventoryItemInstance> ReloadItem;
-	UFUNCTION() void FinishReload();
-};
-
-UCLASS(Blueprintable)
-class NEXTGENONE_API UNGFireAbility : public UNGGameplayAbilityFromEquipment
-{
-	GENERATED_BODY()
-public:
-	UNGFireAbility();
-	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, const FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event) override;
 };

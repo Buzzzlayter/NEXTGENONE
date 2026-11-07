@@ -3,13 +3,15 @@
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryManagerComponent.h"
-#include "Gameplay/Character/NextgenoneCharacter.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "Misc/ScopeExit.h"
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/Abilities/NGItemActivateAbility.h"
+#include "Gameplay/Interaction/NGItemPickup.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Inventory/NGInventoryFragment_ItemActions.h"
 
 UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
@@ -86,52 +88,51 @@ void UNGPlayerInventoryManagerComponent::ClearViewedContext()
 bool UNGPlayerInventoryManagerComponent::RequestDropItem(UNGInventoryItemInstance* Item, int32 Count)
 {
 	if (!IsLocalController() && !GetOwner()->HasAuthority()) return false;
-	auto* Expected = Cast<ANextgenoneCharacter>(GetInventoryPawn());
+	auto* Expected = GetInventoryPawn();
 	if (GetOwner()->HasAuthority()) ServerDropItem_Implementation(Expected, Item, Count);
 	else ServerDropItem(Expected, Item, Count);
 	return true;
 }
 
-void UNGPlayerInventoryManagerComponent::ServerDropItem_Implementation(ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count)
+void UNGPlayerInventoryManagerComponent::ServerDropItem_Implementation(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count)
 {
 	if (Count < 0) return;
 	if (!ExpectedPawn || GetInventoryPawn() != ExpectedPawn) return;
-	auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
-	if (!System || !System->IsCurrentInteractor(ExpectedPawn)) return;
+	auto* Interaction = ExpectedPawn->FindComponentByClass<UNGInteractionComponent>();
+	if (!Interaction || !Interaction->IsCurrentInteractor()) return;
 	const double Now = GetWorld()->GetTimeSeconds();
 	if (Now < NextDropTime) return;
 	NextDropTime = Now + .15;
 	if (!IsValid(Item) || !Contains(Item)) return;
-	System->DropInventoryItem(ExpectedPawn, Item, Count);
+	DropItemOnServer(ExpectedPawn, Item, Count);
 }
 
 void UNGPlayerInventoryManagerComponent::OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType)
 {
-	auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
-	auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
-	if (!GetOwner()->HasAuthority() || !InteractionType.IsValid() || !IsValid(Source) || !CharacterPawn || !System || !System->IsExecutingInteraction(Source->GetOwner(), CharacterPawn)) return;
+	auto* PlayerPawn = GetInventoryPawn();
+	const auto* Target = IsValid(Source) ? Cast<ANGInteractableActor>(Source->GetOwner()) : nullptr;
+	if (!GetOwner()->HasAuthority() || !InteractionType.IsValid() || !PlayerPawn || !Target || !Target->IsExecutingInteraction(PlayerPawn)) return;
 	ViewedInventory = Source;
-	ViewedPawn = CharacterPawn;
-	BindInteractionSession(CharacterPawn);
+	ViewedPawn = PlayerPawn;
+	BindInteractionSession(PlayerPawn);
 	if (SessionInteraction.IsValid()) SessionInteraction->SetConfirmedContext(InteractionType, Source->GetOwner(), Source);
-	if (GetViewedInventory() == Source) ClientShowInventory(CharacterPawn, Source, InteractionType);
+	if (GetViewedInventory() == Source) ClientShowInventory(PlayerPawn, Source, InteractionType);
 }
 UNGInventoryManagerComponent* UNGPlayerInventoryManagerComponent::GetViewedInventory() const
 {
-	const auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
-	return CharacterPawn && NGPlayerContext::GetCurrentASC(CharacterPawn, false) && !CharacterPawn->IsDead()
-		&& ViewedPawn.Get() == CharacterPawn ? ViewedInventory.Get() : nullptr;
+	const auto* PlayerPawn = GetInventoryPawn();
+	const auto* Interaction = PlayerPawn ? PlayerPawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	return Interaction && Interaction->IsCurrentInteractor(false) && ViewedPawn.Get() == PlayerPawn ? ViewedInventory.Get() : nullptr;
 }
-void UNGPlayerInventoryManagerComponent::ClientShowInventory_Implementation(ANextgenoneCharacter* ExpectedPawn, UNGInventoryManagerComponent* Source, FGameplayTag InteractionType)
+void UNGPlayerInventoryManagerComponent::ClientShowInventory_Implementation(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, FGameplayTag InteractionType)
 {
 	if (!IsValid(ExpectedPawn) || GetInventoryPawn() != ExpectedPawn || !IsValid(Source)) return;
-	const auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
-	if (!System || !System->IsCurrentInteractor(ExpectedPawn, false)) return;
+	auto* Interaction = ExpectedPawn->FindComponentByClass<UNGInteractionComponent>();
+	if (!Interaction || !Interaction->IsCurrentInteractor(false)) return;
 	ViewedInventory = Source;
 	ViewedPawn = ExpectedPawn;
 	BindInteractionSession(ExpectedPawn);
-	if (auto* Interaction = ExpectedPawn->FindComponentByClass<UNGInteractionComponent>())
-		Interaction->SetConfirmedContext(InteractionType, Source->GetOwner(), Source);
+	Interaction->SetConfirmedContext(InteractionType, Source->GetOwner(), Source);
 }
 void UNGPlayerInventoryManagerComponent::CloseInventoryView()
 {
@@ -163,31 +164,34 @@ bool UNGPlayerInventoryManagerComponent::CanAccessInventory(UNGInventoryManagerC
 	if (!IsValid(Inventory) || !IsValid(Inventory->GetOwner())) return false;
 	if (Inventory->GetOwner() == (GetPlayerController() ? GetPlayerController()->GetPlayerState<APlayerState>() : nullptr) || Inventory->GetOwner() == GetInventoryPawn()) return true;
 	if (GetViewedInventory() != Inventory) return false;
-	auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
-	auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
-	return CharacterPawn && CharacterPawn->Interaction && System && System->IsCurrentInteractor(CharacterPawn) && System->ValidateTarget(CharacterPawn, Inventory->GetOwner(), CharacterPawn->Interaction->MaxDistance)
+	auto* PlayerPawn = GetInventoryPawn();
+	const auto* Interaction = PlayerPawn ? PlayerPawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	return Interaction && Interaction->IsCurrentInteractor() && Interaction->ValidateTarget(Inventory->GetOwner())
 		&& Inventory->GetOwner()->GetClass()->ImplementsInterface(UNGInteractable::StaticClass())
-		&& INGInteractable::Execute_CanInteract(Inventory->GetOwner(), CharacterPawn);
+		&& INGInteractable::Execute_CanInteract(Inventory->GetOwner(), PlayerPawn);
 }
 bool UNGPlayerInventoryManagerComponent::RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
 {
 	if (!IsLocalController() && !GetOwner()->HasAuthority()) return false;
-	auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
-	if (GetOwner()->HasAuthority()) ServerInventoryTransfer_Implementation(CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
-	else ServerInventoryTransfer(CharacterPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
+	auto* PlayerPawn = GetInventoryPawn();
+	if (GetOwner()->HasAuthority()) ServerInventoryTransfer_Implementation(PlayerPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
+	else ServerInventoryTransfer(PlayerPawn, Source, ExpectedItem, SourceSlot, Target, TargetSlot, ExpectedTarget, Amount);
 	return true;
 }
 
-void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(ANextgenoneCharacter* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
+void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
 {
-	if (Amount < 0 || SourceSlot < 0 || TargetSlot < 0 || !FMath::IsFinite(InventoryOperationInterval)) return;
-	if (!ExpectedPawn || GetInventoryPawn() != ExpectedPawn || ExpectedPawn->IsDead()) return;
+	if (Amount < 0 || SourceSlot < 0 || TargetSlot < 0 || !FMath::IsFinite(InventoryOperationInterval))
+	return;
+	if (!ExpectedPawn || GetInventoryPawn() != ExpectedPawn)
+	return;
 	const double Now = GetWorld()->GetTimeSeconds();
 	if (Now < NextOperationTime) return;
 	NextOperationTime = Now + FMath::Max(.01f, InventoryOperationInterval);
-	auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
-	if (!System || !System->IsCurrentInteractor(ExpectedPawn) || !CanAccessInventory(Source) || !CanAccessInventory(Target))
-	return;
+	const auto* Interaction = ExpectedPawn->FindComponentByClass<UNGInteractionComponent>();
+	if (!Interaction || !Interaction->IsCurrentInteractor()) return;
+	if (!CanAccessInventory(Source)) return;
+	if (!CanAccessInventory(Target)) return;
 	if (!IsValid(ExpectedItem) || Source->GetItemAtSlot(SourceSlot) != ExpectedItem || Target->GetItemAtSlot(TargetSlot) != ExpectedTarget)
 	return;
 	Source->TransferTo(Target, SourceSlot, TargetSlot, Amount);
@@ -196,21 +200,15 @@ void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(
 void UNGPlayerInventoryManagerComponent::GrantStarterInventory()
 {
 	if (!TryBeginStarterGrant()) return;
-	if (InitialContents.IsEmpty() && !StarterItems.IsEmpty())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: migrate legacy StarterItems to explicit InitialContents; legacy items are no longer granted."), *GetPathName());
-	}
 	int32 Failures = 0;
 	for (const auto& Entry : InitialContents)
 	{
-		const int32 Destination = Entry.SlotIndex == INDEX_NONE
-			? FindFirstAvailableSlot(Entry.ItemClass, Entry.Count, Entry.SlotTag) : Entry.SlotIndex;
-		const bool bMatchesGroup = !Entry.SlotTag.IsValid() || GetSlotTag(Destination).MatchesTag(Entry.SlotTag);
-		if (Destination == INDEX_NONE || !bMatchesGroup || !AddItemDefinitionToSlot(Entry.ItemClass, Destination, Entry.Count))
+		const int32 Destination = FindFirstAvailableSlot(Entry.ItemClass, Entry.Count, Entry.SlotTag);
+		if (Destination == INDEX_NONE || !AddItemDefinitionToSlot(Entry.ItemClass, Destination, Entry.Count))
 		{
 			++Failures;
-			UE_LOG(LogTemp, Error, TEXT("%s: rejected starter item %s count=%d slot=%d group=%s"),
-				*GetPathName(), *GetNameSafe(Entry.ItemClass.Get()), Entry.Count, Entry.SlotIndex, *Entry.SlotTag.ToString());
+			UE_LOG(LogTemp, Error, TEXT("%s: rejected starter item %s count=%d group=%s"),
+				*GetPathName(), *GetNameSafe(Entry.ItemClass.Get()), Entry.Count, *Entry.SlotTag.ToString());
 		}
 	}
 	// Preserve successful entries, report partial failure, never retry implicitly on respawn.
@@ -260,4 +258,41 @@ bool UNGPlayerInventoryManagerComponent::ActivateItemOnServer(UNGInventoryItemIn
 		if (Spec.SourceObject.Get() == Item && Spec.IsActive()) return false;
 	FGameplayAbilitySpec Spec(AbilityClass, 1); Spec.SourceObject = Item;
 	return ASC->GiveAbilityAndActivateOnce(Spec).IsValid();
+}
+
+ANGItemPickup* UNGPlayerInventoryManagerComponent::DropItemOnServer(APawn* Pawn,UNGInventoryItemInstance* Item,int32 Count)
+{
+	auto* Interaction = IsValid(Pawn) ? Pawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	if (GetInventoryPawn() != Pawn || !Interaction || !Interaction->IsCurrentInteractor() || !IsValid(Item) || ActiveDrops.Contains(Item)) return nullptr;
+	const int32 OldCount=GetCount(Item); if (Count==0) Count=OldCount;
+	if (Count<1 || Count>OldCount) return nullptr;
+	const auto State=Item->CaptureState(Count);
+	if (!State.ItemClass) return nullptr;
+	// Stateful stacks need an explicit split policy; do not duplicate ammo/charges into two instances.
+	if (Count<OldCount && !State.CanSplitStack()) return nullptr;
+	ActiveDrops.Add(Item); ON_SCOPE_EXIT { ActiveDrops.Remove(Item); };
+	const auto* Movement = Cast<UCharacterMovementComponent>(Pawn->GetMovementComponent());
+	const FVector Up = Movement ? -Movement->GetGravityDirection() : Pawn->GetActorUpVector();
+	const FVector Forward=FVector::VectorPlaneProject(Pawn->GetActorForwardVector(),Up).GetSafeNormal();
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(NGDrop),false,Pawn);
+	FVector Position=Pawn->GetActorLocation()+Forward*140.f;
+	FHitResult Wall; if (GetWorld()->SweepSingleByChannel(Wall,Pawn->GetActorLocation(),Position,FQuat::Identity,ECC_Visibility,FCollisionShape::MakeSphere(26.f),Params)) Position=Wall.Location-Forward*28.f;
+	FHitResult Ground; if (!GetWorld()->LineTraceSingleByChannel(Ground,Position,Position-Up*600.f,ECC_Visibility,Params)) return nullptr;
+	Position=Ground.ImpactPoint+Up*28.f;
+	if (GetWorld()->OverlapBlockingTestByChannel(Position,FQuat::Identity,ECC_Visibility,FCollisionShape::MakeSphere(24.f),Params)) return nullptr;
+	if (FVector::DistSquared(Position,Pawn->GetActorLocation())>FMath::Square(650.f)) return nullptr;
+	UClass* Class = Interaction->DroppedPickupClass.Get();
+	if (!Class || Class->HasAnyClassFlags(CLASS_Abstract)) return nullptr;
+	const FTransform Transform(FRotationMatrix::MakeFromXZ(Forward,Up).Rotator(),Position);
+	auto* Pickup=GetWorld()->SpawnActorDeferred<ANGItemPickup>(Class,Transform,nullptr,nullptr,ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Pickup) return nullptr;
+	Pickup->InitializeDroppedState(State); Pickup->FinishSpawning(Transform);
+	// Construction scripts cannot debit the source or modify it behind the saved snapshot.
+	Interaction = IsValid(Pawn) ? Pawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	if (!IsValid(Pickup) || GetInventoryPawn() != Pawn || !Interaction || !Interaction->IsCurrentInteractor() || GetCount(Item)!=OldCount ||
+		!Item->CaptureState(Count).StatStacks.OrderIndependentCompareEqual(State.StatStacks) || !RemoveQuantity(Item,Count,false))
+	{ if (IsValid(Pickup)) Pickup->Destroy(); return nullptr; }
+	Pickup->PublishDrop();
+	NotifyInventoryChanged();
+	return Pickup;
 }

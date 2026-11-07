@@ -1,5 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
 
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryFragment_SetStats.h"
@@ -36,25 +34,6 @@ const UNGInventoryItemFragment* UNGInventoryItemDefinition::FindFragmentByClass(
 	}
 
 	return nullptr;
-}
-
-void UNGInventoryItemDefinition::PostLoad()
-{
-	Super::PostLoad();
-	if (!Weapon_DEPRECATED) return;
-	const auto* Existing = Cast<UNGInventoryFragment_Equipment>(FindFragmentByClass(UNGInventoryFragment_Equipment::StaticClass()));
-	if (!Existing || Existing->Definition != Weapon_DEPRECATED)
-	{
-		auto* Fragment = NewObject<UNGInventoryFragment_Equipment>(this, NAME_None, RF_Transactional);
-		Fragment->Definition = Weapon_DEPRECATED;
-		// Child item Blueprints can override the old Weapon value. Never mutate an inherited fragment.
-		if (Existing)
-		{
-			for (auto& Entry : Fragments) if (Entry == Existing) { Entry = Fragment; break; }
-		}
-		else Fragments.Add(Fragment);
-	}
-	Weapon_DEPRECATED = nullptr;
 }
 
 UDataAsset* UNGInventoryItemDefinition::GetEquipmentDefinition() const

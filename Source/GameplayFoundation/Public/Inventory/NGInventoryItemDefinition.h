@@ -1,6 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
-
 #pragma once
 
 #include "Kismet/BlueprintFunctionLibrary.h"
@@ -50,7 +47,6 @@ class GAMEPLAYFOUNDATION_API UNGInventoryItemDefinition : public UObject
 
 public:
 	UNGInventoryItemDefinition(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
-	virtual void PostLoad() override;
 	bool ValidateDefinition(FString& Error) const;
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
@@ -71,12 +67,8 @@ public:
 
 public:
 	const UNGInventoryItemFragment* FindFragmentByClass(TSubclassOf<UNGInventoryItemFragment> FragmentClass) const;
-private:
-	// Read old assets without retaining a dependency on the project's weapon class. Never written again.
-	UPROPERTY() TObjectPtr<UDataAsset> Weapon_DEPRECATED;
 };
 
-//@TODO: Make into a subsystem instead?
 UCLASS()
 class GAMEPLAYFOUNDATION_API UNGInventoryFunctionLibrary : public UBlueprintFunctionLibrary
 {

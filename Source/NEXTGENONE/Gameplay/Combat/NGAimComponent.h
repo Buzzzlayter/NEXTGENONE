@@ -24,7 +24,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Aim|Validation", meta=(ClampMin="1")) float MaxViewOriginDistance=600.f;
 	UPROPERTY(EditDefaultsOnly, Category="Aim|Validation", meta=(ClampMin="0",ClampMax="90")) float MaxViewAngleDifference=35.f;
 	bool ValidateShotView(const FVector& Origin, const FVector& Direction) const;
-	/** Lyra-style projection: retain the camera ray, begin targeting level with the Pawn. */
 	FVector GetTargetingOrigin(const FVector& ViewOrigin, const FVector& ViewDirection) const;
 	UFUNCTION(BlueprintPure,Category="Aim") bool ShouldShowReticle() const;
 	UFUNCTION(BlueprintPure,Category="Aim") FLinearColor GetReticleColor() const;

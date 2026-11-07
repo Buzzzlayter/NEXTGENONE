@@ -1,22 +1,13 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
-
 #include "Inventory/NGGameplayTagStack.h"
 
 #include "UObject/Stack.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(NGGameplayTagStack)
 
-//////////////////////////////////////////////////////////////////////
-// FNGGameplayTagStack
-
 FString FNGGameplayTagStack::GetDebugString() const
 {
 	return FString::Printf(TEXT("%sx%d"), *Tag.ToString(), StackCount);
 }
-
-//////////////////////////////////////////////////////////////////////
-// FNGGameplayTagStackContainer
 
 void FNGGameplayTagStackContainer::AddStack(FGameplayTag Tag, int32 StackCount)
 {
@@ -54,7 +45,6 @@ void FNGGameplayTagStackContainer::RemoveStack(FGameplayTag Tag, int32 StackCoun
 		return;
 	}
 
-	//@TODO: Should we error if you try to remove a stack that doesn't exist or has a smaller count?
 	if (StackCount > 0)
 	{
 		for (auto It = Stacks.CreateIterator(); It; ++It)

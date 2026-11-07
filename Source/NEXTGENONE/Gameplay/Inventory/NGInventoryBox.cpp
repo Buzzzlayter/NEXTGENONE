@@ -1,7 +1,7 @@
 #include "NGInventoryBox.h"
 #include "NativeGameplayTags.h"
 
-#include "Gameplay/Character/NextgenoneCharacter.h"
+#include "GameFramework/Pawn.h"
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "NGPlayerInventoryManagerComponent.h"
 #include "Components/BoxComponent.h"
@@ -30,20 +30,20 @@ void ANGInventoryBox::BeginPlay()
 {
 	Super::BeginPlay();
 	if (HasAuthority()) for (const auto& Seed : InitialContents)
-		if (!Inventory->ImportItemState(Seed.Item, Seed.SlotIndex))
-			UE_LOG(LogTemp, Warning, TEXT("Inventory box %s: rejected seed for slot %d"), *GetName(), Seed.SlotIndex);
+		if (!Inventory->ImportItemState(Seed.Item))
+			UE_LOG(LogTemp, Warning, TEXT("Inventory box %s: no compatible free slot or invalid initial item"), *GetName());
 }
-FText ANGInventoryBox::GetInteractionPrompt_Implementation(ANextgenoneCharacter* Interactor) const { return Title; }
-bool ANGInventoryBox::CanInteract_Implementation(ANextgenoneCharacter* Interactor) const
+FText ANGInventoryBox::GetInteractionPrompt_Implementation(APawn* Interactor) const { return Title; }
+bool ANGInventoryBox::CanInteract_Implementation(APawn* Interactor) const
 {
-	return IsValid(Interactor) && !Interactor->IsDead() && Interactor->GetController() && IsValid(Inventory) && InteractionType.IsValid();
+	const auto* Interaction = IsValid(Interactor) ? Interactor->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	return Interaction && Interaction->IsCurrentInteractor(false) && IsValid(Inventory) && InteractionType.IsValid();
 }
-bool ANGInventoryBox::Interact_Implementation(ANextgenoneCharacter* Interactor)
+bool ANGInventoryBox::Interact_Implementation(APawn* Interactor)
 {
-	auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
 	auto* Player = Interactor ? Interactor->GetPlayerState<APlayerState>() : nullptr;
 	auto* Transport = Player ? Player->FindComponentByClass<UNGPlayerInventoryManagerComponent>() : nullptr;
-	if (!HasAuthority() || !Transport || !System || !System->IsExecutingInteraction(this, Interactor) || !CanInteract_Implementation(Interactor)) return false;
+	if (!HasAuthority() || !Transport || !IsExecutingInteraction(Interactor) || !CanInteract_Implementation(Interactor)) return false;
 	Transport->OpenInventorySource(Inventory, InteractionType);
 	return true;
 }

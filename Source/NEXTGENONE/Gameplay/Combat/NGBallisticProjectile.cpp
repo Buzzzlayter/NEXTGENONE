@@ -1,6 +1,8 @@
 #include "Gameplay/Combat/NGBallisticProjectile.h"
 #include "Gameplay/Combat/NGCombat.h"
-#include "Gameplay/Character/NextgenoneCharacter.h"
+#include "AbilitySystemGlobals.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/Character.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
@@ -9,9 +11,7 @@
 #include "NiagaraSystem.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Net/UnrealNetwork.h"
-#include "Engine/World.h"
 
 ANGBallisticProjectile::ANGBallisticProjectile()
 {
@@ -21,14 +21,14 @@ ANGBallisticProjectile::ANGBallisticProjectile()
 	Collision->SetCollisionResponseToAllChannels(ECR_Ignore); Collision->SetCollisionResponseToChannel(ECC_WorldStatic,ECR_Block); Collision->SetCollisionResponseToChannel(ECC_WorldDynamic,ECR_Block); Collision->SetCollisionResponseToChannel(ECC_Pawn,ECR_Block);
 	Collision->SetCollisionResponseToChannel(ECC_PhysicsBody,ECR_Block);
 	Visual=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Tracer")); Visual->SetupAttachment(Collision); Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision); Visual->SetCastShadow(false);
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere")); Visual->SetStaticMesh(Sphere.Object); Visual->SetRelativeScale3D(FVector(.12f,.02f,.02f));
 	Movement=CreateDefaultSubobject<UNGBallisticMovement>(TEXT("Ballistics")); Movement->SetUpdatedComponent(Collision); Movement->bRotationFollowsVelocity=true; Movement->bInitialVelocityInLocalSpace=false;
 	Movement->bForceSubStepping=true; Movement->MaxSimulationTimeStep=1.f/120.f; Movement->MaxSimulationIterations=16; Movement->ProjectileGravityScale=0.f;
 	Movement->OnProjectileStop.AddDynamic(this,&ThisClass::OnStopped);
 }
-void ANGBallisticProjectile::Initialize(ANextgenoneCharacter* Shooter,UNGCombatComponent* Combat,FVector Velocity,FVector InGravity,float InDrag,float InDamage,float Range,int32 Shot,float ImpactImpulse)
+void ANGBallisticProjectile::Initialize(APawn* Shooter,UNGCombatComponent* Combat,FVector Velocity,FVector InGravity,float InDrag,float InDamage,float Range,int32 Shot,float ImpactImpulse)
 {
-	SourcePawn=Shooter; SourceASC=Shooter->GetAbilitySystemComponent(); SourceCombat=Combat;
+	if (!IsValid(Shooter)) return;
+	SourcePawn=Shooter; SourceASC=UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Shooter); SourceCombat=Combat;
 	if (auto* ASC=Cast<UNGPlayerAbilitySystemComponent>(SourceASC.Get())) SourceLife=ASC->GetAvatarGeneration();
 	InitialVelocity=Velocity; Gravity=InGravity; Drag=InDrag; Damage=InDamage; MaxRange=Range; ShotId=Shot;
 	BodyImpulse=FMath::IsFinite(ImpactImpulse) ? FMath::Clamp(ImpactImpulse,0.f,10000.f) : 0.f;
@@ -70,15 +70,15 @@ void ANGBallisticProjectile::OnStopped(const FHitResult& Hit)
 	const auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(SourceASC.Get());
 	const auto* Shooter = SourcePawn.Get();
 	if (Shooter && ASC && Shooter->GetPlayerState() == ASC->GetOwnerActor()
-		&& ASC->GetAvatarGeneration()==SourceLife) if (auto* Target=Cast<ANextgenoneCharacter>(Hit.GetActor()))
+		&& ASC->GetAvatarGeneration()==SourceLife) if (auto* Target=Cast<APawn>(Hit.GetActor()))
 	{
-		if (UNGCombatComponent::ApplyDamageToPawn(Target,SourceASC.Get(),Damage,&Hit) && Target->HitReaction)
+		if (UNGCombatComponent::ApplyDamageToPawn(Target,SourceASC.Get(),Damage,&Hit))
 		{
 			FVector Direction=(Hit.TraceEnd-Hit.TraceStart).GetSafeNormal(); if (Direction.IsNearlyZero()) Direction=GetActorForwardVector();
-			Target->HitReaction->ApplyImpact(Hit,Direction,BodyImpulse);
+			if (auto* Reaction = Target->FindComponentByClass<UNGHitReactionComponent>()) Reaction->ApplyImpact(Hit,Direction,BodyImpulse);
 		}
 	}
-	if (SourceCombat.IsValid()) SourceCombat->MulticastProjectileImpact(Hit.ImpactPoint,Hit.ImpactNormal,ShotId,ShotWeapon,Cast<ANextgenoneCharacter>(Hit.GetActor())!=nullptr);
+	if (SourceCombat.IsValid()) SourceCombat->MulticastProjectileImpact(Hit.ImpactPoint,Hit.ImpactNormal,ShotId,ShotWeapon,Cast<ACharacter>(Hit.GetActor())!=nullptr);
 	ForceNetUpdate(); SetLifeSpan(.3f);
 }
 void ANGBallisticProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

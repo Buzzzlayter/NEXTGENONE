@@ -11,7 +11,7 @@ class UStaticMeshComponent;
 
 /** World storage using exactly the same inventory component as a player or bag. */
 UCLASS(Blueprintable)
-class NEXTGENONE_API ANGInventoryBox : public AActor, public INGInteractable
+class NEXTGENONE_API ANGInventoryBox : public ANGInteractableActor
 {
 	GENERATED_BODY()
 public:
@@ -24,7 +24,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory") TArray<FNGInventorySlotState> InitialContents;
 	UPROPERTY(EditAnywhere, Category="Interaction") FGameplayTag InteractionType;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory") FText Title = NSLOCTEXT("NEXTGENONE", "InventoryBoxTitle", "Storage");
-	virtual FText GetInteractionPrompt_Implementation(ANextgenoneCharacter* Interactor) const override;
-	virtual bool CanInteract_Implementation(ANextgenoneCharacter* Interactor) const override;
-	virtual bool Interact_Implementation(ANextgenoneCharacter* Interactor) override;
+	virtual FText GetInteractionPrompt_Implementation(APawn* Interactor) const override;
+	virtual bool CanInteract_Implementation(APawn* Interactor) const override;
+	virtual bool Interact_Implementation(APawn* Interactor) override;
 };

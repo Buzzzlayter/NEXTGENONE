@@ -1,5 +1,11 @@
 # Combat Foundation: фактическая проверка
 
+## Диагностика первого переноса после холодного старта Editor
+
+Симптом пользователя: drag начинается, но перенос из коробки не применяется; повторная интеракция восстанавливает работу, следующие PIE в том же Editor проблему не воспроизводят. Удаление кеша PlayerInventory в панели не устранило симптом; первопричина пока не установлена.
+
+Временные диагностические логи переноса удалены по запросу пользователя. Проверки доступа, Avatar, snapshot и ограничения частоты сохранены. Холодный запуск и последующий успешный перенос агентом не проверялись; исправление первопричины не подтверждено.
+
 ## Текущий harness — 2026-11-07, не запускался
 
 Код runner обновлён под Action inventory, выбранный item и GAS ADS. Исторические PASS ниже относятся к старым версиям и не подтверждают этот пакет. Сборка и запуск требуют отдельного разрешения.
@@ -178,7 +184,7 @@ Implementation and offline asset authoring are complete. NGSetup -InteractionOnl
 
 Pending initial scope: one server and two clients on Gameplay, manually placed universal pickup (ID_TestItem and ID_Pistol) and BP_InteractiveObject. Check E prompt and interaction, simultaneous pickup by both clients (one winner), inventory-full rejection without consuming world object, drop then other-player pickup with exact count/ammo preservation, equipped drop removing equipment, replicated switch state and late join. Verify owner-only bag visibility, wall/distance rejection, stale Pawn requests after respawn and unavailable/consumed target rejection. Partial stateful stack drops must fail without mutation. Do not add latency/loss or regression runs without agreement on scope.
 
-Manual preparation: place actors on the existing Gameplay map; choose ItemClass on each BP_ItemPickup (inventory ID class, not weapon DA); set StackCount. Existing Runtime HFSM mounts WBP_InteractionPrompt. BP_InteractiveObject exposes OnInteractedOnServer and OnStateChanged. Custom interactables must replicate and block the Interaction trace channel. Camera parallax, pickup volume size, drop placement near walls/slopes and legacy BP_WeaponPickup component migration remain unverified at runtime. Arbitrary gravity support is limited to gravity-aware drop placement here; a full gravity integration is not claimed. Packaging/cook and physics throwing are not verified or included.
+Manual preparation: place actors on the existing Gameplay map; choose ItemClass on each BP_ItemPickup (inventory ID class, not weapon DA); set StackCount. Existing Runtime HFSM mounts WBP_InteractionPrompt. Custom interactables must replicate and block the Interaction trace channel. Camera parallax, pickup volume size, drop placement near walls/slopes and legacy BP_WeaponPickup component migration remain unverified at runtime. Arbitrary gravity support is limited to gravity-aware drop placement here; a full gravity integration is not claimed. Packaging/cook and physics throwing are not verified or included.
 ## Settings / debug state ownership — 2026-11-01
 
 Implemented: WBP_GameSettings on FSMState_GameSettings, local Settings/Back transitions in the existing HUD Game FSM, and Runtime-owned ALS HUD/overlay menu through a project debug-component copy. Full C++ build and offline Blueprint compilation/migration were executed; logs are Saved/Logs/NGSettingsBuild.log and NGSettingsAssets.log. No PIE, gameplay, multiplayer, smoke or automated runtime tests were run for this change.

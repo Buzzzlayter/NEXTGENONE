@@ -1,4 +1,5 @@
 #include "Gameplay/Combat/NGCombat.h"
+#include "AbilitySystemGlobals.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
@@ -18,6 +19,7 @@
 #include "Gameplay/Combat/NGWeaponVFX.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Abilities/NGAimAbility.h"
+#include "Gameplay/Abilities/NGWeaponAbilities.h"
 
 
 UNGCombatComponent::UNGCombatComponent()
@@ -36,10 +38,6 @@ void UNGCombatComponent::BindInventory()
 	if (BoundInventory.IsValid()) BoundInventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::InventoryChanged);
 	BoundInventory = PS->Inventory;
 	PS->Inventory->OnInventoryChanged.AddDynamic(this, &ThisClass::InventoryChanged);
-	if (Pawn->HasAuthority() && !StarterItems.IsEmpty() && PS->Inventory->InitialContents.IsEmpty())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: migrate legacy Combat.StarterItems and reserve ammo to PlayerState.Inventory.InitialContents; legacy items are no longer granted."), *GetPathName());
-	}
 
 }
 void UNGCombatComponent::InventoryChanged()
@@ -284,11 +282,12 @@ bool UNGCombatComponent::FireOnServer()
 	UE_LOG(LogTemp, Verbose, TEXT("NG_BALLISTIC_SHOT pawn=%s ammo=%d pellets=%d"), *Pawn->GetName(),GetMagazineAmmo(),Count);
 	return true;
 }
-bool UNGCombatComponent::ApplyDamageToPawn(ANextgenoneCharacter* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit)
+bool UNGCombatComponent::ApplyDamageToPawn(APawn* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit)
 {
-	if (!Target || !Target->HasAuthority() || Target->IsDead() || !Source || !Source->IsOwnerActorAuthoritative() || !FMath::IsFinite(Damage) || Damage <= 0) return false;
-	auto* TargetASC = Target->GetAbilitySystemComponent();
-	if (!TargetASC || TargetASC->GetAvatarActor() != Target) return false;
+	if (!IsValid(Target) || !Target->HasAuthority() || !Source || !Source->IsOwnerActorAuthoritative() || !FMath::IsFinite(Damage) || Damage <= 0) return false;
+	auto* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
+	if (!TargetASC || TargetASC->GetAvatarActor() != Target || TargetASC->HasMatchingGameplayTag(TAG_NGDead)
+		|| TargetASC->GetNumericAttribute(UNGHealthSet::GetHealthAttribute()) <= 0.f) return false;
 	auto Context = Source->MakeEffectContext(); Context.AddSourceObject(Target);
 	if (Hit) Context.AddHitResult(*Hit);
 	auto Spec = Source->MakeOutgoingSpec(UNGDamageEffect::StaticClass(), 1.f, Context);

@@ -6,7 +6,7 @@
 class APawn;
 class APlayerState;
 class APlayerController;
-class ANextgenoneCharacter;
+class ANGItemPickup;
 class UNGInventoryManagerComponent;
 class UNGInventoryItemInstance;
 class UNGInteractionComponent;
@@ -21,8 +21,6 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|Starter") TArray<FNGInventoryStarterEntry> InitialContents;
-	/** Serialized for manual migration only; runtime grants use InitialContents. */
-	UPROPERTY(EditDefaultsOnly, Category="Inventory|Legacy", meta=(DisplayName="Legacy Starter Items (Migration Only)")) TArray<TSoftClassPtr<UNGInventoryItemDefinition>> StarterItems;
 	void GrantStarterInventory();
 	UNGInventoryManagerComponent* GetViewedInventory() const;
 	void OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
@@ -34,9 +32,11 @@ public:
 	bool RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0);
 	UPROPERTY(EditDefaultsOnly, Category="Inventory", meta=(ClampMin="0.01")) float InventoryOperationInterval = .05f;
 	bool RequestDropItem(UNGInventoryItemInstance* Item, int32 Count=0);
-	UFUNCTION(Server, Reliable) void ServerDropItem(ANextgenoneCharacter* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
+	UFUNCTION(Server, Reliable) void ServerDropItem(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
 
 private:
+	ANGItemPickup* DropItemOnServer(APawn* Pawn, UNGInventoryItemInstance* Item, int32 Count);
+	TSet<TWeakObjectPtr<UNGInventoryItemInstance>> ActiveDrops;
 	UFUNCTION(Server, Reliable) void ServerActivationItem(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 ExpectedSlot);
 	double NextActivationTime = 0.;
 	bool TryBeginStarterGrant();
@@ -50,10 +50,10 @@ private:
 	void InteractionEnded(UObject* Source);
 	void ClearViewedContext();
 	bool CanAccessInventory(UNGInventoryManagerComponent* Inventory) const;
-	UFUNCTION(Client, Reliable) void ClientShowInventory(ANextgenoneCharacter* ExpectedPawn, UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
+	UFUNCTION(Client, Reliable) void ClientShowInventory(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
 	UFUNCTION(Server, Reliable) void ServerCloseInventoryView(APawn* ExpectedPawn, UNGInventoryManagerComponent* ExpectedSource);
 	UFUNCTION(Client, Reliable) void ClientCloseInventoryView(APawn* ExpectedPawn, UNGInventoryManagerComponent* ExpectedSource);
-	UFUNCTION(Server, Reliable) void ServerInventoryTransfer(ANextgenoneCharacter* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount);
+	UFUNCTION(Server, Reliable) void ServerInventoryTransfer(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount);
 
 	APlayerController* GetPlayerController() const;
 	APawn* GetInventoryPawn() const;

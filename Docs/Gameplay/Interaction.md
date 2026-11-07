@@ -14,7 +14,7 @@
 
 ## Интерактивный объект
 
-Использовать `/Game/Gameplay/Interaction/BP_InteractiveObject` или его дочерний Blueprint. Настроить Mesh, InteractionText, bEnabled, bOneShot. **OnInteractedOnServer** — серверная игровая логика; **OnStateChanged** — визуальная реакция на реплицируемый bActive. Не рассчитывать, что серверный Blueprint event сам выполняется на клиентах: сетевое представление строится от реплицируемого состояния.
+Для нового интерактивного объекта создать Blueprint от `ANGInteractableActor` и реализовать события NGInteractable. Игровые состояния и их репликацию задавать под конкретную задачу; готового native-переключателя в системе нет.
 
 Для собственного Actor реализовать интерфейс **NGInteractable**: GetInteractionPrompt, CanInteract, Interact, SetInteractionFocus. Включить Replicates и Block для trace channel **Interaction**. CanInteract оставлять проверкой без побочных эффектов; Interact изменяет состояние только на сервере и повторно проверяет доступность. Focus — локальное оформление. CustomDepth сам по себе не создаёт обводку: нужен соответствующий материал/постпроцесс.
 
@@ -56,3 +56,24 @@ Build/asset result for this change: NEXTGENONEEditor Win64 Development PASS, UBT
 Компактный корень: SizeBox/контейнер по содержимому; Canvas на весь экран не требуется. Положение и выравнивание задаёт layout/placeholder. В старом Blueprint подсказки удалить AimDot и полноэкранный Canvas, если они были созданы вручную. Старый специализированный мounter убрать из состояния и заменить обычным. C++ не создаёт дерево виджетов и не добавляет их во viewport.
 
 Blueprint настраивает пользователь. Сборка и игровые проверки этого изменения агентом не запускались.
+# Распределение логики взаимодействия — 2026-11-07
+
+Interactor во всём interaction API — `APawn*`: интерфейс, GA_Interact, native цели и RPC больше не требуют ANextgenoneCharacter. Компоненты получаются через FindComponentByClass, ASC — через существующий NGPlayerContext/IAbilitySystemInterface. Проверки сохраняют текущий контракт игрока: взаимное possession Controller/Pawn/PlayerState, актуальный Avatar ASC, положительный Health из HealthSet, отсутствие State.Dead и InterruptingTags. Отдельный Pawn без GAS/HealthSet этим изменением автоматически не разрешается к взаимодействию. Для прерывания открытой сессии его lifecycle должен вызывать BindAbilitySystem так же, как существующий персонаж.
+
+AimComponent опционален для поиска: при наличии берётся его view ray, иначе viewpoint Controller. Сервер самостоятельно проверяет eye/control rotation, дистанцию и LOS. Цвет прицела также читает InteractionComponent без cast к проектному Character. PlayerInventory RPC/сессия работают с APawn; drop использует направление гравитации CharacterMovement при наличии, иначе up-вектор Pawn.
+
+После пользовательской полной сборки и перезапуска Editor обновить узлы Blueprint-реализаций интерфейса (GetInteractionPrompt, CanInteract, Interact, SetInteractionFocus): параметр Interactor теперь Pawn. Если графу нужны конкретные функции игрового персонажа, явный cast остаётся в этом пользовательском графе. Ассеты автоматически не пересохранялись.
+
+- `UNGInteractionComponent` хранит фокус/контекст/прерывающие теги и выполняет FindTarget, ValidateTarget и IsCurrentInteractor относительно своего Pawn. Дистанция и CaptureRadius берутся из этого компонента.
+- `UNGInteractionAbility` задаёт порядок проверки цели и CanInteract, GAS Commit и повторной проверки после callbacks. Только после этого вызывается Interact.
+- `UNGInteractionSubsystem` удалён. Общая база целей `ANGInteractableActor` хранит только локальную защиту выполнения и текущего исполнителя. ExecuteInteraction блокирует вложенный запуск этой же цели на время проверок, Commit и Execute_Interact, в том числе через другого игрока. Исполнитель устанавливается только после успешной подготовки и очищается при выходе. Глобальных списков и нового subsystem нет.
+- `ANGItemPickup::Interact_Implementation` добавляет предмет через Inventory, затем расходует pickup и публикует изменение. Локальный bTransferring защищает тот же pickup от повторного входа; отдельно сохраняется общий guard цели. Прежнее правило выбора группы Action/Storage не изменено.
+- `UNGPlayerInventoryManagerComponent::DropItemOnServer` владеет drop: сохраняет snapshot, создаёт скрытый pickup, повторно проверяет текущий Pawn/Count/StatStacks, списывает предмет и только затем публикует pickup. ActiveDrops относится к предметам этого инвентаря.
+
+Серверные проверки переноса/доступа к коробке используют InteractionComponent, а открытие коробки требует подтверждённый execution scope самой цели. Rate limits остаются у прежних постоянных владельцев.
+
+ANGItemPickup и ANGInventoryBox наследуют ANGInteractableActor; их BP-наследников вручную переподчинять не требуется. Новые пользовательские цели должны также наследовать ANGInteractableActor: одного добавления интерфейса к произвольному AActor теперь недостаточно для защищённого исполнения.
+
+Старые Blueprint-вызовы subsystem FindTarget/DropInventoryItem больше не являются API. Gameplay-взаимодействие идёт через InteractionComponent.RequestInteract и GA_Interact; inventory drop — через существующий UI/player inventory request. C++-вызовы перенесены. Ассеты и Blueprint-графы этим пакетом не изменялись; наличие старых узлов или произвольных Actor, реализующих только интерфейс, в пользовательских графах не проверено. После полной сборки нужен перезапуск Editor из-за изменения native-иерархии.
+
+Сборка, PIE и сетевые проверки не выполнялись. Нужны адресные проверки pickup/drop (включая callbacks и два игрока на одной цели), открытия/закрытия коробки, transfer, LOS/range, прерывающих тегов и смены Pawn. Этот рефакторинг не считается исправлением незакрытого бага холодного первого переноса.

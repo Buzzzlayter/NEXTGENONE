@@ -1,3 +1,4 @@
+#include "Gameplay/Abilities/NGWeaponAbilities.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"

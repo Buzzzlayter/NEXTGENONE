@@ -98,7 +98,7 @@ UI сообщает только о запросе: возвращённый tru
 
 ## Коробка
 
-Создать BP от `ANGInventoryBox`, назначить Mesh, подогнать Collision. У компонента Inventory назначить **Layout**. Native-класс коробки не задаёт размер; его определяет Slots назначенного asset. В InitialContents можно задать SlotIndex и Item (ItemClass/Count/StatStacks); выдача выполняется только сервером после инициализации схемы. Коробка подключена к существующему INGInteractable/GAS-пути. На сервере Interact открывает источник, ClientShowInventory подтверждает контекст Interaction.Storage для UI Router.
+Создать BP от `ANGInventoryBox`, назначить Mesh, подогнать Collision. У компонента Inventory назначить **Layout**. Native-класс коробки не задаёт размер; его определяет Slots назначенного asset. В InitialContents задать Item (ItemClass/Count/StatStacks), без номера слота. Сервер размещает записи по порядку списка в первые совместимые свободные ячейки. Старые сохранённые номера в InitialContents игнорируются. У игрока InitialContents также размещается автоматически; SlotTag можно оставить для выбора группы Action/Storage, пустой тег разрешает любую совместимую группу. При отсутствии места запись отклоняется с диагностикой, занятые слоты не перезаписываются. Точные индексы сохраняются в runtime capture/restore API. Коробка подключена к существующему INGInteractable/GAS-пути. На сервере Interact открывает источник, ClientShowInventory подтверждает контекст Interaction.Storage для UI Router.
 
 При закрытии окна вызвать `NGPlayerInventoryManagerComponent.CloseInventoryView` из существующего UI state/Blueprint, затем выполнить обычный переход FSM. Сам контейнер и виджеты не добавляют IMC, клавиши, input mode или fullscreen layout.
 

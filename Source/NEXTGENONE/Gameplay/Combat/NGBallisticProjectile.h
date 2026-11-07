@@ -6,7 +6,7 @@
 class USphereComponent;
 class UStaticMeshComponent;
 class UAbilitySystemComponent;
-class ANextgenoneCharacter;
+class APawn;
 class UNGCombatComponent;
 class UNGWeaponDefinition;
 class UNiagaraSystem;
@@ -34,7 +34,7 @@ public:
 	virtual void Tick(float Delta) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
 	virtual void PostNetReceiveVelocity(const FVector& Velocity) override;
-	void Initialize(ANextgenoneCharacter* Shooter,UNGCombatComponent* Combat,FVector Velocity,FVector Gravity,float Drag,float Damage,float Range,int32 Shot,float ImpactImpulse);
+	void Initialize(APawn* Shooter,UNGCombatComponent* Combat,FVector Velocity,FVector Gravity,float Drag,float Damage,float Range,int32 Shot,float ImpactImpulse);
 	void SetWeaponEffects(UNGWeaponDefinition* Definition);
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly) TObjectPtr<USphereComponent> Collision;
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Visual;
@@ -51,7 +51,7 @@ private:
 	bool bTracerRequested=false,bTracerTrigger=false;
 	UFUNCTION() void OnRep_Tracer();
 	void StopTracer();
-	TWeakObjectPtr<ANextgenoneCharacter> SourcePawn;
+	TWeakObjectPtr<APawn> SourcePawn;
 	TWeakObjectPtr<UAbilitySystemComponent> SourceASC;
 	TWeakObjectPtr<UNGCombatComponent> SourceCombat;
 	uint32 SourceLife=0;

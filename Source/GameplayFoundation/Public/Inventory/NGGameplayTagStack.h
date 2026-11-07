@@ -1,6 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
-
 #pragma once
 
 #include "GameplayTagContainer.h"
@@ -11,9 +8,7 @@
 struct FNGGameplayTagStackContainer;
 struct FNetDeltaSerializeInfo;
 
-/**
- * Represents one stack of a gameplay tag (tag + count)
- */
+
 USTRUCT(BlueprintType)
 struct GAMEPLAYFOUNDATION_API FNGGameplayTagStack : public FFastArraySerializerItem
 {
@@ -57,7 +52,7 @@ public:
 	// Adds a specified number of stacks to the tag (does nothing if StackCount is below 1)
 	void AddStack(FGameplayTag Tag, int32 StackCount);
 
-	// Removes a specified number of stacks from the tag (does nothing if StackCount is below 1)
+	// Removes up to StackCount; missing tags and nonpositive counts are no-ops. Exhausted tags are removed.
 	void RemoveStack(FGameplayTag Tag, int32 StackCount);
 
 	// Returns the stack count of the specified tag (or 0 if the tag is not present)

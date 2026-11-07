@@ -1,6 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
-
 #pragma once
 
 #include "Components/ActorComponent.h"
@@ -23,7 +20,7 @@ struct FReplicationFlags;
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGSlotStorage);
 GAMEPLAYFOUNDATION_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_NGSlotAction);
 
-/** Explicit starting item: use an exact index or the first compatible slot in a tagged group. */
+/** Starting item: placed in the first compatible free slot, optionally within a tagged group. */
 USTRUCT()
 struct GAMEPLAYFOUNDATION_API FNGInventoryStarterEntry
 {
@@ -31,14 +28,14 @@ struct GAMEPLAYFOUNDATION_API FNGInventoryStarterEntry
 	UPROPERTY(EditAnywhere) TSubclassOf<UNGInventoryItemDefinition> ItemClass;
 	UPROPERTY(EditAnywhere, meta=(ClampMin="1")) int32 Count = 1;
 	UPROPERTY(EditAnywhere) FGameplayTag SlotTag;
-	UPROPERTY(EditAnywhere, meta=(ClampMin="-1")) int32 SlotIndex = INDEX_NONE;
 };
 
 USTRUCT(BlueprintType)
 struct GAMEPLAYFOUNDATION_API FNGInventorySlotState
 {
 	GENERATED_BODY()
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 SlotIndex = 0;
+	// Runtime restore/capture position, not an authoring setting for InitialContents.
+	UPROPERTY(BlueprintReadWrite) int32 SlotIndex = INDEX_NONE;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FNGItemState Item;
 };
 
@@ -160,7 +157,7 @@ public:
 	int32 FindSlotByTag(FGameplayTag SlotTag, int32 Ordinal) const;
 	bool CanPlaceItemAtSlot(TSubclassOf<UNGInventoryItemDefinition> ItemClass, int32 SlotIndex) const;
 	bool MoveItemToSlot(UNGInventoryItemInstance* Item, int32 SlotIndex);
-	UNGInventoryItemInstance* ImportItemState(const FNGItemState& State, int32 SlotIndex);
+	UNGInventoryItemInstance* ImportItemState(const FNGItemState& State, int32 SlotIndex=INDEX_NONE);
 	TArray<FNGInventorySlotState> CaptureInventoryState() const;
 	/** Trusted server primitive; caller validates player access/distance. Amount=0 transfers the whole stack. */
 	bool TransferTo(UNGInventoryManagerComponent* Target, int32 SourceSlot, int32 TargetSlot, int32 Amount=0);

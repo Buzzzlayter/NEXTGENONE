@@ -1,20 +1,16 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
 
 #include "Inventory/NGInventoryManagerComponent.h"
-
 #include "Engine/ActorChannel.h"
-#include "Engine/World.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryItemInstance.h"
 #include "Inventory/NGInventoryLayoutDefinition.h"
 #include "NativeGameplayTags.h"
-
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotStorage, "Inventory.Slot.Storage");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotAction, "Inventory.Slot.Action");
 #include "Net/UnrealNetwork.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(NGInventoryManagerComponent)
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotStorage, "Inventory.Slot.Storage");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotAction, "Inventory.Slot.Action");
 
 struct FReplicationFlags;
 
@@ -39,9 +35,6 @@ struct UNGInventoryManagerComponent::FMutationScope
 	}
 };
 
-//////////////////////////////////////////////////////////////////////
-// FNGInventoryEntry
-
 FString FNGInventoryEntry::GetDebugString() const
 {
 	TSubclassOf<UNGInventoryItemDefinition> ItemDef;
@@ -53,8 +46,6 @@ FString FNGInventoryEntry::GetDebugString() const
 	return FString::Printf(TEXT("%s (%d x %s)"), *GetNameSafe(Instance), StackCount, *GetNameSafe(ItemDef));
 }
 
-//////////////////////////////////////////////////////////////////////
-// FNGInventoryList
 void FNGInventoryList::PostReplicatedReceive(const FFastArraySerializer::FPostReplicatedReceiveParameters& Parameters)
 {
 	if (auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent)) Manager->NotifyInventoryChanged();
@@ -90,7 +81,6 @@ void FNGInventoryList::AddEntry(UNGInventoryItemInstance* Instance)
 	if (!Entry) return;
 	Entry->Instance = Instance; Entry->StackCount = 1;
 	MarkItemDirty(*Entry);
-
 }
 
 void FNGInventoryList::RemoveEntry(UNGInventoryItemInstance* Instance, bool bNotify)
@@ -115,16 +105,14 @@ TArray<UNGInventoryItemInstance*> FNGInventoryList::GetAllItems() const
 	Results.Reserve(Entries.Num());
 	for (const FNGInventoryEntry& Entry : Entries)
 	{
-		if (Entry.Instance != nullptr) //@TODO: Would prefer to not deal with this here and hide it further?
+		// Empty slots remain in the replicated list but are excluded from the item view.
+		if (Entry.Instance != nullptr)
 		{
 			Results.Add(Entry.Instance);
 		}
 	}
 	return Results;
 }
-
-//////////////////////////////////////////////////////////////////////
-// UNGInventoryManagerComponent
 
 UNGInventoryManagerComponent::UNGInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -494,7 +482,7 @@ bool UNGInventoryManagerComponent::MoveItemToSlot(UNGInventoryItemInstance* Item
 }
 UNGInventoryItemInstance* UNGInventoryManagerComponent::ImportItemState(const FNGItemState& State, int32 SlotIndex)
 {
-	if (SlotIndex < 0 || bTransferring) return nullptr;
+	if (SlotIndex < INDEX_NONE || bTransferring) return nullptr;
 	return AddItemState(State, true, SlotIndex);
 }
 TArray<FNGInventorySlotState> UNGInventoryManagerComponent::CaptureInventoryState() const
