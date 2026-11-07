@@ -8,6 +8,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 #include "Input/PlayerInputSubsystem.h"
+#include "InputMappingContext.h"
 
 namespace
 {
@@ -155,7 +156,7 @@ void UNGCharacterStateResources::RefreshResources()
             {
                 const FGuid Handle = Input->AcquireMappingContext(this, Entry.MappingContext, Entry.Priority, true);
                 if (!Handle.IsValid())
-                { FailEntry(FString::Printf(TEXT("Failed to acquire mapping context %s."), *GetNameSafe(Entry.MappingContext))); return; }
+                { FailEntry(FString::Printf(TEXT("Failed to acquire mapping context %s."), *GetNameSafe(Entry.MappingContext.Get()))); return; }
                 ContextHandles.Add(Handle);
             }
             FPlayerInputPolicy Policy; Policy.bSetInputMode = false; Policy.bBlockGameplay = Definition->bBlockGameplayInput;
