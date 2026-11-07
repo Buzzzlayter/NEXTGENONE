@@ -61,7 +61,7 @@ class NEXTGENONE_API UNGInteractionComponent : public UActorComponent
 public:
 	UNGInteractionComponent();
 #if WITH_EDITOR
-	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+	virtual EDataValidationResult IsDataValid(FDataValidationContext& ValidationContext) const override;
 #endif
 	const FNGInteractionContext& GetContext() const { return Context; }
 	void SetConfirmedContext(FGameplayTag Type, AActor* Target, UObject* Source);

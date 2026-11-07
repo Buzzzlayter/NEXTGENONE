@@ -168,8 +168,13 @@ void UUILayoutTemplate::Enter()
 					if (ID.IsValid())
 					{
 						if (Placeholders.Contains(ID))
+						{
 							UE_LOG(LogTemp, Error, TEXT("Layout %s has duplicate placeholder ID %s (%s). Keeping the first widget."), *GetNameSafe(TemplateWidget), *ID.ToString(), *GetNameSafe(Widget));
-						else Placeholders.Add(ID, Widget);
+						}
+						else
+						{
+							Placeholders.Add(ID, Widget);
+						}
 					}
 				}
 			});

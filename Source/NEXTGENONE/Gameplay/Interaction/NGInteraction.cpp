@@ -169,12 +169,12 @@ UNGInteractionComponent::UNGInteractionComponent()
 	SetIsReplicatedByDefault(true); PrimaryComponentTick.bCanEverTick=true; PrimaryComponentTick.TickInterval=.1f;
 }
 #if WITH_EDITOR
-EDataValidationResult UNGInteractionComponent::IsDataValid(FDataValidationContext& Context) const
+EDataValidationResult UNGInteractionComponent::IsDataValid(FDataValidationContext& ValidationContext) const
 {
-	const auto Parent = Super::IsDataValid(Context);
+	const auto Parent = Super::IsDataValid(ValidationContext);
 	if (!DroppedPickupClass || DroppedPickupClass->HasAnyClassFlags(CLASS_Abstract))
 	{
-		Context.AddError(FText::FromString(TEXT("Interaction requires a concrete DroppedPickupClass; assign its Blueprint here to include it in cook.")));
+		ValidationContext.AddError(FText::FromString(TEXT("Interaction requires a concrete DroppedPickupClass; assign its Blueprint here to include it in cook.")));
 		return EDataValidationResult::Invalid;
 	}
 	return Parent == EDataValidationResult::Invalid ? Parent : EDataValidationResult::Valid;
