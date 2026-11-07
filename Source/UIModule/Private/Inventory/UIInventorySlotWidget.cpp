@@ -4,6 +4,7 @@
 #include "Input/PlayerInputSubsystem.h"
 #include "Inventory/UIInventoryDragDropOperation.h"
 #include "Components/Image.h"
+#include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 
@@ -86,6 +87,18 @@ void UUIInventorySlotWidget::SetData(const FUIInventorySlotData& InData, UObject
 	OperationHandler = InOperationHandler;
 	if (bIconChanged) UpdateItemIcon();
 	OnSlotUpdated();
+	UpdateItemTextVisibility();
+}
+
+void UUIInventorySlotWidget::UpdateItemTextVisibility()
+{
+	const bool bHasItem = ContainsItem();
+	for (UTextBlock* Label : {txt_name.Get(), txt_count.Get()})
+	{
+		if (!Label) continue;
+		Label->SetVisibility(bHasItem ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+		if (!bHasItem) Label->SetText(FText::GetEmpty());
+	}
 }
 
 void UUIInventorySlotWidget::UpdateItemIcon()
@@ -125,6 +138,7 @@ void UUIInventorySlotWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	UpdateItemIcon();
+	UpdateItemTextVisibility();
 	InputSubsystem = UPlayerInputSubsystem::GetInputSubsystem(this);
 	if (auto* Input = InputSubsystem.Get())
 	{

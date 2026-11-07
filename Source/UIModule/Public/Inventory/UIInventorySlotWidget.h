@@ -10,6 +10,7 @@
 
 class UButton;
 class UImage;
+class UTextBlock;
 class UInputAction;
 class UPlayerInputSubsystem;
 
@@ -42,6 +43,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UButton> btn_Root;
 	/** Optional item image. Updated for every slot snapshot, including empty slots. */
 	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UImage> img_item;
+	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> txt_name;
+	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> txt_count;
 	UPROPERTY(BlueprintReadOnly, Category="Inventory") FUIInventorySlotData Data;
 	UPROPERTY(BlueprintReadOnly, Category="Inventory") TObjectPtr<UInputAction> InputAction;
 private:
@@ -49,6 +52,7 @@ private:
 	bool bDragPending = false;
 	void ReleaseDragPress();
 	void UpdateItemIcon();
+	void UpdateItemTextVisibility();
 	TWeakObjectPtr<UObject> OperationHandler;
 	TWeakObjectPtr<UPlayerInputSubsystem> InputSubsystem;
 	UFUNCTION() void PrimaryAction();
