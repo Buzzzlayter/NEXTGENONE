@@ -62,8 +62,14 @@ void ANextgenonePlayerController::ClientSmoke_Implementation(FNGCombatSmokeReque
     if (Command == 1) { ControlledPawn->Combat->RequestSelectSlot(Request.ActionSlot); return; }
     if (Command == 2)
     {
-        if (!ASC || !IsValid(Request.Target)) return;
-        ASC->AbilityInputTagPressed(TAG_NGInputAim);
+        if (!ASC || !IsValid(Request.Target) || !ControlledPawn->Combat->GetEquipment().bEquipped
+            || !ControlledPawn->Combat->GetEquippedItem()) return;
+        if (!ControlledPawn->Combat->IsAiming())
+        {
+            // A rejected activation still latches Spec.InputPressed; retry a complete input cycle.
+            ASC->AbilityInputTagReleased(TAG_NGInputAim);
+            ASC->AbilityInputTagPressed(TAG_NGInputAim);
+        }
         FVector Origin, Direction;
         if (!ControlledPawn->Aim->GetViewRay(Origin, Direction)) return;
         const FVector TargetPoint = Request.Target->GetActorLocation() + FVector(0, 0, 20);
@@ -74,7 +80,15 @@ void ANextgenonePlayerController::ClientSmoke_Implementation(FNGCombatSmokeReque
             ServerSmokeResult(Command, true);
         return;
     }
-    if (Command == 3 || Command == 7) { ControlledPawn->Combat->RequestFire(); return; }
+    if (Command == 3) { ControlledPawn->Combat->RequestFire(); return; }
+    if (Command == 7)
+    {
+        if (!ASC || !ControlledPawn->Combat->GetEquipment().bEquipped || !ControlledPawn->Combat->GetEquippedItem()) return;
+        if (ControlledPawn->Combat->IsAiming()) { ASC->AbilityInputTagReleased(TAG_NGInputAim); return; }
+        ControlledPawn->Combat->RequestFire();
+        ServerSmokeResult(Command, true);
+        return;
+    }
     if (Command == 4 || Command == 5)
     {
         if (!IsValid(Request.Target) || !IsValid(Request.Shooter)) return;

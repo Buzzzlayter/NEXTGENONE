@@ -124,8 +124,27 @@ void ANGCombatTestGameMode::SmokeTick()
         A->Combat->SetEquippedOnServer(false); A->Combat->SetEquippedOnServer(true);
         if (ASC->CanFireNow(A)) { Fail(TEXT("reequip reset persistent fire limiter")); return; }
         UE_LOG(LogTemp, Display, TEXT("NG_LIMITER_PASS direct_server_gate reactivation=blocked reequip=blocked"));
-        SendShooter(7); // RequestFire before ADS must leave ammo/health unchanged.
-        Phase = 3; PhaseTime = Now; Reports.Reset(); ExpectedReport = 2; return;
+        Phase = 10; PhaseTime = Now; Reports.Reset(); ExpectedReport = 7; return;
+    }
+    if (Phase == 10)
+    {
+        // The ADS check must not pass merely because the previous limiter probe is still active.
+        const auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(A->GetAbilitySystemComponent());
+        if (!ASC || !ASC->CanFireNow(A)) return;
+        if (A->Combat->IsAiming()) { Fail(TEXT("hip-fire fixture unexpectedly has ADS")); return; }
+        SendShooter(7);
+        Phase = 11; PhaseTime = Now; return;
+    }
+    if (Phase == 11)
+    {
+        if (!Reports.Contains(Players[0])) { SendShooter(7); return; }
+        if (Now - PhaseTime < ShotWait) return;
+        const auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(A->GetAbilitySystemComponent());
+        if (!ASC || !ASC->CanFireNow(A) || !FMath::IsNearlyEqual(B->GetHealth(), ExpectedHealth)
+            || A->Combat->GetMagazineAmmo() != ExpectedAmmo)
+        { Fail(TEXT("hip fire changed health/ammo or consumed an available fire gate")); return; }
+        UE_LOG(LogTemp, Display, TEXT("NG_HIP_FIRE_PASS gate=open before_and_after ADS=off"));
+        Phase = 3; PhaseTime = Now - ShotWait; Reports.Reset(); ExpectedReport = 2; return;
     }
     if (Phase == 3)
     {

@@ -98,7 +98,9 @@ R1/R2 реализованы в текущем пакете: ограничен�
   даже если граф уже недоступен. Нормальная GA_Death при сломанном графе не гарантируется.
 - [x] R5: фактические mapping/policy handles проверяются; отказ снимает частично полученные handles
   и передаётся машине. Reacquire уведомляет о готовности после input acquisition.
-- [ ] R2/R3: отделить smoke hip-fire от cooldown и обеспечить повторную попытку ADS.
+- [x] R2/R3: smoke ждёт CanFireNow после limiter probe и проверяет доступность gate после hip-fire;
+  клиент подтверждает попытку только с экипировкой и без ADS. ADS retry выполняет release/press,
+  только если ADS ещё не активен. Прогон не выполнялся.
 - [ ] R4: довести inventory completion до UI, включая синхронный listen server.
 - [ ] R6: явные стартовые записи вместо классификации оружия в PlayerInventory.
 - [ ] R7: упростить общую inventory invalidation до dirty-флага.
