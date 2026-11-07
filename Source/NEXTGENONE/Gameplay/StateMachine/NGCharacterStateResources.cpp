@@ -128,30 +128,47 @@ bool UNGCharacterStateResources::ActivateEntryAbilities()
 
 void UNGCharacterStateResources::RefreshResources()
 {
-	if (!bEntered || !Pawn.IsValid()) return;
-	if (const auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>(); Machine && Machine->HasResourceFailure()) return;
-	if (Pawn->HasAuthority() && !bGASAcquired)
-	{
-		// An unpossessed body can keep its FSM while the player's ASC serves another Avatar.
-		UAbilitySystemComponent* ASC = ResolvePawnASC(Pawn.Get());
-		if (Pawn->GetController() && ASC && ASC->GetAvatarActor() == Pawn.Get())
-		{
-			if (!AcquireGASResources() || !ActivateEntryAbilities()) { FailEntry(TEXT("Failed to reacquire GAS resources or activate an entry ability.")); return; }
-			bEntryReady = true;
-			if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->NotifyResourcesReady(this);
-		}
-	}
-	APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
-	UPlayerInputSubsystem* Input = PC && PC->GetPawn() == Pawn.Get() && PC->IsLocalController() && PC->GetLocalPlayer()
-		? PC->GetLocalPlayer()->GetSubsystem<UPlayerInputSubsystem>() : nullptr;
-	if (LocalInput.Get() == Input) return;
-	ReleaseLocalResources();
-	if (!Input) return; // normal for simulated proxies/dedicated server and before possession arrives
-	LocalInput = Input;
-	for (const auto& Entry : Definition->MappingContexts)
-		ContextHandles.Add(Input->AcquireMappingContext(this, Entry.MappingContext, Entry.Priority, true));
-	FPlayerInputPolicy Policy; Policy.bSetInputMode = false; Policy.bBlockGameplay = Definition->bBlockGameplayInput;
-	PolicyHandle = Input->AcquireInputPolicy(this, Policy);
+    if (!bEntered || !Pawn.IsValid()) return;
+    if (const auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>(); Machine && Machine->HasResourceFailure()) return;
+    bool bReacquired = false;
+    if (Pawn->HasAuthority() && !bGASAcquired)
+    {
+        // Detached bodies do not reacquire an ASC belonging to a different Avatar.
+        UAbilitySystemComponent* ASC = ResolvePawnASC(Pawn.Get());
+        if (Pawn->GetController() && ASC && ASC->GetAvatarActor() == Pawn.Get())
+        {
+            if (!AcquireGASResources() || !ActivateEntryAbilities())
+            { FailEntry(TEXT("Failed to reacquire GAS resources or activate an entry ability.")); return; }
+            bReacquired = true;
+        }
+    }
+    APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
+    UPlayerInputSubsystem* Input = PC && PC->GetPawn() == Pawn.Get() && PC->IsLocalController() && PC->GetLocalPlayer()
+        ? PC->GetLocalPlayer()->GetSubsystem<UPlayerInputSubsystem>() : nullptr;
+    if (LocalInput.Get() != Input)
+    {
+        ReleaseLocalResources();
+        if (Input)
+        {
+            LocalInput = Input;
+            for (const auto& Entry : Definition->MappingContexts)
+            {
+                const FGuid Handle = Input->AcquireMappingContext(this, Entry.MappingContext, Entry.Priority, true);
+                if (!Handle.IsValid())
+                { FailEntry(FString::Printf(TEXT("Failed to acquire mapping context %s."), *GetNameSafe(Entry.MappingContext))); return; }
+                ContextHandles.Add(Handle);
+            }
+            FPlayerInputPolicy Policy; Policy.bSetInputMode = false; Policy.bBlockGameplay = Definition->bBlockGameplayInput;
+            PolicyHandle = Input->AcquireInputPolicy(this, Policy);
+            if (!PolicyHandle.IsValid()) { FailEntry(TEXT("Failed to acquire input policy.")); return; }
+        }
+        // No LocalPlayer on proxies/dedicated server or before possession is normal.
+    }
+    if (bReacquired && bEntered)
+    {
+        bEntryReady = true;
+        if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->NotifyResourcesReady(this);
+    }
 }
 
 void UNGCharacterStateResources::ReleaseLocalResources()

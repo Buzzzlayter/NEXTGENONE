@@ -48,7 +48,7 @@ float ANextgenoneCharacter::GetMaxHealth() const
 void ANextgenoneCharacter::TryInitializeGameplay()
 {
 	ANextgenonePlayerState* PS = GetPlayerState<ANextgenonePlayerState>();
-	if (!PS || IsDead() || (PS->GetPawn() && PS->GetPawn() != this)) return;
+	if (!PS || IsDead() || CharacterStateMachine->HasResourceFailure() || (PS->GetPawn() && PS->GetPawn() != this)) return;
 	auto* ASC = PS->GetAbilitySystemComponent();
 	if (!ASC) return;
 	// A delayed OnRep from an old Pawn must not steal a newer avatar.
@@ -152,7 +152,7 @@ void ANextgenoneCharacter::RagdollStart()
 bool ANextgenoneCharacter::CanAcceptClientLocomotion() const
 {
 	const auto* ASC = GetAbilitySystemComponent();
-	return Super::CanAcceptClientLocomotion() && ASC && !IsDead() && GetHealth() > 0.f
+	return Super::CanAcceptClientLocomotion() && ASC && !CharacterStateMachine->HasResourceFailure() && !IsDead() && GetHealth() > 0.f
 		&& !ASC->HasMatchingGameplayTag(TAG_NGDead) && !ASC->HasMatchingGameplayTag(TAG_NGDashActive)
 		&& !ASC->HasMatchingGameplayTag(TAG_NGMantleActive) && !ASC->HasMatchingGameplayTag(TAG_NGPunchActive)
 		&& !ASC->HasMatchingGameplayTag(TAG_NGRollActive) && !ASC->HasMatchingGameplayTag(TAG_NGRagdollActive);

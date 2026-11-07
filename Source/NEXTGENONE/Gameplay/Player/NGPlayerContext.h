@@ -5,6 +5,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/PlayerState.h"
+#include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 
 namespace NGPlayerContext
 {
@@ -12,6 +13,7 @@ namespace NGPlayerContext
     inline UAbilitySystemComponent* GetCurrentASC(const APawn* Pawn, bool bRequireAuthority)
     {
         if (!IsValid(Pawn) || (bRequireAuthority && !Pawn->HasAuthority())) return nullptr;
+        if (const auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>(); Machine && Machine->HasResourceFailure()) return nullptr;
         const auto* Controller = Pawn->GetController();
         const auto* Player = Pawn->GetPlayerState();
         if (!Controller || Controller->GetPawn() != Pawn || !Player || Player->GetPawn() != Pawn) return nullptr;

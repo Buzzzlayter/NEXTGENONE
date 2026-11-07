@@ -43,16 +43,18 @@ public:
 	bool OwnsStateAbility(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 private:
 	bool StartIfReady();
 	void NotifyStateChanged();
 	FGameplayTag GetCurrentStateTag() const;
 	FGameplayTag RequestedStateTag;
 	FGameplayTag RequestedStateEvent;
-	FGameplayTag FailedStateTag;
+	UPROPERTY(ReplicatedUsing=OnRep_ResourceFailure) FGameplayTag FailedStateTag;
 	FGameplayTag LastNotifiedStateTag;
 	bool bEnding = false;
-	bool bResourcesFailed = false;
+	UPROPERTY(ReplicatedUsing=OnRep_ResourceFailure) bool bResourcesFailed = false;
+	UFUNCTION() void OnRep_ResourceFailure();
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyASC;
 	TArray<TWeakObjectPtr<UNGCharacterStateResources>> ActiveResources;
 };

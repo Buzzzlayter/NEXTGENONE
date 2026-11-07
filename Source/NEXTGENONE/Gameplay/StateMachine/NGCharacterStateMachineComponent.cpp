@@ -7,6 +7,11 @@
 #include "Character/NGControlStateDefinition.h"
 #include "GameplayCueManager.h"
 #include "AbilitySystemGlobals.h"
+#include "AbilitySystem/NGAbilitySystem.h"
+#include "Input/NGGameplayInputComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 
 bool UNGCharacterStateMachineComponent::StartIfReady()
 {
@@ -27,6 +32,7 @@ bool UNGCharacterStateMachineComponent::StartIfReady()
 void UNGCharacterStateMachineComponent::NotifyGameplayReady(UAbilitySystemComponent* ASC)
 {
 	ReadyASC = ASC;
+	if (bResourcesFailed) { OnRep_ResourceFailure(); return; }
 	StartIfReady(); RefreshResources();
 	if (RequestedStateEvent.IsValid()) QueueServerEvent(RequestedStateEvent);
 }
@@ -40,7 +46,15 @@ bool UNGCharacterStateMachineComponent::QueueServerEvent(FGameplayTag Event)
 	return true;
 }
 
-void UNGCharacterStateMachineComponent::NotifyDeath() { RequestStateTransition(TAG_NGDead, DeathEvent); }
+void UNGCharacterStateMachineComponent::NotifyDeath()
+{
+	if (bEnding || !GetOwner()->HasAuthority()) return;
+	if (!bResourcesFailed) { RequestStateTransition(TAG_NGDead, DeathEvent); return; }
+	// A broken graph cannot run GA_Death, but a later lethal hit must still mark this body dead.
+	FailedStateTag = TAG_NGDead;
+	GetOwner()->FlushNetDormancy(); GetOwner()->ForceNetUpdate();
+	NotifyStateChanged();
+}
 
 void UNGCharacterStateMachineComponent::RequestStateTransition(FGameplayTag StateTag, FGameplayTag Event)
 {
@@ -119,7 +133,29 @@ void UNGCharacterStateMachineComponent::NotifyResourceFailure(FGameplayTag State
 	RequestedStateEvent = FGameplayTag();
 	UE_LOG(LogTemp, Error, TEXT("Character FSM resource failure: pawn=%s machine=%s state=%s: %s. Resources released; Avatar handoff allowed."),
 		*GetNameSafe(GetOwner()), *MachineName.ToString(), *FailedStateTag.ToString(), *Reason);
+	GetOwner()->FlushNetDormancy(); GetOwner()->ForceNetUpdate();
+	OnRep_ResourceFailure();
+}
+
+void UNGCharacterStateMachineComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ThisClass, bResourcesFailed);
+	DOREPLIFETIME(ThisClass, FailedStateTag);
+}
+
+void UNGCharacterStateMachineComponent::OnRep_ResourceFailure()
+{
+	if (!bResourcesFailed || bEnding) return;
+	RequestedStateTag = {}; RequestedStateEvent = {};
 	SuspendResources();
+	if (auto* ASC = GetReadyASC())
+	{
+		if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
+		ASC->CancelAllAbilities();
+	}
+	if (auto* Input = GetOwner()->FindComponentByClass<UNGGameplayInputComponent>()) Input->ShutdownInput();
+	if (auto* Character = Cast<ACharacter>(GetOwner())) Character->GetCharacterMovement()->DisableMovement();
 	NotifyStateChanged();
 	// This notification means the handoff barrier is released, not gameplay success.
 	OnResourcesReady.Broadcast(GetOwner());

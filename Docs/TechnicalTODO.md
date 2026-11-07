@@ -91,6 +91,21 @@ R1/R2 реализованы в текущем пакете: ограничен�
 
 ## Проверки, ожидающие отдельного разрешения
 
+## Дополнительное ревью 2026-11-07
+
+- [x] R1: терминальный отказ реплицируется, закрывает общий Pawn/ASC gate и активацию GAS;
+  снимает ввод и останавливает movement. Последующая смерть переводит ошибочный logical state в Dead,
+  даже если граф уже недоступен. Нормальная GA_Death при сломанном графе не гарантируется.
+- [x] R5: фактические mapping/policy handles проверяются; отказ снимает частично полученные handles
+  и передаётся машине. Reacquire уведомляет о готовности после input acquisition.
+- [ ] R2/R3: отделить smoke hip-fire от cooldown и обеспечить повторную попытку ADS.
+- [ ] R4: довести inventory completion до UI, включая синхронный listen server.
+- [ ] R6: явные стартовые записи вместо классификации оружия в PlayerInventory.
+- [ ] R7: упростить общую inventory invalidation до dirty-флага.
+- [ ] R8: убрать повторную валидацию неизменяемого weapon definition.
+
+### Проверки, ожидающие отдельного разрешения
+
 - [ ] Сборки Editor/Game/Server и Blueprint compilation; Data Validation/cook новых definitions.
 - [ ] Регрессии split/merge/drop/pickup, rollback transfer при изменении snapshot, Reload cancel,
   повторные Enter/Exit UI и отказ входа Character FSM с последующим respawn.
