@@ -2,7 +2,9 @@
 
 Ревью: 2026-11-06. Основа: main `4895ed5`; отдельно проверена ветка
 `fix/als-gas-authority`, HEAD `6692a28668ed27579a01ba223a91ca6a211b2f51`, PR #6.
-Код не изменялся. Сборка, Blueprint compilation, PIE и сетевые прогоны не выполнялись.
+Первоначальное ревью не меняло код. Реализация пунктов — 2026-11-07; [x] означает изменение кода
+и статический просмотр, а не подтверждение сборкой/runtime. Сборка, Blueprint compilation, PIE
+и сетевые прогоны текущего пакета не выполнялись.
 
 Исходные замечания №1 (null LocalPlayer в HFSMInputComponent) и №2
 (опасные клиентские ALS RPC) исключены из активного списка: исправления есть в PR #6.
@@ -80,8 +82,20 @@ R1/R2 реализованы в текущем пакете: ограничен�
 ## P2/P3 — плагины, зависимости и проверки
 
 - [x] GCFSMEditor: снимать три зарегистрированных Details class layout в ShutdownModule.
-- [ ] Обновить Combat smoke harness под выбор предмета, Action inventory, ADS и текущие оружейные
+- [x] Обновить Combat smoke harness под выбор предмета, Action inventory, ADS и текущие оружейные
   настройки; убрать зависимость от старой неявной выдачи и фиксированных ammo/damage.
+  Выбирает реальный Action item, ждёт GAS ADS и направления камеры, использует RequestFire со свежим
+  view; health/ammo рассчитываются из fixture. Persistent limiter проверяется отдельным direct gate probe,
+  не невалидным FireOnServer без remote view. Runner требует настроенный GameMode class path.
+  Сценарий не запускался; ограничения fixture и ручные шаги — Docs/Testing/MultiplayerCombat.md.
+
+## Проверки, ожидающие отдельного разрешения
+
+- [ ] Сборки Editor/Game/Server и Blueprint compilation; Data Validation/cook новых definitions.
+- [ ] Регрессии split/merge/drop/pickup, rollback transfer при изменении snapshot, Reload cancel,
+  повторные Enter/Exit UI и отказ входа Character FSM с последующим respawn.
+- [ ] Dedicated server + два клиента: обновлённый smoke, затем отдельно latency/loss,
+  ALS roll/get-up, late join/relevancy. Ни один из этих прогонов пока не выполнялся.
 
 Порядок: P1 → инварианты инвентаря → UI lifecycle → консолидация → проверки качества.
 Сборки и игровые проверки требуют отдельного разрешения по AGENTS.md.

@@ -265,3 +265,21 @@ Setup cleanup (2026-11-03): NGSettingsAssets.cpp deleted; NGSetupCommandlet redu
 Inventory mounting revision (2026-11-03): InventoryStateComponent now derives from UIWidgetMounterComponent and uses its WidgetClass/PlaceholderID/Layer and mount/demount lifecycle. Own PanelClass/ZOrder/window creation removed. Close only queues CloseEvent; state Exit/Abort demounts through the base class and unbinds the panel delegate. No project Controller or input-system dependency added. Blueprint setup remains manual. Full offline NEXTGENONEEditor Development build PASS, UBT exit 0 (AgentBuild.log); no Blueprint authoring or tests performed.
 
 HFSM void lifecycle (2026-11-03, explicitly approved scope): all StateComponent Enter overrides now return void; State already used void Enter. Shared enter failure/rollback, AbortEnter, ActiveComponents and HasEnteredSuccessfully/OnEnterFailed removed. State invokes each configured component; invalid input/layout/widget/GAS configuration is handled locally, without rolling back other components. GAS grant/effect validation and owned-handle cleanup remain. Existing test sources were adapted to the new API and continuation semantics, not executed. User handles removal of stale Blueprint OnEnterFailed/HasEnteredSuccessfully nodes. Full offline NEXTGENONEEditor Win64 Development build PASS, UBT exit 0, no compiler diagnostics (Saved/Logs/AgentBuild.log). No Blueprint edits, PIE, gameplay or network tests. Previous rollback/AbortEnter instructions are historical.
+## Текущий harness — 2026-11-07, не запускался
+
+Код runner обновлён под Action inventory, выбранный item и GAS ADS. Исторические PASS ниже относятся к старым версиям и не подтверждают этот пакет. Сборка и запуск требуют отдельного разрешения.
+
+Подготовка после сборки: создать отдельный Blueprint-наследник `NGCombatTestGameMode`; назначить ему тот же Character/Controller и `PlayerStateClass=BP_NextgenonePlayerState`, что используются игрой. Проверить Layout и стартовый список у Inventory. Старый Combat.StarterItems пока поддерживается как fallback, когда Inventory.StarterItems пуст. Основной GameMode и defaults проекта не переключать.
+
+Fixture: открытый ровный участок возле координат (0,0,100) и (600,0,100), обычная гравитация, Alive/Dead FSM, отсутствие внешнего урона. В Action должно быть оружие с одним projectile и нулевым spread; magazine содержит достаточно патронов, чтобы убить цель без Reload. HP, damage, magazine и ожидание полёта берутся из текущих данных. Неподходящий fixture заканчивается FAIL, оружие автоматически не создаётся. Таймаут сценария — 120 секунд.
+
+После отдельного разрешения runner запускается с явным классом настроенного тестового режима, например:
+
+```powershell
+Tools/Testing/Run-NGCombatSmoke.ps1 -GameMode /Game/Blueprints/BP_CombatTestGameMode.BP_CombatTestGameMode_C
+```
+
+Этот пример не означает, что Blueprint уже создан. Runner не собирает проект. Использует три Editor-процесса с nullrhi, завершает только собственные процессы. Проверяет выбор Action item, отсутствие расхода при обычном RequestFire без ADS, GAS ADS, сходимость camera ray, настоящий клиентский RequestFire, расход магазина, серверный урон, состояние на обоих клиентах и защиту новой жизни от старого Pawn/context. Client snapshots ожидают репликацию в пределах общего deadline.
+
+Persistent fire limiter проверяется отдельным серверным TryCommitFire/CanFireNow probe до и после re-equip. Это не hostile RPC burst test и не доказательство всей защиты при latency/loss. Прямой FireOnServer без свежего remote view больше не используется. Reload/cancel, inventory race, packet loss, произвольная гравитация и визуал ALS требуют отдельных прогонов.
+

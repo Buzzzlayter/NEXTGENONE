@@ -1,6 +1,9 @@
 #include "Gameplay/Player/NextgenonePlayerController.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Abilities/NGAimAbility.h"
+#include "Gameplay/Combat/NGAimComponent.h"
+#include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Gameplay/GameModes/NGTestGameMode.h"
 #include "EngineUtils.h"
 #include "Gameplay/UI/NGSettingsPanel.h"
@@ -40,46 +43,47 @@ void ANextgenonePlayerController::OnRep_Pawn()
     APlayerController::OnRep_Pawn();
     RefreshPawnPresentation();
 }
-void ANextgenonePlayerController::ClientSmoke_Implementation(int32 Command)
+void ANextgenonePlayerController::ClientSmoke_Implementation(FNGCombatSmokeRequest Request)
 {
 #if !UE_BUILD_SHIPPING
-	if (!FParse::Param(FCommandLine::Get(), TEXT("NGCombatSmoke"))) return;
-	auto* ControlledPawn = Cast<ANextgenoneCharacter>(GetPawn());
-	if ((Command == 0 || Command == 6) && (!ControlledPawn || !ControlledPawn->GetAbilitySystemComponent()))
-	{
-		// Controller RPC can precede Pawn/PlayerState replication on a new connection.
-		FTimerHandle Retry;
-		GetWorldTimerManager().SetTimer(Retry, FTimerDelegate::CreateWeakLambda(this, [this, Command]() { ClientSmoke_Implementation(Command); }), .2f, false);
-		return;
-	}
-	if (!ControlledPawn) { ServerSmokeResult(Command, false); return; }
-	if (Command == 0 || Command == 6)
-	{
-		auto* ASC = ControlledPawn->GetAbilitySystemComponent();
-		ServerSmokeResult(Command, ASC && ASC->GetOwnerActor() == PlayerState && ASC->GetAvatarActor() == ControlledPawn && IsLocalController() && ControlledPawn->GetHealth()==100.f);
-	}
-	else if (Command == 1) { SetControlRotation(FRotator::ZeroRotator); ControlledPawn->Combat->RequestEquip(true); }
-	else if (Command == 2)
-	{
-		// Actual client GAS activation requests, interleaved with equip RPCs.
-		for (int32 i = 0; i < 8; ++i) { ControlledPawn->Combat->RequestFire(); ControlledPawn->Combat->RequestEquip(false); ControlledPawn->Combat->RequestEquip(true); }
-		ControlledPawn->Combat->RequestFire();
-	}
-	else if (Command == 3) ControlledPawn->Combat->RequestFire();
-	else
-	{
-		bool bFoundState = false;
-		for (TActorIterator<ANextgenoneCharacter> It(GetWorld()); It; ++It)
-		{
-			if (It->IsDead()) { bFoundState |= Command == 5 && It->GetHealth() == 0.f; }
-			else if (It->GetHealth() == 75.f) bFoundState |= Command == 4;
-		}
-		// All clients must also see an equipped shooter; only owner sees ammo.
-		bool bEquippedSeen = false;
-		for (TActorIterator<ANextgenoneCharacter> It(GetWorld()); It; ++It) bEquippedSeen |= It->Combat->GetEquipment().bEquipped;
-		const bool bOwnerAmmoCorrect = !ControlledPawn->Combat->GetEquipment().bEquipped || ControlledPawn->Combat->GetMagazineAmmo() == (Command == 4 ? 11 : 8);
-		ServerSmokeResult(Command, bFoundState && bEquippedSeen && bOwnerAmmoCorrect);
-	}
+    if (!FParse::Param(FCommandLine::Get(), TEXT("NGCombatSmoke"))) return;
+    auto* ControlledPawn = Cast<ANextgenoneCharacter>(GetPawn());
+    if (!ControlledPawn) return; // Server retries within a bounded global deadline.
+    auto* ASC = Cast<UNGAbilitySystemComponent>(ControlledPawn->GetAbilitySystemComponent());
+    const int32 Command = Request.Command;
+    if (Command == 0 || Command == 6)
+    {
+        if (ASC && ASC->GetOwnerActor() == PlayerState && ASC->GetAvatarActor() == ControlledPawn
+            && ControlledPawn->CharacterStateMachine->IsGameplayReady(TAG_NGAlive)
+            && ControlledPawn->GetMaxHealth() > 0.f && FMath::IsNearlyEqual(ControlledPawn->GetHealth(), ControlledPawn->GetMaxHealth()))
+            ServerSmokeResult(Command, true);
+        return;
+    }
+    if (Command == 1) { ControlledPawn->Combat->RequestSelectSlot(Request.ActionSlot); return; }
+    if (Command == 2)
+    {
+        if (!ASC || !IsValid(Request.Target)) return;
+        ASC->AbilityInputTagPressed(TAG_NGInputAim);
+        FVector Origin, Direction;
+        if (!ControlledPawn->Aim->GetViewRay(Origin, Direction)) return;
+        const FVector TargetPoint = Request.Target->GetActorLocation() + FVector(0, 0, 20);
+        const FVector ToTarget = (TargetPoint - Origin).GetSafeNormal();
+        // Camera interpolation updates on subsequent frames; retry until the actual view ray converges.
+        SetControlRotation(ToTarget.Rotation());
+        if (ControlledPawn->Combat->IsAiming() && FVector::DotProduct(Direction, ToTarget) > .99999f)
+            ServerSmokeResult(Command, true);
+        return;
+    }
+    if (Command == 3 || Command == 7) { ControlledPawn->Combat->RequestFire(); return; }
+    if (Command == 4 || Command == 5)
+    {
+        if (!IsValid(Request.Target) || !IsValid(Request.Shooter)) return;
+        const bool bTargetCorrect = FMath::IsNearlyEqual(Request.Target->GetHealth(), Request.ExpectedHealth)
+            && Request.Target->IsDead() == (Request.ExpectedHealth <= 0.f);
+        const bool bAmmoCorrect = ControlledPawn != Request.Shooter || ControlledPawn->Combat->GetMagazineAmmo() == Request.ExpectedAmmo;
+        if (bTargetCorrect && bAmmoCorrect && Request.Shooter->Combat->GetEquipment().bEquipped)
+            ServerSmokeResult(Command, true);
+    }
 #endif
 }
 void ANextgenonePlayerController::ServerSmokeResult_Implementation(int32 Command, bool bPassed)
