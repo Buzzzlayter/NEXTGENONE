@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "Misc/ScopeExit.h"
+#include "Gameplay/Player/NGPlayerContext.h"
 
 
 UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
@@ -141,11 +142,14 @@ void UNGPlayerInventoryManagerComponent::OpenInventorySource(UNGInventoryManager
 UNGInventoryManagerComponent* UNGPlayerInventoryManagerComponent::GetViewedInventory() const
 {
 	const auto* CharacterPawn = Cast<ANextgenoneCharacter>(GetInventoryPawn());
-	return CharacterPawn && !CharacterPawn->IsDead() && ViewedPawn.Get() == CharacterPawn ? ViewedInventory.Get() : nullptr;
+	return CharacterPawn && NGPlayerContext::GetCurrentASC(CharacterPawn, false) && !CharacterPawn->IsDead()
+		&& ViewedPawn.Get() == CharacterPawn ? ViewedInventory.Get() : nullptr;
 }
 void UNGPlayerInventoryManagerComponent::ClientShowInventory_Implementation(ANextgenoneCharacter* ExpectedPawn, UNGInventoryManagerComponent* Source, FGameplayTag InteractionType)
 {
 	if (!IsValid(ExpectedPawn) || GetInventoryPawn() != ExpectedPawn || !IsValid(Source)) return;
+	const auto* System = GetWorld()->GetSubsystem<UNGInteractionSubsystem>();
+	if (!System || !System->IsCurrentInteractor(ExpectedPawn, false)) return;
 	ViewedInventory = Source;
 	ViewedPawn = ExpectedPawn;
 	BindInteractionSession(ExpectedPawn);

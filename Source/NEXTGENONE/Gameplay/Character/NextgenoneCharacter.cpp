@@ -259,7 +259,7 @@ void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason)
 void ANextgenoneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	if (!IsDead()) GameplayInput->InitializeInput(PlayerInputComponent);
+	if (!IsDead() && !CharacterStateMachine->HasResourceFailure()) GameplayInput->InitializeInput(PlayerInputComponent);
 	else GameplayInput->ShutdownInput();
 	CharacterStateMachine->RefreshResources();
 }

@@ -105,8 +105,9 @@ R1/R2 реализованы в текущем пакете: ограничен�
 - [x] R6: Inventory.InitialContents содержит ItemClass/Count/SlotTag/SlotIndex; нет классификации
   оружия или чтения WeaponDefinition в PlayerInventory. Старые StarterItems не исполняются; значения
   сохранены для ручного переноса. Требуется Blueprint-сетап InitialContents после сборки.
-- [x] R7: один dirty-флаг и OnInventoryChanged без аргументов; удалены map сообщений, delta DTO
+- [x] R7: один dirty-флаг и OnInventoryChanged без аргументов; удалены map сообщений
   и per-entry replication callbacks. Текущие native подписчики переведены на snapshot invalidation.
+  Legacy delta struct сохранён только как цель существующего Core Redirect до миграции ассетов.
 - [x] R8: Fire/Reload используют ValidateDefinition как единый контракт параметров; повторные
   finite/range/clamp после успешной проверки убраны. Pawn/ADS/ammo/view/cooldown проверки сохранены.
 

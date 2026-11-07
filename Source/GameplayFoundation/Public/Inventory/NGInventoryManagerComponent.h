@@ -42,6 +42,18 @@ struct GAMEPLAYFOUNDATION_API FNGInventorySlotState
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FNGItemState Item;
 };
 
+/** Legacy serialized type targeted by Core Redirects. Not used by runtime notifications. */
+USTRUCT(BlueprintType)
+struct GAMEPLAYFOUNDATION_API FNGInventoryChangeMessage
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly, Category=Inventory) TObjectPtr<UActorComponent> InventoryOwner = nullptr;
+	UPROPERTY(BlueprintReadOnly, Category=Inventory) TObjectPtr<UNGInventoryItemInstance> Instance = nullptr;
+	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 NewCount = 0;
+	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 Delta = 0;
+	UPROPERTY(BlueprintReadOnly, Category=Inventory) int32 SlotIndex = INDEX_NONE;
+};
+
 /** Final inventory invalidation. Observers read a fresh snapshot; no per-slot delta is promised. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNGInventoryChanged);
 

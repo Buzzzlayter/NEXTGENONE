@@ -46,7 +46,7 @@ void UNGInteractionStateComponent::Route()
 	const APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;
 	const auto* Machine = PlayerPawn ? PlayerPawn->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
 	if (!Interaction || Interaction->GetOwner() != PlayerPawn || !Interaction->GetContext().IsValid()
-		|| (Machine && Machine->HasStateTag(TAG_NGDead)))
+		|| (Machine && (Machine->HasStateTag(TAG_NGDead) || Machine->HasResourceFailure())))
 	{
 		if (!bClosedSent && !ClosedEvent.IsNone()) UHFSMLibrary::QueueNamedEvent(GetState(), ClosedEvent);
 		bClosedSent = true;
@@ -68,7 +68,7 @@ void UNGInteractionStateComponent::Tick(float DeltaTime)
 		const APawn* PlayerPawn = PC ? PC->GetPawn() : nullptr;
 		const auto* Machine = PlayerPawn ? PlayerPawn->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
 		if (!Interaction || Interaction->GetOwner() != PlayerPawn || !Interaction->GetContext().IsValid()
-			|| (Machine && Machine->HasStateTag(TAG_NGDead))) Route();
+			|| (Machine && (Machine->HasStateTag(TAG_NGDead) || Machine->HasResourceFailure()))) Route();
 	}
 }
 
