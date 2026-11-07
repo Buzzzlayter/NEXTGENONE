@@ -10,11 +10,15 @@ UNGInteractionStateComponent::UNGInteractionStateComponent() { bIsTickEnabled = 
 
 void UNGInteractionStateComponent::Enter()
 {
+	if (auto* PC = ObservedController.Get()) PC->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	ObservedController.Reset();
+	BindPawn(nullptr);
 	bActive = true;
 	bClosedSent = false;
 	Super::Enter();
 	if (auto* PC = GetPlayerController())
 	{
+		ObservedController = PC;
 		PC->OnPossessedPawnChanged.AddUniqueDynamic(this, &ThisClass::PawnChanged);
 		BindPawn(PC->GetPawn());
 	}
@@ -71,7 +75,8 @@ void UNGInteractionStateComponent::Tick(float DeltaTime)
 void UNGInteractionStateComponent::Exit(FName Event)
 {
 	bActive = false;
-	if (auto* PC = GetPlayerController()) PC->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	if (auto* PC = ObservedController.Get()) PC->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	ObservedController.Reset();
 	if (ObservedInteraction.IsValid()) ObservedInteraction->OnContextChanged.RemoveAll(this);
 	ObservedInteraction.Reset();
 	Super::Exit(Event);

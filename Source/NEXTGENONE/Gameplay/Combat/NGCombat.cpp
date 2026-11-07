@@ -24,11 +24,6 @@ UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGFireInput, "Input.Combat.Fire");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGDamageAmount, "Data.Damage");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_NGReloadInput, "Input.Combat.Reload");
 
-UNGWeaponDefinition::UNGWeaponDefinition()
-{
-	ProjectileClass=ANGBallisticProjectile::StaticClass();
-	AimAbilityClass=UNGAimAbility::StaticClass();
-}
 
 UNGCombatComponent::UNGCombatComponent()
 {
@@ -104,6 +99,9 @@ void UNGCombatComponent::SetEquippedOnServer(bool bEquip)
 	if (bEquip && (!BoundInventory.IsValid() || !BoundInventory->Contains(CurrentItem))) return;
 	const auto* ItemDef = CurrentItem ? GetDefault<UNGInventoryItemDefinition>(CurrentItem->GetItemDef()) : nullptr;
 	auto* Weapon = GetWeaponDefinition(ItemDef);
+	FString WeaponError;
+	if (bEquip && Weapon && !Weapon->ValidateDefinition(WeaponError))
+	{ UE_LOG(LogTemp, Error, TEXT("Invalid weapon %s: %s"), *Weapon->GetName(), *WeaponError); return; }
 	if (bEquip && (!Weapon || !BoundInventory->Contains(CurrentItem) || !BoundInventory->GetSlotTag(BoundInventory->GetSlotIndex(CurrentItem)).MatchesTag(TAG_NGSlotAction))) return;
 	WeaponHandles.Remove(GrantedASC.Get()); GrantedASC.Reset();
 	Equipment.bEquipped = bEquip; ++Equipment.Revision;
@@ -241,6 +239,8 @@ bool UNGCombatComponent::FireOnServer()
 	auto* PS = Pawn ? Pawn->GetPlayerState<ANextgenonePlayerState>() : nullptr;
 	const auto* Def = Equipment.Definition.Get();
 	if (!Pawn || !Pawn->HasAuthority() || !ASC || !PS || !Def || !Equipment.bEquipped || Pawn->IsDead() || Pawn->GetHealth() <= 0 || !Pawn->GetController() || GetMagazineAmmo() <= 0 || !PS->Inventory->Contains(CurrentItem)) return false;
+	FString WeaponError;
+	if (!Def->ValidateDefinition(WeaponError)) return false;
 	if (!ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming)) return false;
 	if (ASC->HasMatchingGameplayTag(TAG_NGRagdollActive) || ASC->HasMatchingGameplayTag(TAG_NGRollActive)) return false;
 	if (ASC->HasMatchingGameplayTag(TAG_NGDashActive) || ASC->HasMatchingGameplayTag(TAG_NGMantleActive) || ASC->HasMatchingGameplayTag(TAG_NGPunchActive) || ASC->HasMatchingGameplayTag(TAG_NGReloadActive)) return false;
@@ -379,4 +379,3 @@ void UNGCombatComponent::MulticastPunchHit_Implementation(ANextgenoneCharacter* 
 {
 	if (GetNetMode() != NM_DedicatedServer) OnPunchHit.Broadcast(Target, ImpactPoint);
 }
-

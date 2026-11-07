@@ -4,6 +4,8 @@
 
 void UHFSMInputComponent::Enter()
 {
+    ResetBlueprintInput();
+    RestoreInput();
     AppliedInputSubsystem = GetPlayerInputSubsystem();
     if (!AppliedInputSubsystem.IsValid())
     {

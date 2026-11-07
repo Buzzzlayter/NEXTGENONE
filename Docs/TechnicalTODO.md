@@ -62,19 +62,24 @@ R1/R2 реализованы в текущем пакете: ограничен�
   Сохранить специализированную серверную валидацию на каждой входной границе.
   NGPlayerContext.GetCurrentASC используется Combat и Interaction; GetInventoryPawn остаётся транспортной
   проверкой PlayerState/Controller, а access/health/state/rate/snapshot проверки сохранены на границах.
-- [ ] Добавить валидацию item/weapon definitions: размеры стеков, числовые диапазоны,
+- [x] Добавить валидацию item/weapon definitions: размеры стеков, числовые диапазоны,
   обязательные ссылки и согласованность fragment stats. Не полагаться только на ClampMin в Details.
+  ValidateDefinition/IsDataValid проверяют runtime-диапазоны и ссылки; Editor дополнительно проверяет
+  soft classes, equipment backlink и magazine/reserve stats. Data Validation и cook не запускались.
 
 ## P2 — UI и lifecycle
 
-- [ ] Безопасный повторный Enter/Exit UI-компонентов: освобождение старых policy/mapping handles,
+- [x] Безопасный повторный Enter/Exit UI-компонентов: освобождение старых policy/mapping handles,
   подписок и виджетов; очистка Placeholders при смене layout template; диагностика дубликатов ID.
-- [ ] Обнулять OutComponent перед GetClosestComponentInHierarchyUp: отсутствие результата
+  Input/Mounter/Layout/ResolutionObserver очищают старые ресурсы перед Enter; router хранит Controller,
+  у которого подписался. Layout очищает ссылки после Exit, отложенный fade работает со старым widget;
+  mounter запоминает фактический placeholder. Дубликаты ID логируются, сохраняется первый.
+- [x] Обнулять OutComponent перед GetClosestComponentInHierarchyUp: отсутствие результата
   не должно возвращать старое значение вызывающего кода.
 
 ## P2/P3 — плагины, зависимости и проверки
 
-- [ ] GCFSMEditor: снимать три зарегистрированных Details class layout в ShutdownModule.
+- [x] GCFSMEditor: снимать три зарегистрированных Details class layout в ShutdownModule.
 - [ ] Обновить Combat smoke harness под выбор предмета, Action inventory, ADS и текущие оружейные
   настройки; убрать зависимость от старой неявной выдачи и фиксированных ammo/damage.
 

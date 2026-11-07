@@ -24,6 +24,10 @@ class NEXTGENONE_API UNGWeaponDefinition : public UDataAsset
 	GENERATED_BODY()
 public:
 	UNGWeaponDefinition();
+	bool ValidateDefinition(FString& Error) const;
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+#endif
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Ammo") TSoftClassPtr<UNGInventoryItemDefinition> AmmoItemClass;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Ballistics") TSubclassOf<ANGBallisticProjectile> ProjectileClass;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Ballistics",meta=(ClampMin="100",ClampMax="200000")) float MuzzleSpeed=60000.f;

@@ -37,6 +37,7 @@ protected:
 private:
 	UPROPERTY()
 	UUILayoutTemplate* MountedLayout = nullptr;
+	FGameplayTag MountedPlaceholderID;
 
 	UUILayoutTemplate* ResolveLayout() const;
 	bool MountWidget();

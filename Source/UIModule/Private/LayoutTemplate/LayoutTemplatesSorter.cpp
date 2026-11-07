@@ -37,7 +37,7 @@ UUILayoutTemplate* ULayoutTemplatesSorter::GetLayer(const ELayoutLayer Layer)
 
 void ULayoutTemplatesSorter::AddLayout(UUILayoutTemplate* LayoutTemplate)
 {
-	TemplatesList.Add(LayoutTemplate);
+	TemplatesList.AddUnique(LayoutTemplate);
 	Update();
 }
 

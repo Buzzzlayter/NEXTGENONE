@@ -505,6 +505,8 @@ int32 UNGInventoryManagerComponent::FindFirstAvailableSlot(TSubclassOf<UNGInvent
 {
     if (!ItemClass || ItemClass->HasAnyClassFlags(CLASS_Abstract) || StackCount < 1
         || StackCount > GetDefault<UNGInventoryItemDefinition>(ItemClass)->MaxStackSize) return INDEX_NONE;
+    FString Error;
+    if (!GetDefault<UNGInventoryItemDefinition>(ItemClass)->ValidateDefinition(Error)) return INDEX_NONE;
     for (int32 Index = 0; Index < GetSlotCount(); ++Index)
         if (const auto* Entry = FindSlot(Index); Entry && Entry->StackCount == 0 && !Entry->Instance
             && (!SlotTag.IsValid() || Entry->SlotTag.MatchesTag(SlotTag)) && CanPlaceItemAtSlot(ItemClass, Index)) return Index;

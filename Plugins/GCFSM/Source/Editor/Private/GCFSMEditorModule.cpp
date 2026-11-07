@@ -90,6 +90,13 @@ void FGCFSMEditorModule::StartupModule()
 
 void FGCFSMEditorModule::ShutdownModule()
 {
+	if (auto* PropertyModule = FModuleManager::GetModulePtr<FPropertyEditorModule>("PropertyEditor"))
+	{
+		PropertyModule->UnregisterCustomClassLayout("GCFSMTriggerEventNode");
+		PropertyModule->UnregisterCustomClassLayout("GCFSMStateNode");
+		PropertyModule->UnregisterCustomClassLayout("GCFSMLaunchNode");
+		PropertyModule->NotifyCustomizationModuleChanged();
+	}
 	FSlateStyleRegistry::UnRegisterSlateStyle(styleSet);
 
 	if (UObjectInitialized())

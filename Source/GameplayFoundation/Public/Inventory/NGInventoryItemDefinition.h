@@ -51,6 +51,10 @@ class GAMEPLAYFOUNDATION_API UNGInventoryItemDefinition : public UObject
 public:
 	UNGInventoryItemDefinition(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 	virtual void PostLoad() override;
+	bool ValidateDefinition(FString& Error) const;
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+#endif
 	UFUNCTION(BlueprintPure, Category=Inventory) UDataAsset* GetEquipmentDefinition() const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category=Display)
