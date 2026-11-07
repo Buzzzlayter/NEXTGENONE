@@ -2,6 +2,19 @@
 
 Актуальный сетап личного инвентаря и отдельного состояния Storage: [InteractionUI.md](InteractionUI.md). Источник каждой панели назначает Inventory Window мounter; сама панель не выбирает между своим/внешним контейнером.
 
+## Пакет консолидации — 2026-11-07
+
+Реализация пунктов [TechnicalTODO](../TechnicalTODO.md) сохранена коммитами. Подтверждены только статический просмотр, diff и синтаксис PowerShell runner; сборка C++, Data Validation, cook, Blueprint compilation и игра не запускались.
+
+- Канонический стартовый список теперь **PlayerState.Inventory → StarterItems**. Старый **Combat.StarterItems** пока используется, если новый список пуст: можно перенести настройки вручную после сборки. Выдача однократная; при частичном отказе успешные предметы остаются, ошибки логируются, respawn не повторяет выдачу. Большой резерв раскладывается по отдельным стекам вместо молчаливого обрезания.
+- Pickup использует один чистый поиск подходящего пустого слота на клиенте/сервере. При auto-equip оружие идёт в свободный Action; если Action заполнен — в Storage без экипировки. Если подходящего Storage тоже нет, pickup остаётся в мире.
+- **Character.Interaction → DroppedPickupClass** задаёт класс выброшенного предмета. Native default — NGItemPickup. Для прежнего Blueprint-визуала назначить BP_ItemPickup явно; hard class reference доступна cook. IsDataValid проверяет null/abstract, фактический cook ещё не выполнен.
+- Drop/transfer возвращают native request ID; OnRequestCompleted сообщает серверный результат. Подписываться до отправки: на listen server callback может быть синхронным. Успешный ответ не означает, что репликация слотов уже пришла. UI не меняет inventory оптимистически.
+- Мутации публикуют итоговое уведомление после регистрации subobjects и списаний; повторная мутация тех же контейнеров из синхронного callback отклоняется. Reload использует общий consume; до списания проверяет весь debit, затем добавляет магазин и уведомляет inventory. Stateful partial consume запрещён, как split.
+- Панель сохраняет неизменившиеся item-подписки; одинаковые slot snapshots не вызывают повторный OnSlotUpdated и загрузку иконки. Полный UI snapshot пока формируется; прирост производительности не измерялся.
+
+Схемы DA_InventoryLayout_Player/Box, BP_NextgenonePlayerState и ссылки GameMode/Box созданы ранее через MCP и сохранены. Для уже размещённой коробки проверить наследование Layout: старый экземпляр мог сохранить None. При необходимости заменить его экземпляром настроенного BP с сохранением пользовательских свойств. Этот пакет не пересохраняет карту автоматически.
+
 ## Политика разделения и слияния стеков
 
 `Count` — количество в слоте; `StatStacks` — состояние всего item instance (например, заряды), а не каждой единицы Count. Пустые stats допускают split и merge предметов одного класса в пределах MaxStackSize. При непустых stats split и merge запрещены, даже если значения совпадают: их копирование дублирует состояние, а объединение с потерей одного instance теряет состояние. Полный перенос в пустой слот, полный drop и перестановка целых предметов внутри контейнера разрешены. Transfer и drop используют общую политику FNGItemState; автоматического распределения stats между частями нет. Сборка и runtime этой правки не проверены.
@@ -16,12 +29,12 @@
 
 ## Data Asset схемы слотов
 
-После полной сборки и перезапуска Editor создать два Data Asset класса **NGInventoryLayoutDefinition** в `/Game/Gameplay/Inventory/Layouts`:
+В `/Game/Gameplay/Inventory/Layouts` созданы два Data Asset класса **NGInventoryLayoutDefinition**:
 
 - `DA_InventoryLayout_Player`: Slots из 25 записей — первые 20 с SlotTag=Inventory.Slot.Storage, остальные 5 с Inventory.Slot.Action.
 - `DA_InventoryLayout_Box`: Slots из 20 записей с SlotTag=Inventory.Slot.Storage.
 
-Каждая запись содержит только SlotTag и AcceptedItems (GameplayTagQuery). Пустой AcceptedItems разрешает любой предмет. Позиция записи в Slots задаёт SlotIndex; один и тот же Layout можно назначать нескольким независимым контейнерам. Предметов, количества стека и ItemInstance в Layout нет. Указанные assets нужно создать и назначить после появления нового native-типа в Editor; агент не выполняет сборку.
+Каждая запись содержит только SlotTag и AcceptedItems (GameplayTagQuery). Пустой AcceptedItems разрешает любой предмет. Позиция записи в Slots задаёт SlotIndex; один и тот же Layout можно назначать нескольким независимым контейнерам. Предметов, количества стека и ItemInstance в Layout нет. Новые native-типы и настройки доступны после полной сборки и перезапуска Editor; агент сборку не выполняет.
 
 Для игрока назначить Player Layout на Inventory в Blueprint-наследнике существующего ANextgenonePlayerState. Если такого BP ещё нет, создать `BP_NextgenonePlayerState` и выбрать его в BP_NextgenoneGameMode → Player State Class. Это тот же native PlayerState и тот же subobject Inventory. Для коробки назначить Box Layout на Inventory в BP_InventoryBox. Изменения отдельных слотов конкретной коробки задавать отдельным Layout asset.
 
@@ -31,7 +44,7 @@ Layout применяется один раз за жизнь компонент
 
 Runtime API Manager и его проектного наследника оставлен C++ без BlueprintCallable/BlueprintPure. InventoryUIRequested/OnInventoryRequested и ToggleInventoryUI удалены: внешнее взаимодействие передаётся через общий контекст Interaction и UI Router, свой инвентарь открывается напрямую UI FSM. Нужные Blueprint-точки пользователь помечает явно. RPC/RepNotify и callback OnPawnSet сохраняют обязательные UFUNCTION, настройки остаются в Details. InventoryOperationInterval задаётся на **PlayerState.Inventory**. Blueprint/assets агент не менял.
 
-Сессия хранится на Manager и привязана к Pawn, открывшему контейнер. OnPawnSet и EndPlay очищают её. Запросы старого Pawn отклоняются после смены владения. Проверки ExpectedPawn, доступ/дистанция/LOS и ожидаемые item pointers сохранены. Drop/transfer rate limits и однократность стартовой выдачи — приватное состояние PlayerInventory Manager, который живёт на PlayerState и переживает смену Pawn. Combat запрашивает TryBeginStarterGrant вместо изменения флага PlayerState.
+Сессия хранится на Manager и привязана к Pawn, открывшему контейнер. OnPawnSet и EndPlay очищают её. Запросы старого Pawn отклоняются после смены владения. Проверки ExpectedPawn, доступ/дистанция/LOS и ожидаемые item pointers сохранены. Drop/transfer rate limits и однократность стартовой выдачи — приватное состояние PlayerInventory Manager, который живёт на PlayerState и переживает смену Pawn. Character при инициализации вызывает GrantStarterInventory; Combat.BindInventory только подписывается на изменения.
 
 Флаги bInventoryUIOpen/bSettingsUIOpen удалены. UI FSM блокирует Gameplay общей политикой UPlayerInputSubsystem. Прицел и интеракция проверяют IsGameplayInputBlocked и не знают названий экранов. Settings mounter уже использует эту политику. Старые Blueprint-узлы флагов удалить, в нужных UI-состояниях включить bBlockGameplay. Сборка/runtime не проверены.
 

@@ -66,9 +66,10 @@ void UUILayoutTemplate::DemountWidgetsImmediate(const TArray<FUIWidgetDemountDat
 	{
 		UWidget* Placeholder = DemountData.Placeholder.Get();
 		UUserWidget* Widget = DemountData.Widget.Get();
-		if (Placeholder && Widget)
+		if (Widget)
 		{
-			IWidgetPlaceholder::Execute_DemountWidget(Placeholder, Widget);
+			if (Placeholder) IWidgetPlaceholder::Execute_DemountWidget(Placeholder, Widget);
+			Widget->RemoveFromParent();
 		}
 	}
 }

@@ -272,6 +272,7 @@ int32 UNGInventoryManagerComponent::GetTotalItemCountByDefinition(TSubclassOf<UN
 		{
 			if (Instance->GetItemDef() == ItemDef)
 			{
+				if (Entry.StackCount > MAX_int32 - TotalCount) return MAX_int32;
 				TotalCount += Entry.StackCount;
 			}
 		}
@@ -289,18 +290,21 @@ bool UNGInventoryManagerComponent::ConsumeItemsByDefinition(TSubclassOf<UNGInven
 {
     if (bTransferring || !GetOwner() || !GetOwner()->HasAuthority() || !ItemDef || NumToConsume < 1
         || GetTotalItemCountByDefinition(ItemDef) < NumToConsume) return false;
-    FMutationScope Mutation(this);
+    TArray<TTuple<UNGInventoryItemInstance*, int32>> Debits;
     int32 Remaining = NumToConsume;
-    const auto Items = GetAllItems();
-    for (auto* Item : Items)
+    for (auto* Item : GetAllItems())
     {
         if (Remaining == 0) break;
         if (Item->GetItemDef() != ItemDef) continue;
-        const int32 Take = FMath::Min(GetCount(Item), Remaining);
-        // No callbacks occur between preflight and these private mutations.
-        RemoveQuantityInternal(Item, Take, true);
+        const int32 OldCount = GetCount(Item);
+        const int32 Take = FMath::Min(OldCount, Remaining);
+        if (Take < OldCount && !Item->CaptureState().CanSplitStack()) return false;
+        Debits.Emplace(Item, Take);
         Remaining -= Take;
     }
+    FMutationScope Mutation(this);
+    // No callbacks occur between preflight and these private mutations.
+    for (const auto& Debit : Debits) RemoveQuantityInternal(Debit.Get<0>(), Debit.Get<1>(), true);
     OnConsumed();
     return true;
 }

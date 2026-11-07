@@ -81,7 +81,7 @@ bool UUIInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDr
 void UUIInventorySlotWidget::SetData(const FUIInventorySlotData& InData, UObject* InOperationHandler)
 {
 	if (OperationHandler.Get() == InOperationHandler && Data.HasSamePresentation(InData)) return;
-	const bool bIconChanged = Data.Item != InData.Item || Data.Icon != InData.Icon;
+	const bool bIconChanged = Data.Item != InData.Item || Data.Icon != InData.Icon || (Data.Count > 0) != (InData.Count > 0);
 	Data = InData;
 	OperationHandler = InOperationHandler;
 	if (bIconChanged) UpdateItemIcon();

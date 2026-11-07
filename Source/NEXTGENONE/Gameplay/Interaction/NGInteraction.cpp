@@ -17,6 +17,9 @@
 #include "Net/UnrealNetwork.h"
 #include "Misc/ScopeExit.h"
 #include "Engine/World.h"
+#if WITH_EDITOR
+#include "Misc/DataValidation.h"
+#endif
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionBlocked, "State.Interaction.Blocked");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionAbility, "Ability.Type.Interaction");
@@ -129,6 +132,7 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 	if (!IsCurrentInteractor(Pawn) || !Item || ActiveDrops.Contains(Item)) return nullptr;
 	auto* PS=Pawn->GetPlayerState<ANextgenonePlayerState>();
 	const int32 OldCount=PS->Inventory->GetCount(Item); if (Count==0) Count=OldCount;
+	const int32 OldSlot=PS->Inventory->GetSlotIndex(Item);
 	if (Count<1 || Count>OldCount) return nullptr;
 	const auto State=Item->CaptureState(Count);
 	if (!State.ItemClass) return nullptr;
@@ -155,7 +159,7 @@ ANGItemPickup* UNGInteractionSubsystem::DropInventoryItem(ANextgenoneCharacter* 
 		!Item->CaptureState(Count).StatStacks.OrderIndependentCompareEqual(State.StatStacks) || !PS->Inventory->RemoveQuantity(Item,Count,false))
 	{ if (IsValid(Pickup)) Pickup->Destroy(); return nullptr; }
 	Pickup->PublishDrop();
-	PS->Inventory->NotifyItemChange(Item,OldCount,OldCount-Count);
+	PS->Inventory->NotifyItemChange(Item,OldCount,OldCount-Count,OldSlot);
 	return Pickup;
 }
 UNGInteractionComponent::UNGInteractionComponent()
@@ -164,6 +168,18 @@ UNGInteractionComponent::UNGInteractionComponent()
 	InterruptingTags = DefaultInteractionInterruptions();
 	SetIsReplicatedByDefault(true); PrimaryComponentTick.bCanEverTick=true; PrimaryComponentTick.TickInterval=.1f;
 }
+#if WITH_EDITOR
+EDataValidationResult UNGInteractionComponent::IsDataValid(FDataValidationContext& Context) const
+{
+	const auto Parent = Super::IsDataValid(Context);
+	if (!DroppedPickupClass || DroppedPickupClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		Context.AddError(FText::FromString(TEXT("Interaction requires a concrete DroppedPickupClass; assign its Blueprint here to include it in cook.")));
+		return EDataValidationResult::Invalid;
+	}
+	return Parent == EDataValidationResult::Invalid ? Parent : EDataValidationResult::Valid;
+}
+#endif
 void UNGInteractionComponent::BindAbilitySystem(UAbilitySystemComponent* ASC)
 {
     if (BoundASC.Get() == ASC) return;

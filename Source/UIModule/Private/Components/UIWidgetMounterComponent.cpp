@@ -84,6 +84,7 @@ bool UUIWidgetMounterComponent::MountWidget()
 void UUIWidgetMounterComponent::DemountWidget(bool bImmediate)
 {
 	if (!Widget) { MountedLayout = nullptr; MountedPlaceholderID = {}; return; }
+	Widget->SetIsEnabled(false); // Deferred fade must not keep an exited state's controls interactive.
 	
 	if (MountedLayout && MountedPlaceholderID.IsValid())
 	{
