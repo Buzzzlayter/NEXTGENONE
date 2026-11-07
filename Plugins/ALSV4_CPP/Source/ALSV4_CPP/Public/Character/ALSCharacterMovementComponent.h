@@ -28,6 +28,7 @@ class ALSV4_CPP_API UALSCharacterMovementComponent : public UCharacterMovementCo
 		virtual void SetMoveFor(ACharacter* Character, float InDeltaTime, FVector const& NewAccel,
 		                        class FNetworkPredictionData_Client_Character& ClientData) override;
 		virtual void PrepMoveFor(class ACharacter* Character) override;
+		virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* Character, float MaxDelta) const override;
 
 		// Walk Speed Update
 		uint8 bSavedRequestMovementSettingsChange : 1;
@@ -73,4 +74,6 @@ class ALSV4_CPP_API UALSCharacterMovementComponent : public UCharacterMovementCo
 	UFUNCTION(BlueprintCallable, Category = "Movement Settings")
 	void SetAllowedGait(EALSGait NewAllowedGait);
 
+private:
+	void ApplyAllowedGaitSpeed();
 };

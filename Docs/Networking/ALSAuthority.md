@@ -24,6 +24,12 @@ Server_SetMeshLocationDuringRagdoll, Server_PlayMontage, Server_RagdollStart, Se
 
 AllowedGait вычисляется в обычном серверном ALS UpdateCharacterMovement; отдельного RPC, позволяющего назначить серверу максимальный gait, больше нет. MantleCheck сохраняет оригинальную геометрию ALS, а ReplicateMantleStart — обычный virtual callback, не RPC. Проектный executor распространяет только синхронный результат собственной server-side проверки GA_Mantle.
 
+### Исправление speed update / replay — 2026-11-07
+
+Смена AllowedGait и MovementSettings сразу применяет MaxWalkSpeed/MaxWalkSpeedCrouched. Compressed flags объединяются с локальным запросом обновления: клиентский move без Custom_0 больше не стирает ожидающее серверное изменение. PrepMoveFor восстанавливает gait через setter вместе со скоростью; CanCombineWith запрещает объединять moves с разными gait/settings-change flags. SavedAllowedGait остаётся локальной историей клиента и не становится доверенным серверным параметром.
+
+Обнаруженный дефект мог оставлять server speed cap старым при клиентском спринте. Это согласуется с сообщением пользователя о рывках autonomous Pawn; runtime-корреляция не установлена. ALS считает lean по изменению скорости, поэтому наклон может реагировать на correction/replay; AnimBP и коэффициенты lean не менялись. Сборка и воспроизведение не выполнялись. Нужна отдельная проверка переходов walk/run/sprint и replay на сервере + owning client; порядок доставки locomotion intents и CMC moves этим патчем полностью не унифицирован.
+
 ## Действия через GAS
 
 - UNGRollAbility: ServerInitiated/ServerOnlyTermination. Сервер валидирует и начинает действие, клиент не задаёт ему asset/rate. Montage берётся из authored GetRollAnimation, проверяется skeleton; PlayRate берётся только из ability defaults, проверяется конечность и диапазон 0.1..3. Воспроизведение и root motion проходят через AbilityTask_PlayMontageAndWait/ASC. Клиентский экземпляр также выполняет task: обычная ASC montage replication пропускает owning client. Старый Replicated_PlayMontage у проектного Character передаёт только намерение Input.Roll, игнорируя asset/rate.

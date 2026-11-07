@@ -25,10 +25,7 @@ void UALSCharacterMovementComponent::OnMovementUpdated(float DeltaTime, const FV
 	// Set Movement Settings
 	if (bRequestMovementSettingsChange)
 	{
-		const float UpdateMaxWalkSpeed = CurrentMovementSettings.GetSpeedForGait(AllowedGait);
-		MaxWalkSpeed = UpdateMaxWalkSpeed;
-		MaxWalkSpeedCrouched = UpdateMaxWalkSpeed;
-
+		ApplyAllowedGaitSpeed();
 		bRequestMovementSettingsChange = false;
 	}
 }
@@ -70,7 +67,8 @@ void UALSCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags) // C
 {
 	Super::UpdateFromCompressedFlags(Flags);
 
-	bRequestMovementSettingsChange = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
+	// A client move without the flag must not erase a pending authoritative settings change.
+	bRequestMovementSettingsChange = bRequestMovementSettingsChange || (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
 }
 
 class FNetworkPredictionData_Client* UALSCharacterMovementComponent::GetPredictionData_Client() const
@@ -131,8 +129,17 @@ void UALSCharacterMovementComponent::FSavedMove_My::PrepMoveFor(ACharacter* Char
 	UALSCharacterMovementComponent* CharacterMovement = Cast<UALSCharacterMovementComponent>(Character->GetCharacterMovement());
 	if (CharacterMovement)
 	{
-		CharacterMovement->AllowedGait = SavedAllowedGait;
+		// Replay must restore the speed together with gait, not only the enum.
+		CharacterMovement->SetAllowedGait(SavedAllowedGait);
 	}
+}
+
+bool UALSCharacterMovementComponent::FSavedMove_My::CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* Character, float MaxDelta) const
+{
+	const auto* OtherMove = static_cast<const FSavedMove_My*>(NewMove.Get());
+	return OtherMove && SavedAllowedGait == OtherMove->SavedAllowedGait
+		&& bSavedRequestMovementSettingsChange == OtherMove->bSavedRequestMovementSettingsChange
+		&& Super::CanCombineWith(NewMove, Character, MaxDelta);
 }
 
 UALSCharacterMovementComponent::FNetworkPredictionData_Client_My::FNetworkPredictionData_Client_My(
@@ -175,6 +182,7 @@ void UALSCharacterMovementComponent::SetMovementSettings(FALSMovementSettings Ne
 	// Set the current movement settings from the owner
 	CurrentMovementSettings = NewMovementSettings;
 	bRequestMovementSettingsChange = true;
+	ApplyAllowedGaitSpeed();
 }
 
 void UALSCharacterMovementComponent::SetAllowedGait(EALSGait NewAllowedGait)
@@ -186,5 +194,14 @@ void UALSCharacterMovementComponent::SetAllowedGait(EALSGait NewAllowedGait)
 	{
 		AllowedGait = NewAllowedGait;
 		bRequestMovementSettingsChange = true;
+		// Apply before the next prediction/server simulation, not after that move has used the old cap.
+		ApplyAllowedGaitSpeed();
 	}
+}
+
+void UALSCharacterMovementComponent::ApplyAllowedGaitSpeed()
+{
+	const float GaitSpeed = CurrentMovementSettings.GetSpeedForGait(AllowedGait);
+	MaxWalkSpeed = GaitSpeed;
+	MaxWalkSpeedCrouched = GaitSpeed;
 }
