@@ -13,7 +13,7 @@ class GAMEPLAYFOUNDATION_API UNGAbilitySystemComponent : public UAbilitySystemCo
 {
 	GENERATED_BODY()
 public:
-	// Call once on first Triggered and on Completed/Canceled, not every Triggered tick.
+	// Shared player/AI input: local control or authority. Press once, release on completion/cancellation.
 	UFUNCTION(BlueprintCallable, Category="GAS|Input") virtual void AbilityInputTagPressed(FGameplayTag InputTag);
 	UFUNCTION(BlueprintCallable, Category="GAS|Input") void AbilityInputTagReleased(FGameplayTag InputTag);
 	void ClearAbilityInput();
