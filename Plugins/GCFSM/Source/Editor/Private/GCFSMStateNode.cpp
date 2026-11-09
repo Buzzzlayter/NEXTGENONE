@@ -45,6 +45,8 @@ UGCFSMStateNode::UGCFSMStateNode(const FObjectInitializer& objectInitializer)
 	: Super(objectInitializer)
 {
 	transitionEvents.Add("Event");
+	// A removed class-owned exec output must retain its wires as an orphan, not silently discard them.
+	OrphanedPinSaveMode = ESaveOrphanPinMode::SaveAll;
 
 #if WITH_EDITORONLY_DATA
 	bCanRenameNode = true;
@@ -218,7 +220,15 @@ void UGCFSMStateNode::PostEditChangeProperty(FPropertyChangedEvent& propertyChan
 			if (propertyChangedEvent.ChangeType == EPropertyChangeType::ValueSet)
 			{
 				// An event has been renamed, save the index so that we can properly match pins during reconstruction
-				indexOfEventPinBeingRenamed = TransitionsPinStartIndex + propertyChangedEvent.GetArrayIndex("transitionEvents");
+				const int eventIndex = propertyChangedEvent.GetArrayIndex("transitionEvents");
+				const int pinIndex = TransitionsPinStartIndex + eventIndex;
+				if (transitionEvents.IsValidIndex(eventIndex) && Pins.IsValidIndex(pinIndex)
+					&& classTransitionEvents.Contains(Pins[pinIndex]->PinName))
+				{
+					// A declared event is a class contract, not an editable alias for a different runtime event.
+					transitionEvents[eventIndex] = Pins[pinIndex]->PinName;
+				}
+				else if (eventIndex != INDEX_NONE) indexOfEventPinBeingRenamed = pinIndex;
 			}
 		}
 
@@ -934,7 +944,7 @@ void UGCFSMStateNode::GetContextMenuActions(const FGraphNodeContextMenuBuilder& 
 {
 	Super::GetContextMenuActions(Context);
 
-	if (Context.Pin && Context.Pin->Direction == EGPD_Output && Context.Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec && !IsTickPin(Context.Pin) && !IsTimeOutEventPin(Context.Pin))
+	if (Context.Pin && !Context.Pin->bOrphanedPin && Context.Pin->Direction == EGPD_Output && Context.Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec && !IsTickPin(Context.Pin) && !IsTimeOutEventPin(Context.Pin))
 	{
 		int index = Pins.IndexOfByKey(Context.Pin) - TransitionsPinStartIndex;
 		check(transitionEvents.IsValidIndex(index));
@@ -1030,7 +1040,7 @@ void UGCFSMStateNode::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeConte
 
 	auto pin = Context->Pin;
 	auto pThis = const_cast<UGCFSMStateNode*>(this);
-	if (pin && pin->Direction == EGPD_Output && pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec && !IsTickPin(pin) && !IsTimeOutEventPin(pin))
+	if (pin && !pin->bOrphanedPin && pin->Direction == EGPD_Output && pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec && !IsTickPin(pin) && !IsTimeOutEventPin(pin))
 	{
 		int index = Pins.IndexOfByKey(pin) - TransitionsPinStartIndex;
 		check(transitionEvents.IsValidIndex(index));
@@ -1149,9 +1159,36 @@ void UGCFSMStateNode::RemoveTransitionEvent(int eventIndex)
 
 void UGCFSMStateNode::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& oldPins)
 {
+	UClass* implementationClass = IsRegularState() && oldPins[ImplementationPinIndex]->LinkedTo.Num() == 0
+		? Cast<UClass>(oldPins[ImplementationPinIndex]->DefaultObject) : nullptr;
+	SyncClassTransitionEvents(implementationClass, oldPins);
 	AllocateDefaultPins();
-	CreatePinsForClass(oldPins[ImplementationPinIndex]->LinkedTo.Num() == 0 ? Cast<UClass>(oldPins[ImplementationPinIndex]->DefaultObject) : nullptr);
+	CreatePinsForClass(implementationClass);
 	RestoreSplitPins(oldPins);
+}
+
+void UGCFSMStateNode::SyncClassTransitionEvents(UClass* implementationClass, const TArray<UEdGraphPin*>& oldPins)
+{
+	TArray<FName> declaredEvents;
+	if (implementationClass && implementationClass->IsChildOf(UGCFSMState::StaticClass()))
+	{
+		for (const FName eventName : implementationClass->GetDefaultObject<UGCFSMState>()->GetDeclaredTransitionEvents())
+			if (!eventName.IsNone()) declaredEvents.AddUnique(eventName);
+	}
+	for (const FName previousEvent : classTransitionEvents)
+		if (!declaredEvents.Contains(previousEvent)) transitionEvents.Remove(previousEvent);
+
+	// Replace only the unconnected placeholder on a fresh node. Real manual events are retained.
+	if (!declaredEvents.IsEmpty() && transitionEvents.Num() == 1 && transitionEvents[0] == FName(TEXT("Event")))
+	{
+		const bool linkedPlaceholder = oldPins.ContainsByPredicate([](const UEdGraphPin* pin)
+		{
+			return pin && pin->Direction == EGPD_Output && pin->PinName == FName(TEXT("Event")) && !pin->LinkedTo.IsEmpty();
+		});
+		if (!linkedPlaceholder) transitionEvents.Reset();
+	}
+	for (const FName eventName : declaredEvents) transitionEvents.AddUnique(eventName);
+	classTransitionEvents = MoveTemp(declaredEvents);
 }
 
 void UGCFSMStateNode::CreatePinsForClass(UClass* implementationClass, TArray<UEdGraphPin*>* classPins)
