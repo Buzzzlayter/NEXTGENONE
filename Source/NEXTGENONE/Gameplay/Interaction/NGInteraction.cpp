@@ -1,7 +1,7 @@
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Player/NGPlayerContext.h"
-#include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
+#include "AbilitySystemComponent.h"
 #include "Gameplay/Interaction/NGItemPickup.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Engine/OverlapResult.h"
@@ -22,7 +22,7 @@ namespace
         FGameplayTagContainer Tags;
         Tags.AddTag(TAG_NGInteractionBlocked); Tags.AddTag(TAG_NGDead);
         Tags.AddTag(TAG_NGDashActive); Tags.AddTag(TAG_NGMantleActive);
-        Tags.AddTag(TAG_NGPunchActive); Tags.AddTag(TAG_NGReloadActive);
+        Tags.AddTag(TAG_NGReloadActive);
 		Tags.AddTag(TAG_NGRollActive); Tags.AddTag(TAG_NGRagdollActive);
         return Tags;
     }
@@ -227,8 +227,8 @@ void UNGInteractionComponent::ServerRequestInteract_Implementation(APawn* Expect
 {
 	auto* Pawn=Cast<APawn>(GetOwner());
 	if (Pawn!=ExpectedPawn || !IsCurrentInteractor()) return;
-	auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(NGPlayerContext::GetCurrentASC(Pawn, true));
-	if (!ASC || !ASC->TryCommitInteraction(Pawn, .15f)) return;
+	auto* ASC = NGPlayerContext::GetCurrentASC(Pawn, true);
+	if (!ASC) return;
 	FGameplayEventData Event; Event.EventTag=TAG_NGInteractEvent; Event.Instigator=Pawn; Event.Target=ProposedTarget;
 	ASC->HandleGameplayEvent(TAG_NGInteractEvent,&Event);
 }

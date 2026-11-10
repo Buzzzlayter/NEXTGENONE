@@ -3,12 +3,24 @@
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayTags/NGGameplayTags.h"
+#include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
+
+UNGInteractionCooldownEffect::UNGInteractionCooldownEffect()
+{
+	DurationPolicy = EGameplayEffectDurationType::HasDuration;
+	DurationMagnitude = FScalableFloat(.15f);
+	FInheritedTagContainer Tags; Tags.AddTag(TAG_NGInteractionCooldown);
+	auto* TargetTags = CreateDefaultSubobject<UTargetTagsGameplayEffectComponent>(TEXT("InteractionCooldownTags"));
+	GEComponents.Add(TargetTags);
+	TargetTags->SetAndApplyTargetTagChanges(Tags);
+}
 
 UNGInteractionAbility::UNGInteractionAbility()
 {
 	FGameplayTagContainer InteractionAssetTags; InteractionAssetTags.AddTag(TAG_NGInteractionAbility); SetAssetTags(InteractionAssetTags);
 	InstancingPolicy=EGameplayAbilityInstancingPolicy::InstancedPerActor; NetExecutionPolicy=EGameplayAbilityNetExecutionPolicy::ServerOnly;
 	NetSecurityPolicy=EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
+	CooldownGameplayEffectClass = UNGInteractionCooldownEffect::StaticClass();
 	FAbilityTriggerData Trigger; Trigger.TriggerTag=TAG_NGInteractEvent; Trigger.TriggerSource=EGameplayAbilityTriggerSource::GameplayEvent; AbilityTriggers.Add(Trigger);
 }
 bool UNGInteractionAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

@@ -8,6 +8,7 @@
 
 class ANextgenonePlayerState;
 class UNGCombatComponent;
+class UNGEquipmentComponent;
 class UNGInteractionComponent;
 class UNGAimComponent;
 class UNGHitReactionComponent;
@@ -26,6 +27,7 @@ class NEXTGENONE_API ANextgenoneCharacter : public AALSCharacter, public IAbilit
 public:
 	ANextgenoneCharacter(const FObjectInitializer& Init);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGCombatComponent> Combat;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGEquipmentComponent> Equipment;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGInteractionComponent> Interaction;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGAimComponent> Aim;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gameplay") TObjectPtr<UNGHitReactionComponent> HitReaction;
@@ -67,4 +69,6 @@ private:
 	void HealthChanged(const FOnAttributeChangeData& Data);
 	void StateChanged(FGameplayTag Previous, FGameplayTag Current);
 	void StateResourcesFailed();
+	void EquipmentResourcesReady(AActor* Avatar);
+	void RefreshEquipment();
 };

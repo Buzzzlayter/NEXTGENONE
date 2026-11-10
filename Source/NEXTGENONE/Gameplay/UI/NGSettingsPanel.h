@@ -11,7 +11,6 @@ class UTextBlock;
 class UNGConnectionPanel;
 class UNGDebugSettingsPanel;
 
-// Local input preferences, separate from machine-wide graphics settings (as in Lyra).
 UCLASS(Config=GameUserSettings)
 class NEXTGENONE_API UNGInputPreferences : public UObject
 {

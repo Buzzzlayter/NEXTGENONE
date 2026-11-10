@@ -9,8 +9,6 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputMantle, "Input.Mantle");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPickup, "Input.Interaction.PickupWeapon");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGDashActive, "State.Action.Dash");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGMantleActive, "State.Action.Mantle");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPunch, "Input.Combat.Punch");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGPunchActive, "State.Action.Punch");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGMovementAbility, "Ability.Type.Movement");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadActive, "State.Action.Reload");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGMagazineAmmo, "Weapon.MagazineAmmo");
@@ -26,16 +24,17 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGRagdollActive, "State.Ragdoll");
 UE_DEFINE_GAMEPLAY_TAG(TAG_ALSActionCooldown, "Cooldown.Movement.ALSAction");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGRagdollAbility, "Ability.Type.Ragdoll");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGDashCooldown, "Cooldown.Movement.Dash");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGFireCooldown, "Cooldown.Combat.Fire");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGDashCue, "GameplayCue.Movement.Dash");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGActivatingItem, "State.ActivatingItem");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemActivateAbility, "Ability.Type.ItemActivate");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGHealingAmount, "Data.Healing");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGPunchCooldown, "Cooldown.Combat.Punch");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGDeathRagdollCue, "GameplayCue.Character.Death.Ragdoll");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGFireInput, "Input.Combat.Fire");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadInput, "Input.Combat.Reload");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionBlocked, "State.Interaction.Blocked");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionAbility, "Ability.Type.Interaction");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionCooldown, "Cooldown.Interaction");
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_InputMove, "Input.Move");
 UE_DEFINE_GAMEPLAY_TAG(TAG_InputLookMouse, "Input.Look.Mouse");
@@ -57,3 +56,17 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_InputActionSlot4, "Input.ActionBar.Slot4");
 UE_DEFINE_GAMEPLAY_TAG(TAG_InputActionSlot5, "Input.ActionBar.Slot5");
 UE_DEFINE_GAMEPLAY_TAG(TAG_InputReload, "Input.Equipment.Reload");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGPrimaryInputAbility, "Ability.Type.Weapon.PrimaryInput");
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipment, "Inventory.Slot.Equipment");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipmentBack, "Inventory.Slot.Equipment.Back");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipmentFeet, "Inventory.Slot.Equipment.Feet");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipmentTorso, "Inventory.Slot.Equipment.Torso");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGEquipmentHands, "Equipment.Slot.Hands");
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputJetpack, "Input.Jetpack");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGJetpackActive, "State.Action.Jetpack");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGJetpackEquipped, "Equipment.Jetpack");
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentBack, "Item.Equipment.Back");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentFeet, "Item.Equipment.Feet");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentTorso, "Item.Equipment.Torso");

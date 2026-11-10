@@ -141,8 +141,9 @@ UNGMantleAbility::UNGMantleAbility()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
 	ActivationBlockedTags.AddTag(TAG_NGDead); ActivationBlockedTags.AddTag(TAG_NGDashActive);
-	ActivationBlockedTags.AddTag(TAG_NGMantleActive); ActivationBlockedTags.AddTag(TAG_NGPunchActive);
+	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
 	ActivationOwnedTags.AddTag(TAG_NGMantleActive);
+	ActivationBlockedTags.AddTag(TAG_NGJetpackActive);
 	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	FGameplayTagContainer Tags; Tags.AddTag(TAG_NGMovementAbility); SetAssetTags(Tags);
 }

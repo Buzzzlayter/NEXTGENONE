@@ -3,9 +3,9 @@
 #include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
-#include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
+#include "Gameplay/Equipment/NGEquipmentDefinition.h"
 #include "Inventory/NGInventoryItemInstance.h"
-#include "Inventory/NGInventoryFragment_ItemActions.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameplayEffect.h"
@@ -39,7 +39,7 @@ bool UNGItemActivateAbility::HasCurrentItem() const
     auto* Inventory = GetInventory();
     const auto* Pawn = CurrentActorInfo ? Cast<APawn>(CurrentActorInfo->AvatarActor.Get()) : nullptr;
     return Inventory && IsValid(Item) && Inventory->Contains(Item) && Inventory->GetCount(Item) > 0
-        && NGPlayerContext::GetCurrentASC(Pawn, true) == CurrentActorInfo->AbilitySystemComponent.Get();
+        && NGPlayerContext::GetCurrentASC(Pawn, true);
 }
 bool UNGItemActivateAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
     const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const
@@ -50,7 +50,7 @@ bool UNGItemActivateAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handl
     auto* Inventory = Owner ? Owner->FindComponentByClass<UNGPlayerInventoryManagerComponent>() : nullptr;
     return IsValid(Item) && Inventory && Inventory->Contains(Item) && Inventory->GetCount(Item) > 0
         && Info->AbilitySystemComponent->GetNumericAttribute(UNGHealthSet::GetHealthAttribute()) > 0.f
-        && NGPlayerContext::GetCurrentASC(Cast<APawn>(Info->AvatarActor.Get()), true) == Info->AbilitySystemComponent.Get();
+        && NGPlayerContext::GetCurrentASC(Cast<APawn>(Info->AvatarActor.Get()), true);
 }
 
 UNGActivatingItemEffect::UNGActivatingItemEffect()
@@ -61,14 +61,42 @@ UNGActivatingItemEffect::UNGActivatingItemEffect()
     GEComponents.Add(TargetTags); TargetTags->SetAndApplyTargetTagChanges(Tags);
 }
 
+UNGEquipWeaponItemAbility::UNGEquipWeaponItemAbility()
+{
+    // Equipment replacement owns its own cancellation. A Back action must not interrupt Hands/ADS,
+    // and equipping a weapon must not cancel another installation's active thrust.
+    ActivationOwnedTags.RemoveTag(TAG_NGActivatingItem);
+}
+
 void UNGEquipWeaponItemAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
     FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
 {
-    auto* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
-    auto* Combat = Avatar ? Avatar->FindComponentByClass<UNGCombatComponent>() : nullptr;
-    const bool bEquipped = HasCurrentItem() && Combat && CommitAbility(Handle, Info, Activation)
-        && Combat->EquipItemFromAbility(GetAssociatedItem());
-    EndAbility(Handle, Info, Activation, true, !bEquipped);
+	auto* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
+	auto* Equipment = Avatar ? Avatar->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
+	if (!HasCurrentItem() || !Equipment || !CommitAbility(Handle, Info, Activation))
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	if (!IsActive()) return;
+	if (!HasCurrentItem() || Info->AvatarActor.Get() != Avatar)
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	auto* Item = GetAssociatedItem();
+	auto* Inventory = GetInventory();
+	const auto* Definition = UNGEquipmentComponent::GetDefinition(Item);
+	bool bEquipped = false;
+	if (Definition && Definition->SlotTag == TAG_NGEquipmentHands) bEquipped = Equipment->EquipHands(Item);
+	else if (Definition)
+	{
+		const int32 CurrentSlot = Inventory->GetSlotIndex(Item);
+		int32 Destination = INDEX_NONE;
+		if (Inventory->GetSlotTag(CurrentSlot) == Definition->SlotTag)
+		{
+			for (int32 I = 0; I < Inventory->GetSlotCount(); ++I)
+				if (!Inventory->GetSlotTag(I).MatchesTag(TAG_NGSlotEquipment) && !Inventory->GetItemAtSlot(I)
+					&& Inventory->CanPlaceItemAtSlot(Item->GetItemDef(), I)) { Destination = I; break; }
+		}
+		else Destination = Inventory->FindSlotByTag(Definition->SlotTag, 0);
+		bEquipped = Destination != INDEX_NONE && Inventory->MoveEquipmentItemOnServer(Item, Destination);
+	}
+	if (IsActive()) EndAbility(Handle, Info, Activation, true, !bEquipped);
 }
 UNGHealingEffect::UNGHealingEffect()
 {
@@ -82,7 +110,7 @@ UNGHealingEffect::UNGHealingEffect()
 UNGActivateMedkitAbility::UNGActivateMedkitAbility()
 {
     ActivationBlockedTags.AddTag(TAG_NGDashActive); ActivationBlockedTags.AddTag(TAG_NGMantleActive);
-    ActivationBlockedTags.AddTag(TAG_NGPunchActive); ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+    ActivationBlockedTags.AddTag(TAG_NGReloadActive);
     ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 }
 bool UNGActivateMedkitAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

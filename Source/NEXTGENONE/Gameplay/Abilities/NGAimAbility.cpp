@@ -4,7 +4,6 @@
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
-#include "GameFramework/Pawn.h"
 
 
 UNGAimingEffect::UNGAimingEffect()
@@ -24,40 +23,34 @@ UNGAimAbility::UNGAimAbility()
 	ActivationBlockedTags.AddTag(TAG_NGActivatingItem);
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
-	ActivationBlockedTags.AddTag(TAG_NGPunchActive);
 	ActivationBlockedTags.AddTag(TAG_NGReloadActive);
 	ActivationBlockedTags.AddTag(TAG_NGRollActive);
 	ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 }
 
-bool UNGAimAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
-	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const
-{
-	if (!Info || !Super::CanActivateAbility(Handle, Info, SourceTags, TargetTags, RelevantTags)) return false;
-	const auto* Combat = Cast<UNGCombatComponent>(GetSourceObject(Handle, Info));
-	const auto* Pawn = Cast<APawn>(Info->AvatarActor.Get());
-	const auto* ASC = Info->AbilitySystemComponent.Get();
-	return Combat && Pawn && Pawn->GetController() && Combat->GetOwner() == Pawn
-		&& ASC && ASC->GetAvatarActor() == Pawn && Combat->GetEquipment().bEquipped;
-}
-
 void UNGAimAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 	FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
 {
-	const auto* Combat = Info ? Cast<UNGCombatComponent>(GetSourceObject(Handle, Info)) : nullptr;
-	if (!Info || !Combat || Combat->GetOwner() != Info->AvatarActor.Get() || !Combat->GetEquipment().bEquipped
-		|| !CommitAbility(Handle, Info, Activation))
+	FNGWeaponAbilityContext Context;
+	if (!ResolveWeaponContext(Handle, Info, Context) || !CommitAbility(Handle, Info, Activation))
 	{
 		EndAbility(Handle, Info, Activation, true, true);
 		return;
 	}
+	if (!IsActive()) return;
+	if (!ResolveWeaponContext(Handle, Info, Context))
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	AimingASC = Info->AbilitySystemComponent;
-	AimingEffect = ApplyGameplayEffectToOwner(Handle, Info, Activation, GetDefault<UNGAimingEffect>(), GetAbilityLevel(Handle, Info));
-	if (!AimingEffect.IsValid())
+	const auto ApplyingASC = AimingASC;
+	const auto Applied = ApplyGameplayEffectToOwner(Handle, Info, Activation, GetDefault<UNGAimingEffect>(), GetAbilityLevel(Handle, Info));
+	if (!IsActive())
 	{
-		EndAbility(Handle, Info, Activation, true, true);
+		if (auto* ASC = ApplyingASC.Get(); ASC && Applied.IsValid()) ASC->RemoveActiveGameplayEffect(Applied);
 		return;
 	}
+	AimingEffect = Applied;
+	if (!AimingEffect.IsValid() || !ResolveWeaponContext(Handle, Info, Context))
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	BlockingTagHandle = AimingASC->RegisterGenericGameplayTagEvent().AddUObject(this, &ThisClass::BlockingTagChanged);
 	auto* Task = UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
 	Task->OnRelease.AddDynamic(this, &ThisClass::OnAimInputReleased);

@@ -8,8 +8,8 @@ Character FSM/resources, PlayerState lifecycle, UI inventory и профильн
 Авторинг и результаты прежних сессий из Docs не выдаются за проверки этого исследования.
 
 Уточнение от 2026-11-10: база статического чтения — `101fc13`, джетпак —
-`origin/feature/jetpack` (`1904161`). Пользователь исключил bohdon; ориентир для оценки
-и адаптации Equipment — Lyra. Цель теперь включает одновременно оружие и джетпак,
+`origin/feature/jetpack` (`1904161`). Пользователь исключил bohdon; контракты
+Equipment определяются требованиями проекта. Цель теперь включает одновременно оружие и джетпак,
 а также расширение GAS через способности, теги и эффекты. Ниже обновлены целевые
 контракты; runtime-реализация этих изменений ещё не выполнена.
 Дополнительное требование пользователя: Back/Feet/Torso — типизированные инвентарные ячейки.
@@ -23,7 +23,7 @@ Character FSM/resources, PlayerState lifecycle, UI inventory и профильн
 затем подключить джетпак через тот же lifecycle. Броню и двуручность добавлять под конкретный сценарий.
 Упрощения Inventory из раздела 1 — отдельная работа, не обязательная предпосылка Equipment.
 
-Это не предложение импортировать Lyra EquipmentManager целиком, менять ALS или строить общий framework.
+Это не предложение импортировать внешний EquipmentManager целиком, менять ALS или строить общий framework.
 Конкретная необходимость небольшого Equipment-компонента — освободить будущие неоружейные предметы
 от зависимости на Combat и дать один lifecycle для их grants/effects/presentation.
 Общий механизм сначала оставить в NEXTGENONE; переносить в GameplayFoundation после появления
@@ -69,10 +69,10 @@ Character FSM/resources, PlayerState lifecycle, UI inventory и профильн
 - Source/NEXTGENONE/Gameplay/Abilities/NGItemActivateAbility.cpp
 - Source/NEXTGENONE/Gameplay/Character/NextgenoneCharacter.cpp
 
-Combat сейчас одновременно хранит CurrentItem/Equipment, выдаёт WeaponHandles, наблюдает Inventory,
+В исходной реализации Combat одновременно хранит CurrentItem/Equipment, выдаёт WeaponHandles, наблюдает Inventory,
 обрабатывает удержание основной атаки, исполняет выстрел/reload и передаёт cosmetics.
-GetAssociatedEquipment в базовой equipment ability возвращает именно Combat; GetAssociatedItem
-берёт его текущий предмет. Значит, название общее, но контракт оружейный и динамический.
+Базовая equipment ability была привязана к Combat и его текущему предмету.
+Значит, название общее, но исходный контракт оружейный и динамический.
 Добавление шлема через этот контракт заставит либо расширять Combat, либо дублировать управление grants.
 
 Equipment.Definition содержит WeaponDefinition; общего equipment definition пока нет.
@@ -209,8 +209,7 @@ SelectedItem не даёт права Fire/Reload; permission даёт толь�
 ### SourceObject и отложенные действия
 
 Equipment abilities должны получать устойчивую привязку к конкретной record/предмету и generation,
-а не разрешать «текущее оружие Combat» после ожидания. Целевой SourceObject — конкретный EquipmentInstance,
-как в Lyra. GetAssociatedItem разрешает исходный предмет через этот instance и проверяет актуальность записи.
+а не разрешать «текущее оружие Combat» после ожидания. Целевой SourceObject — конкретный EquipmentInstance. GetAssociatedItem разрешает исходный предмет через этот instance и проверяет актуальность записи.
 Отдельный item-activation spec уже правильно имеет SourceObject=item — его контракт сохраняется.
 
 Reload, ADS и auto-fire отменяются при выходе соответствующей record; повторная экипировка того же
@@ -219,9 +218,9 @@ item не делает старый callback валидным. Снаряд со
 
 ### Контракт расширения GAS
 
-Definition описывает наборы grants/effects данными, по образцу Lyra Ability Sets.
+Definition описывает наборы grants/effects данными.
 Использовать существующие FNGAbilityGrant/FNGGrantedHandles и общий путь выдачи/снятия;
-не импортировать Lyra ASC и не дублировать FSM lifecycle. Выделение переиспользуемого
+не импортировать сторонний ASC и не дублировать FSM lifecycle. Выделение переиспользуемого
 AbilitySet asset допустимо для этих наборов; перевод Character FSM на него — отдельная задача.
 
 | Возможность | Контракт |
@@ -296,7 +295,7 @@ Cleanup идемпотентен; чужие state grants не снимаютс�
    в другой файл не упрощает систему. Отпускание/смерть/UI/смена предмета должны остановить удержание.
 4. Reload остаётся способностью времени жизни; magazine в item StatStacks, reserve в Inventory.
    ConsumeItemsByDefinition + credit callback уже общий путь — не создавать второй AmmoInventory.
-5. ApplyDamageToPawn используется также кулаком, но расположен как static Combat API.
+5. ApplyDamageToPawn расположен как static Combat API.
    При появлении armor damage processing вынести узкую операцию применения урона рядом с Health/GE,
    сохранив проверку intended Pawn. Не превращать её в универсальную damage-service подсистему заранее.
 6. ValidateDefinition оставить в Editor и server boundary; кэшировать resolved refs можно в activation context.
@@ -388,29 +387,3 @@ Feet/Torso добавляются конфигурацией; сапоги и ф
 Перед реализацией остаётся уточнить очистку/сохранение equipment-ячеек после смерти и правила respawn.
 Для одежды/устройств Storage — хранение, а активация перемещает в типизированную equipment-ячейку.
 Для оружия сохраняется существующее требование Action; отдельные Hands/Back входят в целевую модель.
-
-## 9. Оценка Lyra как источника решений — 2026-11-10
-
-Первоисточники Epic: [Inventory and Equipment](https://dev.epicgames.com/documentation/unreal-engine/lyra-inventory-and-equipment-in-unreal-engine),
-[Abilities in Lyra](https://dev.epicgames.com/documentation/unreal-engine/abilities-in-lyra-in-unreal-engine).
-Для статического чтения использовано публичное зеркало [johnlogostini/Lyra](https://github.com/johnlogostini/Lyra/tree/7e87d760560a05cd61069f725471d948f4ddb190/Source/LyraGame),
-commit 7e87d760 (2023-10-12). Это старый срез, не подтверждение API/поведения Lyra для UE 5.8.4.
-Перед переносом C++ сверить нужные API с версией движка проекта.
-
-Подходят: EquipmentDefinition/Instance, SourceObject конкретной установки,
-накапливаемые GrantedHandles, серверная выдача Ability Sets и описание attach actors/socket/transform.
-Список менеджера допускает несколько instances; ограничение одного выбранного оружия в прочитанном
-срезе задаётся QuickBar. Для проекта нужны собственные независимые места Hands/Back.
-
-Адаптировать, а не копировать без изменений:
-
-- В прочитанном QuickBar исходный item задаётся через SetInstigator после EquipItem;
-  manager уже выдал abilities, а Lyra OnGiveAbility может запустить OnSpawn.
-  Наш источник item/Avatar должен быть готов до любой автоматической активации.
-- Lyra AbilitySet в этом срезе логирует невалидные entries и продолжает выдачу;
-  наш preflight и политика обязательных ресурсов не должны публиковать частичный успех.
-- Теги ношения, правила stacking, конфликты мест/ввода, private item identity,
-  ALS presentation и смена жизни требуют проектных контрактов из разделов 3–4.
-
-bohdon исключён по решению пользователя. Оценка Lyra основана на документации и статическом чтении;
-сборка, импорт, authoring assets и игровые проверки не выполнялись.

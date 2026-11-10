@@ -35,12 +35,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Healing", meta=(ClampMin="0.1")) float ActivationDuration = 3.f;
 };
 
-/** Weapon-specific executor; generic inventory/UI never calls Combat to equip an item. */
+/** Shared equipment activation. Class name retained for serialized weapon Item Actions. */
 UCLASS(Blueprintable)
 class NEXTGENONE_API UNGEquipWeaponItemAbility : public UNGItemActivateAbility
 {
 	GENERATED_BODY()
 public:
+	UNGEquipWeaponItemAbility();
 	virtual void ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event) override;
 };

@@ -14,7 +14,7 @@
 | ViewMode | Только FirstPerson/ThirdPerson; клиентский bForce игнорируется |
 | Движение/взгляд | Существующий CharacterMovement/Controller; полный аудит движковых RPC этим пакетом не выполнялся |
 
-Четыре оставшихся ALS state RPC используют CanAcceptClientLocomotion и отдельные лимиты по виду команды (ClientStateCommandInterval, default 0.03 s). В проектном Character проверяются привязанный ASC/Avatar, положительное здоровье, отсутствие Dead/Dash/Mantle/Punch/Roll/Ragdoll. Параметр интервала должен быть конечным и не меньше 0.01 s. Последнее валидное намерение каждого из четырёх видов сохраняется в фиксированной очереди и применяется после снятия временного state gate и истечения интервала. Более новое намерение заменяет старое; смена Controller сбрасывает очередь. Невалидные enum по-прежнему отклоняются до постановки в очередь. Это ограничение применения состояния, а не защита от любого сетевого flood.
+Четыре оставшихся ALS state RPC используют CanAcceptClientLocomotion и отдельные лимиты по виду команды (ClientStateCommandInterval, default 0.03 s). В проектном Character проверяются привязанный ASC/Avatar, положительное здоровье, отсутствие Dead/Dash/Mantle/Roll/Ragdoll. Параметр интервала должен быть конечным и не меньше 0.01 s. Последнее валидное намерение каждого из четырёх видов сохраняется в фиксированной очереди и применяется после снятия временного state gate и истечения интервала. Более новое намерение заменяет старое; смена Controller сбрасывает очередь. Невалидные enum по-прежнему отклоняются до постановки в очередь. Это ограничение применения состояния, а не защита от любого сетевого flood.
 
 ## Удалённые клиентские RPC
 
@@ -38,7 +38,7 @@ AllowedGait вычисляется в обычном серверном ALS Upda
 - UNGRagdollAbility: ServerInitiated/ServerOnlyTermination. На сервере применяет Infinite UNGRagdollStateEffect с State.Ragdoll. Character подписывается на этот тег и использует исходные локальные RagdollStart/End ALS. Клиентский экземпляр GA нужен для пересылки generic input events; сам эффект клиент не применяет. Снятие эффекта при отмене/удалении способности завершает живой ragdoll. На смерти get-up не вызывается; существующая FSM → GA_Death → cue сохраняется.
 - Обе способности используют серверный UNGALSActionCooldownEffect, default 0.3 s. Он хранится на постоянном ASC, не в локальном таймере ability, поэтому окончание/снятие grant не обнуляет действующий cooldown.
 - Живой ragdoll не помечен Ability.Type.Movement: локальная блокировка gameplay-ввода UI не должна завершать его серверный lifetime. Он имеет Ability.Type.Ragdoll; Jump на сервере может завершить эту способность для get-up после той же проверки cooldown, что и повторный Ragdoll input (общая CanRequestGetUp). Смерть/смена Avatar/снятие Alive grants отменяют её обычным GAS lifecycle.
-- Aim/Fire/Reload/Interaction/Mantle/Dash/Punch учитывают новые несовместимые состояния. У BP с ручным override InterruptingTags следует добавить State.Roll и State.Ragdoll.
+- Aim/Fire/Reload/Interaction/Mantle/Dash учитывают новые несовместимые состояния. У BP с ручным override InterruptingTags следует добавить State.Roll и State.Ragdoll.
 
 Тело живого ragdoll следует серверному TargetRagdollLocation из серверной физики; клиентские координаты удалены. Позиции/rotation проверяются на нечисловые/бесконечные значения до trace и SetActorLocation. Поза и кости трупа по-прежнему рассчитываются локально; dead Tick не следует этому target. Переход из живого ragdoll в смерть также выполняет отделение меша и передачу смертельного импульса.
 

@@ -1,6 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from local LyraStarterGame (UE 5.4) for NEXTGENONE / UE 5.8.
-
 #pragma once
 
 #include "Inventory/NGGameplayTagStack.h"
@@ -13,6 +10,7 @@ class UNGInventoryItemDefinition;
 class UNGInventoryItemFragment;
 struct FFrame;
 struct FGameplayTag;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNGItemStatsChanged);
 
 USTRUCT(BlueprintType)

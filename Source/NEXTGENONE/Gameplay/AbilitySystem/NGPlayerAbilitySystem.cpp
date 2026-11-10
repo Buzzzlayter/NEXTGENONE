@@ -3,15 +3,6 @@
 
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "GameFramework/Actor.h"
-#include "Engine/World.h"
-#include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
-
-bool UNGPlayerAbilitySystemComponent::AreAbilityTagsBlocked(const FGameplayTagContainer& InAbilityTags) const
-{
-	const auto* Avatar = GetAvatarActor();
-	const auto* Machine = Avatar ? Avatar->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
-	return (Machine && Machine->HasResourceFailure()) || Super::AreAbilityTagsBlocked(InAbilityTags);
-}
 
 void UNGPlayerAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor, AActor* InAvatarActor)
 {
@@ -22,35 +13,6 @@ void UNGPlayerAbilitySystemComponent::InitAbilityActorInfo(AActor* InOwnerActor,
 		++AvatarGeneration;
 	}
 	Super::InitAbilityActorInfo(InOwnerActor, InAvatarActor);
-}
-
-bool UNGPlayerAbilitySystemComponent::IsCurrentServerAvatar(const AActor* ExpectedAvatar) const
-{
-	const auto* Machine = IsValid(ExpectedAvatar) ? ExpectedAvatar->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
-	if (Machine && Machine->HasResourceFailure()) return false;
-	return IsValid(ExpectedAvatar) && GetOwnerActor() && GetOwnerActor()->HasAuthority()
-		&& GetAvatarActor() == ExpectedAvatar && GetWorld();
-}
-
-bool UNGPlayerAbilitySystemComponent::CanFireNow(const AActor* ExpectedAvatar) const
-{
-	return IsCurrentServerAvatar(ExpectedAvatar) && GetWorld()->GetTimeSeconds() >= NextFireTime;
-}
-
-bool UNGPlayerAbilitySystemComponent::TryCommitFire(const AActor* ExpectedAvatar, float Interval)
-{
-	if (!CanFireNow(ExpectedAvatar) || !FMath::IsFinite(Interval) || Interval <= 0.f) return false;
-	NextFireTime = GetWorld()->GetTimeSeconds() + Interval;
-	return true;
-}
-
-bool UNGPlayerAbilitySystemComponent::TryCommitInteraction(const AActor* ExpectedAvatar, float Interval)
-{
-	if (!IsCurrentServerAvatar(ExpectedAvatar) || !FMath::IsFinite(Interval) || Interval <= 0.f) return false;
-	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now < NextInteractionTime) return false;
-	NextInteractionTime = Now + Interval;
-	return true;
 }
 
 void UNGPlayerAbilitySystemComponent::AbilityInputTagPressed(FGameplayTag InputTag)
@@ -76,4 +38,11 @@ bool UNGPlayerAbilitySystemComponent::TryActivateAbilityByInputTag(FGameplayTag 
 		return false;
 	}
 	return Super::TryActivateAbilityByInputTag(InputTag);
+}
+
+void UNGPlayerAbilitySystemComponent::OnRep_ActivateAbilities()
+{
+	OnAbilitySpecsReplicated.Broadcast(this);
+	Super::OnRep_ActivateAbilities();
+	OnAbilitySpecsReplicated.Broadcast(this);
 }

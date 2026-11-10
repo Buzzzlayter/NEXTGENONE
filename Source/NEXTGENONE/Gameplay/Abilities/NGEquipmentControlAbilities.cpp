@@ -2,8 +2,11 @@
 
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameFramework/Actor.h"
 #include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
+#include "Gameplay/Equipment/NGEquipmentInstance.h"
 #include "GameplayTags/NGGameplayTags.h"
 
 UNGPrimaryAttackAbility::UNGPrimaryAttackAbility()
@@ -22,13 +25,56 @@ void UNGPrimaryAttackAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle,
 {
 	AActor* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
 	UNGCombatComponent* Combat = Avatar ? Avatar->FindComponentByClass<UNGCombatComponent>() : nullptr;
-	if (!Info || !Info->IsLocallyControlled() || !Combat || !CommitAbility(Handle, Info, Activation))
+	auto* Equipment = Avatar ? Avatar->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
+	if (!Info || !Info->IsLocallyControlled() || !Combat || !Equipment || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, false, true); return; }
+	if (!IsActive()) return;
 	ActiveCombat = Combat;
-	Combat->StartPrimaryInput();
+	ActiveEquipment = Equipment;
+	const FNGEquipmentState State = Combat->GetEquipment();
+	PrimaryRevision = State.Revision;
+	if (!State.bEquipped || !HasCurrentWeapon())
+	{ EndAbility(Handle, Info, Activation, false, true); return; }
+	EquipmentChangedHandle = Equipment->OnEquipmentChanged.AddUObject(this, &ThisClass::EquipmentChanged);
+	ContinuePrimaryInput();
+	if (!IsActive()) return;
 	auto* Release = UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
 	Release->OnRelease.AddDynamic(this, &ThisClass::HandleInputReleased);
 	Release->ReadyForActivation();
+}
+
+bool UNGPrimaryAttackAbility::HasCurrentWeapon() const
+{
+	const auto* Combat = ActiveCombat.Get();
+	const auto* Weapon = Combat ? Combat->GetWeaponInstance() : nullptr;
+	return CurrentActorInfo && CurrentActorInfo->IsLocallyControlled() && Combat
+		&& CurrentActorInfo->AvatarActor.Get() == Combat->GetOwner()
+		&& Weapon && Weapon->IsCurrent() && ActiveEquipment.IsValid()
+		&& PrimaryRevision == ActiveEquipment->GetHandsRevision();
+}
+
+void UNGPrimaryAttackAbility::EquipmentChanged()
+{
+	if (IsActive() && !HasCurrentWeapon())
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, false, true);
+}
+
+void UNGPrimaryAttackAbility::ContinuePrimaryInput()
+{
+	if (!HasCurrentWeapon())
+	{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, false, true); return; }
+	const FNGEquipmentState State = ActiveCombat->GetEquipment();
+	ActiveCombat->RequestFire();
+	if (!IsActive()) return;
+	// A synchronous shot callback can change equipment before the next wait is created.
+	if (!HasCurrentWeapon())
+	{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, false, true); return; }
+	if (State.Definition->bAutomatic && FMath::IsFinite(State.Definition->FireInterval))
+	{
+		auto* Delay = UAbilityTask_WaitDelay::WaitDelay(this, FMath::Max(.05f, State.Definition->FireInterval));
+		Delay->OnFinish.AddDynamic(this, &ThisClass::ContinuePrimaryInput);
+		Delay->ReadyForActivation();
+	}
 }
 
 void UNGPrimaryAttackAbility::HandleInputReleased(float TimeHeld)
@@ -39,7 +85,9 @@ void UNGPrimaryAttackAbility::HandleInputReleased(float TimeHeld)
 void UNGPrimaryAttackAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 	FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bCancelled)
 {
-	if (UNGCombatComponent* Combat = ActiveCombat.Get()) Combat->StopPrimaryInput();
+	if (auto* Equipment = ActiveEquipment.Get()) Equipment->OnEquipmentChanged.Remove(EquipmentChangedHandle);
+	EquipmentChangedHandle.Reset();
+	ActiveEquipment.Reset();
 	ActiveCombat.Reset();
 	Super::EndAbility(Handle, Info, Activation, bReplicateEnd, bCancelled);
 }
@@ -56,8 +104,8 @@ void UNGEquipmentControlAbility::ActivateAbility(FGameplayAbilitySpecHandle Hand
 	FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
 {
 	AActor* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
-	UNGCombatComponent* Combat = Avatar ? Avatar->FindComponentByClass<UNGCombatComponent>() : nullptr;
-	const bool bValid = Info && Info->IsLocallyControlled() && Combat && CommitAbility(Handle, Info, Activation);
-	if (bValid) Combat->RequestEquip(bEquip);
+	auto* Equipment = Avatar ? Avatar->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
+	const bool bValid = Info && Info->IsLocallyControlled() && Equipment && CommitAbility(Handle, Info, Activation);
+	if (bValid) Equipment->RequestEquip(bEquip);
 	EndAbility(Handle, Info, Activation, false, !bValid);
 }

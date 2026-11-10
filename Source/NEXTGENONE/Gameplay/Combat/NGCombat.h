@@ -2,13 +2,18 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "AbilitySystem/NGAbilitySystem.h"
+#include "Gameplay/Equipment/NGEquipmentDefinition.h"
 #include "Library/ALSCharacterEnumLibrary.h"
 #include "NGCombat.generated.h"
 
-class ANextgenoneCharacter;
+class UNGEquipmentComponent;
 class APawn;
-class UStaticMeshComponent;
+class UNGEquipmentInstance;
+class UAbilitySystemComponent;
+class UAnimSequence;
+class UAnimMontage;
+class UGameplayAbility;
+class UStaticMesh;
 class USkeletalMeshComponent;
 class UNGInventoryItemInstance;
 class UNGInventoryItemDefinition;
@@ -18,12 +23,13 @@ class USoundBase;
 class UNiagaraSystem;
 
 UCLASS(BlueprintType, Blueprintable)
-class NEXTGENONE_API UNGWeaponDefinition : public UDataAsset
+class NEXTGENONE_API UNGWeaponDefinition : public UNGEquipmentDefinition
 {
 	GENERATED_BODY()
 public:
 	UNGWeaponDefinition();
-	bool ValidateDefinition(FString& Error) const;
+	virtual bool ValidateDefinition(FString& Error) const override;
+	virtual void ResolveResources(TArray<FNGEquipmentAbilityGrant>& OutAbilities, TArray<TSubclassOf<UGameplayEffect>>& OutEffects) const override;
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
 #endif
@@ -45,7 +51,6 @@ public:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics|Niagara") FName MuzzleFXSocket=TEXT("Muzzle");
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics|Niagara") FName ShellEjectFXSocket=TEXT("ShellEject");
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TSoftClassPtr<UNGInventoryItemDefinition> InventoryItemClass;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TObjectPtr<USkeletalMesh> SkeletalMesh;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) EALSOverlayState Overlay = EALSOverlayState::Default;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) bool bAutomatic = false;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="0")) int32 InitialReserveAmmo = 90;
@@ -61,9 +66,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="1")) float Range = 10000.f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="0.05")) float FireInterval = 0.25f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="1")) int32 MagazineCapacity = 12;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TObjectPtr<UStaticMesh> Mesh;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) FName AttachSocket = TEXT("hand_r");
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) FTransform VisualTransform = FTransform(FRotator::ZeroRotator, FVector(12, 0, 0), FVector(0.35, 0.08, 0.08));
 };
 
 USTRUCT(BlueprintType)
@@ -78,8 +80,6 @@ struct FNGEquipmentState
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGEquipmentChanged, FNGEquipmentState, Equipment);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGAmmoChanged, int32, MagazineAmmo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FNGShotCosmetic, FVector, Start, FVector, End, bool, bHit, int32, ShotId);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGPunchStarted, FVector, Direction);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FNGPunchHit, ANextgenoneCharacter*, Target, FVector, ImpactPoint);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGAimChanged, bool, bAiming);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FNGProjectileImpact,FVector,Point,FVector,Normal,int32,ShotId);
 
@@ -91,54 +91,45 @@ public:
 	UNGCombatComponent();
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	UPROPERTY(BlueprintAssignable) FNGEquipmentChanged OnEquipmentChanged;
 	UPROPERTY(BlueprintAssignable) FNGAmmoChanged OnAmmoChanged;
 	// Weapon-pack adapters subscribe here; cosmetic events never apply damage.
 	UPROPERTY(BlueprintAssignable) FNGShotCosmetic OnShotCosmetic;
 	UPROPERTY(BlueprintAssignable) FNGProjectileImpact OnProjectileImpact;
-	UPROPERTY(BlueprintAssignable, Category="Punch") FNGPunchStarted OnPunchStarted;
-	UPROPERTY(BlueprintAssignable, Category="Punch") FNGPunchHit OnPunchHit;
 	UPROPERTY(BlueprintAssignable, Category="Weapon") FNGAimChanged OnAimChanged;
-	UFUNCTION(BlueprintPure) FNGEquipmentState GetEquipment() const { return Equipment; }
+	UFUNCTION(BlueprintPure) FNGEquipmentState GetEquipment() const;
 	UFUNCTION(BlueprintPure) int32 GetMagazineAmmo() const;
 	UFUNCTION(BlueprintPure) int32 GetReserveAmmo() const;
 	UFUNCTION(BlueprintPure) bool IsAiming() const;
-	UFUNCTION(BlueprintPure) UNGInventoryItemInstance* GetEquippedItem() const { return CurrentItem; }
+	UFUNCTION(BlueprintPure) UNGInventoryItemInstance* GetEquippedItem() const;
+	UNGEquipmentInstance* GetWeaponInstance() const;
 	UFUNCTION(BlueprintCallable) void RequestReload();
 	static UNGWeaponDefinition* GetWeaponDefinition(const UNGInventoryItemDefinition* ItemDefinition);
-	bool CompleteReloadOnServer(UNGInventoryItemInstance* Item);
-	void BindInventory();
+	bool CompleteReloadOnServer(UNGEquipmentInstance* Source);
+	void BindInventory(UNGInventoryManagerComponent* Inventory);
 	void BindAbilitySystem(UAbilitySystemComponent* ASC);
+	void SetWeaponMesh(USkeletalMeshComponent* Mesh);
+	FSimpleMulticastDelegate OnPresentationChanged;
 	UFUNCTION(BlueprintCallable) void RequestEquip(bool bEquip);
 	UFUNCTION(BlueprintCallable) void RequestFire();
-	void StartPrimaryInput();
-	void StopPrimaryInput();
 	void UnequipOnServer();
-	bool FireOnServer();
-	UFUNCTION(Server, Reliable) void ServerSetEquipped(bool bEquip);
-	UFUNCTION(NetMulticast, Unreliable) void MulticastReload();
+	// Called by NGFireAbility after GAS checks state tags and commits the fire cooldown.
+	bool FireOnServer(UNGEquipmentInstance* Source);
+	UFUNCTION(NetMulticast, Unreliable) void MulticastReload(UNGWeaponDefinition* ReloadWeapon, int32 Revision);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize Start, FVector_NetQuantize End, bool bHit, int32 ShotId,UNGWeaponDefinition* ShotWeapon);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastProjectileImpact(FVector_NetQuantize Point,FVector_NetQuantizeNormal Normal,int32 ShotId,UNGWeaponDefinition* ShotWeapon,bool bCharacter);
-	UFUNCTION(NetMulticast, Unreliable) void MulticastPunchStarted(FVector_NetQuantizeNormal Direction, UAnimMontage* Montage);
-	UFUNCTION(NetMulticast, Unreliable) void MulticastPunchHit(ANextgenoneCharacter* Target, FVector_NetQuantize ImpactPoint);
 	// Shared damage entry point rejects stale Pawn/ASC pairings, including corpses.
 	static bool ApplyDamageToPawn(APawn* Target, UAbilitySystemComponent* Source, float Damage, const FHitResult* Hit = nullptr);
 private:
-	friend class UNGEquipWeaponItemAbility;
-	bool EquipItemFromAbility(UNGInventoryItemInstance* Item);
-	void SetEquippedOnServer(bool bEquip);
+	UNGEquipmentComponent* GetEquipmentComponent() const;
+	UAbilitySystemComponent* GetCombatASC() const { return ObservedASC.Get(); }
+	TWeakObjectPtr<USkeletalMeshComponent> WeaponMesh;
+	void EquipmentChanged();
 	UFUNCTION(Server, Reliable) void ServerRequestFire(FVector_NetQuantize ViewOrigin, FVector_NetQuantizeNormal ViewDirection, int32 EquipmentRevision);
 	// Only valid during synchronous activation of GA_Fire; never reused by a later shot.
 	TOptional<FTransform> RequestedShotView;
-	void ContinuePrimaryInput();
-	FTimerHandle PrimaryInputTimer;
-	UPROPERTY(ReplicatedUsing=OnRep_Equipment) FNGEquipmentState Equipment;
-	UPROPERTY(ReplicatedUsing=OnRep_CurrentItem) TObjectPtr<UNGInventoryItemInstance> CurrentItem;
-	UPROPERTY() FNGGrantedHandles WeaponHandles;
 	TWeakObjectPtr<UNGInventoryItemInstance> BoundItem;
 	TWeakObjectPtr<UNGInventoryManagerComponent> BoundInventory;
-	TWeakObjectPtr<UAbilitySystemComponent> GrantedASC;
 	TWeakObjectPtr<UAbilitySystemComponent> ObservedASC;
 	FDelegateHandle AimingTagHandle;
 	int32 ShotSerial = 0;
@@ -148,5 +139,4 @@ private:
 	UFUNCTION() void OnRep_CurrentItem();
 	void AimingTagChanged(FGameplayTag Tag, int32 Count);
 	UFUNCTION() void InventoryChanged();
-	UFUNCTION() void HandleDeath(bool bDead);
 };

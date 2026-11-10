@@ -74,12 +74,12 @@ bool UNGAimComponent::ShouldShowReticle() const
 	const auto* Pawn=Cast<APawn>(GetOwner()); const auto* PC=Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
 	const auto* ASC = NGPlayerContext::GetCurrentASC(Pawn, false);
 	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
-	return bShowReticle && PC && PC->IsLocalController() && PC->GetPawn()==Pawn && ASC
+	return bShowReticle && PC && PC->IsLocalController() && ASC
 		&& !ASC->HasMatchingGameplayTag(TAG_NGDead) && !(Input && Input->IsGameplayInputBlocked());
 }
 FLinearColor UNGAimComponent::GetReticleColor() const
 {
-	const auto* Interaction = GetOwner() ? GetOwner()->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	const auto* Interaction = GetOwner()->FindComponentByClass<UNGInteractionComponent>();
 	if (Interaction && Interaction->GetFocusedActor()) return Interaction->CanUseFocusedActor() ? InteractionColor : UnavailableColor;
 	return IdleColor;
 }

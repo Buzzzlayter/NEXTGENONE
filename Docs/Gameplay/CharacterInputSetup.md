@@ -16,7 +16,7 @@ DA_Input_Character теперь заполнен: 13 NativeInputActions, 3 Abili
 | Прыжок | Space | A |
 | Dash в воздухе / Mantle | Q / V | RB / Y |
 | Взаимодействие | E | LB |
-| Огонь или удар / прицел | ЛКМ / ПКМ | RT / LT |
+| Огонь / прицел | ЛКМ / ПКМ | RT / LT |
 | Перезарядка | R | X |
 | Бег / стойка | Shift / Ctrl | L3 / B |
 | Ходьба | Alt | аналоговое движение; отдельной toggle-кнопки нет |
@@ -42,7 +42,7 @@ FSMState_GameRuntime.HFSMInputComponent подключает отдельный 
 
 ## Способности принадлежат состояниям — 2026-11-03
 
-CharacterDefinition содержит только InputConfig. PlayerState.StartLife больше не выдаёт базовых способностей; UNGAbilitySet и DA_PlayerAbilities удалены. Jump/Dash/Mantle/Interact/Punch с прежними input tags находятся непосредственно в DA_CharacterState_Alive.Abilities (FNGAbilityGrant). Dead содержит NGDeathAbility с bActivateOnEnter=true и пустым InputTag. Назначать второй базовый набор не нужно.
+CharacterDefinition содержит только InputConfig. PlayerState.StartLife больше не выдаёт базовых способностей; UNGAbilitySet и DA_PlayerAbilities удалены. Jump/Dash/Mantle/Interact с прежними input tags находятся непосредственно в DA_CharacterState_Alive.Abilities (FNGAbilityGrant). Dead содержит NGDeathAbility с bActivateOnEnter=true и пустым InputTag. Назначать второй базовый набор не нужно.
 
 Состояние выдаёт grants/effects при Enter и снимает собственные handles при Exit/Unbind. Повторная инициализация Pawn не дублирует выдачу; новый Pawn получает init-health один раз, входы в Alive здоровье не сбрасывают. Equipment grants сохраняют отдельные handles Combat. Подробный контракт и сетап: CharacterStateMachine.md. IA→tag маршруты по-прежнему задаются один раз в InputConfig и могут обслуживать способности разных состояний.
 
@@ -62,7 +62,7 @@ NativeInputActions для NGCharacterInputComponent:
 | Input.Jump | Boolean | Единственный ALS→GAS маршрут прыжка; не добавлять второй binding в AbilityInputActions |
 | Input.Aim | Boolean | Удержание прицеливания; единственный ALS/Combat маршрут |
 | Input.Sprint | Boolean | Удержание sprint |
-| Input.Combat.Primary | Boolean | Стрельба при экипировке, иначе удар; автоогонь принадлежит Combat |
+| Input.Combat.Primary | Boolean | Стрельба при экипировке; без оружия действие не выполняется; автоогонь принадлежит Combat |
 | Input.Equipment.Equip / Input.Equipment.Unequip | Boolean | Экипировать / снять |
 | Input.Equipment.Reload | Boolean | Перезарядить |
 | Input.Equipment.SelectSlot | Axis1D | Значения 1, 2, 3… через modifiers в IMC; номера слотов не связаны с физическими клавишами |
@@ -72,7 +72,7 @@ NativeInputActions для NGCharacterInputComponent:
 
 Дискретная native-команда исполняется один раз при первом Triggered, а не заранее на Started: это позволяет использовать Hold/Tap/порог курка. Movement/Look обрабатываются каждый Triggered. Ability input также отправляет pressed один раз на первый Triggered и released на Completed/Canceled.
 
-AbilityInputActions: существующие Input.Dash, Input.Mantle, Input.Interaction.Interact и при необходимости Input.Combat.Punch. Для обычного удара/стрельбы достаточно Native Input.Combat.Primary. Отдельные Input.Combat.Fire/Reload можно связывать прямо с GAS, но они не дают native автоогонь/маршрут Reload компонента; основной контракт — строки таблицы.
+AbilityInputActions: существующие Input.Dash, Input.Mantle, Input.Interaction.Interact. Для стрельбы используется Native Input.Combat.Primary. Отдельные Input.Combat.Fire/Reload можно связывать прямо с GAS, но они не дают native автоогонь/маршрут Reload компонента; основной контракт — строки таблицы.
 
 ### UI отдельно от персонажа
 
@@ -106,7 +106,7 @@ GameplayInput снимает собственные binding handles и context h
 
 - **ControlStateDefinition.MappingContexts** — единственный список gameplay IMC/приоритетов. Alive содержит IMC_NG_Character с приоритетом 10, Dead пустой. В InputConfig нет MappingContexts и StateMappingContexts: только NativeInputActions/AbilityInputActions.
 - **NativeInputActions** — движение, камера и команды существующих компонентов. Строка содержит IA и смысловой тег. Точный список новых native-тегов будет закреплён при реализации обработчиков на этапе 2; произвольный тег ещё не создаёт обработчик.
-- **AbilityInputActions** — IA и точный InputTag из существующего Ability Set. Например: Input.Dash, Input.Mantle, Input.Combat.Punch, Input.Interaction.Interact. Jump у текущего ALS-персонажа проходит через NativeInputActions, как указано в таблице выше.
+- **AbilityInputActions** — IA и точный InputTag из существующего Ability Set. Например: Input.Dash, Input.Mantle, Input.Interaction.Interact. Jump у текущего ALS-персонажа проходит через NativeInputActions, как указано в таблице выше.
 
 Сейчас готовыми ассетами среди этих действий являются IA_Dash и IA_Mantle; наличие остальных IA нужно проверить/создать при заполнении. Не добавлять одновременно старый pickup-тег и новый interact-тег для одной кнопки. Runtime-спецмаршрут interact в ASC будет перенесён в компонент при следующем этапе.
 

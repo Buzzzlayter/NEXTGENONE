@@ -1,12 +1,18 @@
 # FSM персонажа и ресурсы состояний
 
+ASC не зависит от Character FSM. Машина сама подписывается на нейтральное событие
+`OnAbilitySpecsReplicated` и снимает подписку при suspend, смене ASC и EndPlay.
+При отказе ресурсов она освобождает свои grants; Character останавливает ввод и
+Equipment, а `NGPlayerContext` отклоняет игровые операции отказавшего Pawn.
+ASC не содержит отдельной блокировки Avatar или копии состояния отказа FSM.
+
 Актуализация lifecycle: UHFSMStateComponent и все наследники используют **void Enter/Exit**, как UHFSMState. Общий отказ/откат входа, AbortEnter, OnEnterFailed, HasEnteredSuccessfully и отдельный ActiveComponents удалены по решению пользователя. State вызывает все настроенные компоненты; каждый проверяет свои данные, освобождает собственные частичные ресурсы и делает return при ошибке. Ошибка одного компонента не откатывает остальные. Внутренние GAS validation/grant/handle проверки и барьер готовности ресурсов для смены Avatar сохранены. Blueprint пользователь настраивает сам: удалить старые узлы OnEnterFailed/HasEnteredSuccessfully и ненужный переход ResourceFailure, если он обслуживал только общий rollback. Более ранние описания rollback ниже исторические.
 
 ## Ошибка входа ресурсов персонажа
 
 При ошибке Definition, input mappings, выдачи GAS-ресурсов или активации entry ability `UNGCharacterStateResources` очищается и сообщает отказ CharacterStateMachine. Машина снимает остальные свои GAS/input-ресурсы, очищает RequestedStateTag/Event и разрешает Avatar handoff через существующее OnResourcesReady. Здесь уведомление означает снятие барьера смены Avatar; успешную готовность проверяет только IsGameplayReady, которая при ошибке возвращает false.
 
-Ошибка терминальна для данного Pawn, без автоматических повторов. Флаг отказа и логический StateTag реплицируются самим CharacterStateMachine; это не успешный переход GCFSM-графа. Общий Pawn/ASC gate и AreAbilityTagsBlocked закрывают дальнейшие действия; активные способности отменяются, ввод/movement/auto-fire останавливаются, interaction закрывается и оружие снимается. Новые Pawn имеют независимую машину, ASC не блокируется навсегда. Если здоровье отказавшего Pawn позже обнулилось, NotifyDeath всё равно устанавливает Dead и уведомляет подписчиков/клиентов. При сломанном графе GA_Death и ragdoll не гарантируются: скрытого обходного запуска анимации нет. Лог содержит Pawn, MachineName, StateTag и причину; для grants также класс ability/effect. Общий void Enter/Exit HFSM и Blueprint-граф не получают rollback-протокола. Отсутствие самого перехода в Blueprint, при котором resource Enter не вызывается, этот обработчик не диагностирует. Сборка и runtime правки не проверены.
+Ошибка терминальна для данного Pawn, без автоматических повторов. Флаг отказа и логический StateTag реплицируются самим CharacterStateMachine; это не успешный переход GCFSM-графа. Снятие grants и проверка текущего Pawn через NGPlayerContext закрывают игровые действия; активные способности отменяются, ввод/movement/auto-fire останавливаются, interaction закрывается и оружие снимается. Новые Pawn имеют независимую машину, отдельной блокировки в ASC нет. Если здоровье отказавшего Pawn позже обнулилось, NotifyDeath всё равно устанавливает Dead и уведомляет подписчиков/клиентов. При сломанном графе GA_Death и ragdoll не гарантируются: скрытого обходного запуска анимации нет. Лог содержит Pawn, MachineName, StateTag и причину; для grants также класс ability/effect. Общий void Enter/Exit HFSM и Blueprint-граф не получают rollback-протокола. Отсутствие самого перехода в Blueprint, при котором resource Enter не вызывается, этот обработчик не диагностирует. Сборка и runtime правки не проверены.
 
 Актуальный контракт — 2026-11-03. Персонаж не получает базовых способностей при создании/possession. Их единственный источник — активные UNGControlStateDefinition. UNGAbilitySet и DA_PlayerAbilities удалены. CharacterDefinition содержит InputConfig, без базовых GAS grants.
 
@@ -33,7 +39,7 @@ Refresh после possession восстанавливает ресурсы ак
 
 ## Alive и Dead
 
-DA_CharacterState_Alive получает прежние игровые grants: Jump, Dash, Mantle, Interact, Punch с сохранёнными классами/тегами/уровнями. bActivateOnEnter=false: они ждут ввода. При выходе из Alive эти grants снимаются. Equipment Fire/Reload сохраняют прежний scope Combat; он выдаёт прямые FNGAbilityGrant без промежуточного AbilitySet.
+DA_CharacterState_Alive получает прежние игровые grants: Jump, Dash, Mantle, Interact с сохранёнными классами/тегами/уровнями. bActivateOnEnter=false: они ждут ввода. При выходе из Alive эти grants снимаются. Equipment Fire/Reload сохраняют прежний scope Combat; он выдаёт прямые FNGAbilityGrant без промежуточного AbilitySet.
 
 DA_CharacterState_Dead содержит NGDeathAbility, InputTag пустой, Level=1, **bActivateOnEnter=true**, bBlockGameplayInput=true. Отдельный NGCharacterDeathStateComponent удалён: смерть использует ту же выдачу и активацию, что любое другое состояние.
 

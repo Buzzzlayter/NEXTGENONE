@@ -1,6 +1,6 @@
-# Lyra weapon particles
+# Weapon particles
 
-Ported from the local LyraStarterGame into /Game/Effects, preserving package paths. The tracked list is Docs/Research/LyraWeaponVFXAssets.txt: 82 assets including seven Niagara systems, emitters, modules, materials, textures, curves and three shell meshes. Source Lyra and the original ALS plugin/AnimBP were not modified.
+Imported Epic sample content in /Game/Effects preserves package paths: 82 assets including seven Niagara systems, emitters, modules, materials, textures, curves and three shell meshes. Original ALS assets and AnimBP were not modified.
 
 ## Connected effects
 
@@ -8,7 +8,7 @@ Ported from the local LyraStarterGame into /Game/Effects, preserving package pat
 - NS_WeaponFire_ShellEject: per-weapon pistol/rifle/shotgun shell mesh.
 - NS_WeaponFire_Tracer and NS_WeaponFire_Tracer_Shotgun: driven by moving ballistic projectile segments.
 - NS_ImpactConcrete: default world impact.
-- NS_ImactSparksCharacter: Lyra's stylized character sparks, not blood.
+- NS_ImactSparksCharacter: stylized character sparks, not blood.
 - NS_ImpactGlass: imported and compiled for manual assignment; automatic physical-surface/glass routing is not implemented.
 
 DA_Pistol, DA_Rifle, DA_Shotgun and DA_TestWeapon receive unset MuzzleFX, ShellEjectFX, TracerFX, ImpactFX, CharacterImpactFX and ShellMesh fields. Existing custom assignments are preserved. MuzzleFXSocket defaults to Muzzle, ShellEjectFXSocket to ShellEject. If the socket is absent, the helper spawns at the server launch anchor. All fields remain editable in the weapon definition.
@@ -34,5 +34,5 @@ A future visual pass should check muzzle direction, shell scale, normal orientat
 New source: Source/NEXTGENONE/Gameplay/Combat/NGWeaponVFX.h/.cpp and NGWeaponVFXAssets.cpp.
 Updated source: NGCombat.h/.cpp, NGBallisticProjectile.h/.cpp, NGSetupCommandlet.cpp; NEXTGENONE.Build.cs adds the required Niagara runtime dependency. NEXTGENONE.uproject explicitly enables Niagara. No NiagaraEditor framework dependency remains.
 
-Updated project assets: DA_Pistol, DA_Rifle, DA_Shotgun, DA_TestWeapon, BP_BallisticProjectile, GA_Fire and BP_NextgenoneCharacter. Backups are in Saved/RefactorBackup/WeaponVFX and Saved/RefactorBackup/Interaction. Imported asset list: Docs/Research/LyraWeaponVFXAssets.txt. Logs: Saved/Logs/NGWeaponVFXBuild.log and NGWeaponVFXAssets.log.
+Updated project assets: DA_Pistol, DA_Rifle, DA_Shotgun, DA_TestWeapon, BP_BallisticProjectile, GA_Fire and BP_NextgenoneCharacter. Backups are in Saved/RefactorBackup/WeaponVFX and Saved/RefactorBackup/Interaction. Logs: Saved/Logs/NGWeaponVFXBuild.log and NGWeaponVFXAssets.log.
 Final delivered verification: NEXTGENONEEditor Win64 Development UBT exit 0 / PASS, no compiler diagnostics. NGSetup -WeaponVFXOnly exit 0; summary 0 errors / 14 ALS/environment warnings. Active Niagara script statuses: 58 UpToDate, 14 UpToDateWithWarnings, zero Error/Unknown/Dirty. LWC diagnostics remain associated with the warning statuses; no graph-rewrite fix is claimed. Seven systems and four weapon definitions saved. This is asset/code compilation evidence, not a visual or network test.

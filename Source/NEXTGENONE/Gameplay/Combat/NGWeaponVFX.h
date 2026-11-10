@@ -3,10 +3,10 @@
 class UNiagaraComponent;
 class UNiagaraSystem;
 class UNGWeaponDefinition;
-class ANextgenoneCharacter;
+class USkeletalMeshComponent;
 namespace NGWeaponVFX
 {
-	void Shot(ANextgenoneCharacter* Pawn,const UNGWeaponDefinition* Weapon,FVector Start,FVector Direction);
+	void Shot(USkeletalMeshComponent* Mesh,const UNGWeaponDefinition* Weapon,FVector Start,FVector Direction);
 	void Impact(UObject* Context,const UNGWeaponDefinition* Weapon,FVector Point,FVector Normal,bool bCharacter);
 	UNiagaraComponent* CreateTracer(UObject* Context,UNiagaraSystem* System,FVector Position);
 	void UpdateTracer(UNiagaraComponent* Component,FVector From,FVector To,bool bTrigger);

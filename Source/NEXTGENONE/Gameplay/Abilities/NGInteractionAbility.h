@@ -1,7 +1,16 @@
 #pragma once
 
 #include "Abilities/GameplayAbility.h"
+#include "GameplayEffect.h"
 #include "NGInteractionAbility.generated.h"
+
+UCLASS()
+class NEXTGENONE_API UNGInteractionCooldownEffect : public UGameplayEffect
+{
+	GENERATED_BODY()
+public:
+	UNGInteractionCooldownEffect();
+};
 
 UCLASS(Blueprintable)
 class NEXTGENONE_API UNGInteractionAbility : public UGameplayAbility

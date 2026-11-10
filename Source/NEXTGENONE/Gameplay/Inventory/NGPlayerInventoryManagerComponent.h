@@ -26,18 +26,20 @@ public:
 	void OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
 	void CloseInventoryView();
 	/** True means dispatched; inventory changes arrive through replication. */
-	bool RequestActivationItem(UNGInventoryItemInstance* Item);
+	bool RequestActivationItem(UNGInventoryItemInstance* Item, UNGInventoryManagerComponent* Source = nullptr);
 	bool RequestActivationSlot(int32 ActionSlot);
 	bool ActivateItemOnServer(UNGInventoryItemInstance* Item);
+	bool MoveEquipmentItemOnServer(UNGInventoryItemInstance* Item, int32 TargetSlot);
 	bool RequestInventoryTransfer(UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount=0);
 	UPROPERTY(EditDefaultsOnly, Category="Inventory", meta=(ClampMin="0.01")) float InventoryOperationInterval = .05f;
 	bool RequestDropItem(UNGInventoryItemInstance* Item, int32 Count=0);
 	UFUNCTION(Server, Reliable) void ServerDropItem(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
 
 private:
+	bool ExecuteTransferOnServer(UNGInventoryManagerComponent* Source, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, int32 Amount);
 	ANGItemPickup* DropItemOnServer(APawn* Pawn, UNGInventoryItemInstance* Item, int32 Count);
 	TSet<TWeakObjectPtr<UNGInventoryItemInstance>> ActiveDrops;
-	UFUNCTION(Server, Reliable) void ServerActivationItem(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 ExpectedSlot);
+	UFUNCTION(Server, Reliable) void ServerActivationItem(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* Item, int32 ExpectedSlot);
 	double NextActivationTime = 0.;
 	bool TryBeginStarterGrant();
 	double NextDropTime = 0.0;

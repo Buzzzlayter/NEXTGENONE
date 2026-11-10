@@ -2,6 +2,7 @@
 #include "Inventory/NGInventoryItemInstance.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "NGPlayerInventoryManagerComponent.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 
@@ -82,13 +83,13 @@ bool UNGInventoryPanel::RequestInventoryOperation_Implementation(const FUIInvent
 	auto* Transport = ResolvePlayerInventory();
 	auto* Item = Cast<UNGInventoryItemInstance>(SlotInfo.Item.Get());
 	// UI snapshots are untrusted: resolve ownership/count again, then use existing server-validated requests.
-	if (!Transport || Inventory.Get() != Transport
+	if (!Transport || !Inventory.IsValid()
 		|| SlotInfo.Inventory != Inventory.Get() || Inventory->GetItemAtSlot(SlotInfo.SlotIndex) != Item || !Inventory->Contains(Item) || Amount < 0 || Amount > Inventory->GetCount(Item)) return false;
 	if (Operation == EUIInventoryOperation::SecondaryAction)
 	{
-		return Transport->RequestActivationItem(Item);
+		return Transport->RequestActivationItem(Item, Inventory.Get());
 	}
-	if (Operation == EUIInventoryOperation::Drop)
+	if (Operation == EUIInventoryOperation::Drop && Inventory.Get() == Transport)
 		return Transport->RequestDropItem(Item, Amount);
 	return false;
 }

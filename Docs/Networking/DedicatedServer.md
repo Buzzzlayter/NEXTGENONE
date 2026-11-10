@@ -6,7 +6,7 @@
 
 Esc → настройки → «Сеть»: адрес сервера, «Подключиться», «Отключиться», статус/ошибки и явно отключённая кнопка Steam. WBP_ServerConnection вложен в существующий WBP_GameSettings и живёт вместе с FSMState_GameSettings. UNGConnectionSubsystem на GameInstance переживает переход между картами, хранит последний адрес, слушает ошибки сети/travel и ограничивает ожидание подключения 30 секундами. В адресе запрещены URL-параметры/команды; IPv6 пока не поддерживается.
 
-UI подключения следует разделению запроса/статуса из Lyra CommonSessionSubsystem, но адаптирован к существующей UMG/HFSM. Lyra CommonUI/CommonUser, Experience System, EOS и online framework не переносились. Это меню direct-connect, а не Steam browser/matchmaking. Disconnect возвращает в локальный Gameplay.
+UI подключения разделяет запрос и статус и использует существующую UMG/HFSM. Сторонние UI/session frameworks, Experience System, EOS и online framework не переносились. Это меню direct-connect, а не Steam browser/matchmaking. Disconnect возвращает в локальный Gameplay.
 
 ## Разработка на текущем движке
 
@@ -49,7 +49,7 @@ bash Scripts/StartDedicatedServer.sh /opt/nextgenone/NEXTGENONEServer.sh 7777
 
 Config/Steam.example.ini — неактивная справочная заготовка, а не действующая конфигурация. После получения App ID понадобится включить подходящий Steam OSS/transport, настроить dedicated-server advertisement и authentication, затем согласованно проверить клиентские Steam-аккаунты, совместимость билдов, серверный browser/приглашения. Текущая кнопка Steam ничего из этого не выполняет. App ID 480 не подставлялся по просьбе пользователя.
 
-Источники: [Epic: Dedicated Servers](https://dev.epicgames.com/documentation/unreal-engine/setting-up-dedicated-servers-in-unreal-engine?lang=en-US), [Epic: Steam OSS](https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-steam-interface-in-unreal-engine), [Epic: Common User / Common Session](https://dev.epicgames.com/documentation/en-us/unreal-engine/common-user-plugin-in-unreal-engine-for-lyra-sample-game). Локально прочитан Lyra Plugins/CommonUser/Source/CommonUser/Private/CommonSessionSubsystem.cpp.
+Источники: [Epic: Dedicated Servers](https://dev.epicgames.com/documentation/unreal-engine/setting-up-dedicated-servers-in-unreal-engine?lang=en-US), [Epic: Steam OSS](https://dev.epicgames.com/documentation/en-us/unreal-engine/online-subsystem-steam-interface-in-unreal-engine).
 
 ## Фактически выполнено
 

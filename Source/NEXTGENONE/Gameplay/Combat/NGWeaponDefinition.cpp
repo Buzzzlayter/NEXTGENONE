@@ -2,6 +2,7 @@
 #include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Combat/NGBallisticProjectile.h"
 #include "Gameplay/Abilities/NGAimAbility.h"
+#include "Gameplay/Abilities/NGWeaponAbilities.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryFragment_SetStats.h"
 #if WITH_EDITOR
@@ -10,12 +11,16 @@
 
 UNGWeaponDefinition::UNGWeaponDefinition()
 {
+    SlotTag = TAG_NGEquipmentHands;
+    AttachSocket = TEXT("VB RHS_ik_hand_gun");
+    VisualTransform = FTransform(FRotator::ZeroRotator, FVector(12, 0, 0), FVector(.35, .08, .08));
     ProjectileClass = ANGBallisticProjectile::StaticClass();
     AimAbilityClass = UNGAimAbility::StaticClass();
 }
 
 bool UNGWeaponDefinition::ValidateDefinition(FString& Error) const
 {
+    if (!Super::ValidateDefinition(Error) || SlotTag != TAG_NGEquipmentHands) return false;
     auto InRange = [](float Value, float Min, float Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; };
     if (!InRange(MuzzleSpeed, 100.f, 200000.f) || !InRange(GravityScale, 0.f, 10.f)
         || !InRange(LinearDrag, 0.f, 2.f) || !InRange(SpreadDegrees, 0.f, 20.f)
@@ -27,7 +32,20 @@ bool UNGWeaponDefinition::ValidateDefinition(FString& Error) const
     if (!ProjectileClass || ProjectileClass->HasAnyClassFlags(CLASS_Abstract)
         || !AimAbilityClass || AimAbilityClass->HasAnyClassFlags(CLASS_Abstract) || AmmoItemClass.IsNull())
     { Error = TEXT("Weapon requires a concrete projectile, aim ability and ammo item class."); return false; }
+    UClass* AmmoClass = AmmoItemClass.LoadSynchronous();
+    if (!AmmoClass || AmmoClass->HasAnyClassFlags(CLASS_Abstract) || !GetDefault<UNGInventoryItemDefinition>(AmmoClass)->ValidateDefinition(Error))
+    { if (Error.IsEmpty()) Error = TEXT("Weapon ammo must resolve to a concrete valid item definition."); return false; }
     Error.Reset(); return true;
+}
+void UNGWeaponDefinition::ResolveResources(TArray<FNGEquipmentAbilityGrant>& OutAbilities, TArray<TSubclassOf<UGameplayEffect>>& OutEffects) const
+{
+    Super::ResolveResources(OutAbilities, OutEffects);
+    auto Add = [&](TSubclassOf<UGameplayAbility> Ability, FGameplayTag Input)
+    { FNGEquipmentAbilityGrant Entry; Entry.Grant.Ability = Ability; Entry.Grant.InputTag = Input; OutAbilities.Add(Entry); };
+    // Preserve null native defaults, but do not conceal a broken authored soft reference.
+    Add(FireAbilityClass.IsNull() ? UNGFireAbility::StaticClass() : FireAbilityClass.LoadSynchronous(), TAG_NGFireInput);
+    Add(ReloadAbilityClass.IsNull() ? UNGReloadAbility::StaticClass() : ReloadAbilityClass.LoadSynchronous(), TAG_NGReloadInput);
+    Add(AimAbilityClass ? AimAbilityClass.Get() : UNGAimAbility::StaticClass(), TAG_NGInputAim);
 }
 #if WITH_EDITOR
 EDataValidationResult UNGWeaponDefinition::IsDataValid(FDataValidationContext& Context) const
