@@ -1,4 +1,41 @@
-# Пересохранение после выделения GameplayFoundation
+# Миграции Core Redirects
+
+## 11 ноября 2026: удалены все 25 проектных redirects
+
+Текущий `Config/DefaultEngine.ini` больше не содержит Core Redirects и
+ActiveGameNameRedirects. Удалены только записи из предварительно просмотренного плана:
+
+- 6 ClassRedirects и 6 StructRedirects переноса инвентаря в GameplayFoundation;
+- 4 PropertyRedirects appearance-полей NGWeaponDefinition → NGEquipmentDefinition;
+- PackageRedirect и ClassRedirect BP_NextgenonePawn → BP_NextgenoneCharacter;
+- 3 ClassRedirects переименований Character/PlayerController/PlayerState;
+- 2 ClassRedirects HFSMContextLibrary/HFSMEventLibrary → HFSMLibrary;
+- 2 ActiveGameNameRedirects TP_Blank → NEXTGENONE.
+
+С редиректами принудительно пересохранены 62 проектных ассета, включая карту Gameplay
+и DA_Pistol/Rifle/Shotgun/TestWeapon. Затем отдельный процесс UnrealEditor-Cmd успешно
+загрузил эти же 62 ассета и destination-типы без редиректов. Снимки классов ассетов,
+родителей Blueprint, Ability Set grants/effects, классов/ссылок item fragments, тегов,
+стеков предметов и appearance-полей оружия совпали. Оба успешных процесса завершились
+с кодом 0; Error/Fatal в их логах нет. Предупреждения ALS/Python, старого animation
+modifier, empty engine version и окружения остались; плагиновые ассеты не сохранялись.
+
+Полный backup до первого запуска и до любых изменений ассетов:
+`Saved/CoreRedirectMigrations/20261111-003858/`.
+Manifest, backup перед успешным проходом, отчёты `resave.json`/`verify.json` и логи:
+`Saved/CoreRedirectMigrations/20261111-004246/`.
+
+Скрипт `Scripts/Editor/MigrateCoreRedirects.py` использовал явный `--plan-file`:
+`Saved/RuntimeReview/RedirectCleanupPlan.json`. Для процесса миграции DDC направлен
+в проектный `Saved/DerivedDataCache`, автозапуск Zen и source control provider отключены.
+Первоначальные остановки из-за DDC, Python API и source control произошли до удаления
+redirects; их отчёты сохранены в соседних timestamp-каталогах.
+
+Сборка, PIE, gameplay/сетевые тесты и cook не выполнялись. Это проверка сериализации
+и свежей загрузки текущего Content; совместимость внешних savegames и старых веток
+не проверялась. Обычный редактор после завершения не запускался.
+
+## Историческая миграция 2 ноября 2026
 
 2026-11-02. Выполнена миграция ссылок из /Script/NEXTGENONE в /Script/GameplayFoundation для 7 классов и 4 структур. Из DefaultEngine.ini удалены только соответствующие 11 ClassRedirects/StructRedirects. Старые redirects переименований Character/Controller/PlayerState, Pawn Blueprint и UI libraries сохранены.
 
