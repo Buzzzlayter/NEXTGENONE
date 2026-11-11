@@ -9,6 +9,12 @@
 - UI FSM — маршрутизация, input policy и монтаж представлений.
 - InventoryPanel — отображение только явно переданного источника. bUseViewedInventory и автоматический выбор своего/внешнего контейнера удалены.
 
+Кулдаун интеракции принадлежит `UNGInteractionAbility`: стандартный GAS effect
+`UNGInteractionCooldownEffect` даёт `Cooldown.Interaction` на 0,15 с при `CommitAbility`.
+Таймера `NextInteractionTime` и отдельного API кулдауна в ASC больше нет. Commit
+выполняется после проверки цели; неверный запрос кулдаун не расходует. Эффект живёт
+на PlayerState ASC и не снимается при завершении способности или interaction-сессии.
+
 Коробка имеет настраиваемый InteractionType, по умолчанию native Interaction.Storage. После серверной проверки интеракции PlayerInventory открывает сессию, отправляет owning client подтверждение с ExpectedPawn, Source и типом; клиент записывает контекст в Interaction текущего Pawn. Только затем UI получает событие. Личная панель открывается напрямую, без создания контекста внешней интеракции.
 
 ## Граф
@@ -40,7 +46,7 @@ SetInventorySource вызывается мounter после монтажа и о
 
 ### Прерывание через GAS
 
-В native Interaction-компоненте персонажа есть редактируемый **InterruptingTags**. Defaults: State.Interaction.Blocked, State.Dead, State.Action.Dash, State.Action.Mantle, State.Action.Punch, State.Action.Reload. Появление любого из них в ASC текущего Avatar событийно вызывает EndInteraction: сервер отменяет активные способности с asset-тегом **Ability.Type.Interaction**, очищается общий контекст, Inventory Manager завершает только связанную storage-сессию и уведомляет owning client. Повторная активация GA_Interact запрещена через CanActivateAbility и тот же набор тегов; сервер также проверяет его в интеракции/доступе к контейнеру.
+В native Interaction-компоненте персонажа есть редактируемый **InterruptingTags**. Defaults: State.Interaction.Blocked, State.Dead, State.Action.Dash, State.Action.Mantle, State.Action.Reload. Появление любого из них в ASC текущего Avatar событийно вызывает EndInteraction: сервер отменяет активные способности с asset-тегом **Ability.Type.Interaction**, очищается общий контекст, Inventory Manager завершает только связанную storage-сессию и уведомляет owning client. Повторная активация GA_Interact запрещена через CanActivateAbility и тот же набор тегов; сервер также проверяет его в интеракции/доступе к контейнеру.
 
 GA_Interact получает Ability.Type.Interaction в native-конструкторе. Если Blueprint переопределяет asset tags, проверить наличие этого тега. Будущие длительные интеракционные способности должны иметь этот asset-тег, поддерживать cancellation и снимать свои ресурсы на EndAbility. GA_Interact сейчас мгновенная и уже завершена после открытия Storage: отмена этой ability сама по себе не закрывает экран. Поэтому отдельно завершаются контекст и серверная сессия; только их изменение даёт UI событие InteractionClosed.
 

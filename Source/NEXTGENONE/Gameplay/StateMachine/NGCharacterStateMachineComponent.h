@@ -46,6 +46,9 @@ public:
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 private:
+	void NotifyAbilitySpecsReplicated(const UAbilitySystemComponent* ASC);
+	void UnbindAbilitySpecNotifications();
+	FDelegateHandle AbilitySpecsReplicatedHandle;
 	bool StartIfReady();
 	void NotifyStateChanged();
 	FGameplayTag GetCurrentStateTag() const;

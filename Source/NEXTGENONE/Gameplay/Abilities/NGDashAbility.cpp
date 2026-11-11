@@ -25,7 +25,6 @@ UNGDashAbility::UNGDashAbility()
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
 	ActivationOwnedTags.AddTag(TAG_NGDashActive);
-	ActivationBlockedTags.AddTag(TAG_NGPunchActive);
 	FGameplayTagContainer Tags; Tags.AddTag(TAG_NGMovementAbility); SetAssetTags(Tags);
 }
 bool UNGDashAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

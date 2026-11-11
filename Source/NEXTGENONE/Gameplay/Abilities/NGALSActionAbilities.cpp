@@ -15,7 +15,7 @@ namespace
 	{
 		const auto* Pawn = Info ? Cast<ANextgenoneCharacter>(Info->AvatarActor.Get()) : nullptr;
 		const auto* ASC = Info ? Info->AbilitySystemComponent.Get() : nullptr;
-		return Pawn && ASC && ASC->GetAvatarActor() == Pawn && Pawn->GetAbilitySystemComponent() == ASC
+		return Pawn && ASC && ASC->GetAvatarActor() == Pawn
 			&& Pawn->GetController() && !Pawn->IsDead() && Pawn->GetHealth() > 0.f
 			&& Pawn->GetMovementAction() == EALSMovementAction::None
 			&& (Pawn->GetMovementState() == EALSMovementState::Grounded || Pawn->GetMovementState() == EALSMovementState::InAir);
@@ -46,7 +46,7 @@ UNGRollAbility::UNGRollAbility()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
 	CooldownGameplayEffectClass = UNGALSActionCooldownEffect::StaticClass();
-	for (const FGameplayTag Tag : {TAG_NGDead.GetTag(), TAG_NGDashActive.GetTag(), TAG_NGMantleActive.GetTag(), TAG_NGPunchActive.GetTag(), TAG_NGReloadActive.GetTag()}) ActivationBlockedTags.AddTag(Tag);
+	for (const FGameplayTag Tag : {TAG_NGDead.GetTag(), TAG_NGDashActive.GetTag(), TAG_NGMantleActive.GetTag(), TAG_NGReloadActive.GetTag()}) ActivationBlockedTags.AddTag(Tag);
 	ActivationBlockedTags.AddTag(TAG_NGRagdollActive); ActivationBlockedTags.AddTag(TAG_NGRollActive);
 	ActivationOwnedTags.AddTag(TAG_NGRollActive);
 	FGameplayTagContainer Tags; Tags.AddTag(TAG_NGMovementAbility); SetAssetTags(Tags);
@@ -89,8 +89,12 @@ UNGRagdollAbility::UNGRagdollAbility()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
 	CooldownGameplayEffectClass = UNGALSActionCooldownEffect::StaticClass();
-	for (const FGameplayTag Tag : {TAG_NGDead.GetTag(), TAG_NGDashActive.GetTag(), TAG_NGMantleActive.GetTag(), TAG_NGPunchActive.GetTag(), TAG_NGReloadActive.GetTag()}) ActivationBlockedTags.AddTag(Tag);
-	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
+	ActivationBlockedTags.AddTag(TAG_NGDead);
+	ActivationBlockedTags.AddTag(TAG_NGDashActive);
+	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
+	ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive);
+	ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	// UI's local cancellation of movement input must not end this server-owned lifetime.
 	FGameplayTagContainer Tags; Tags.AddTag(TAG_NGRagdollAbility); SetAssetTags(Tags);
 }

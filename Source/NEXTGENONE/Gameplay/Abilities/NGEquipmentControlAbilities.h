@@ -4,6 +4,7 @@
 #include "NGEquipmentControlAbilities.generated.h"
 
 class UNGCombatComponent;
+class UNGEquipmentComponent;
 
 /** Local input lifetime; Combat retains shot requests and the server validates each shot. */
 UCLASS(Blueprintable)
@@ -18,7 +19,13 @@ public:
 		FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bCancelled) override;
 private:
 	UFUNCTION() void HandleInputReleased(float TimeHeld);
+	bool HasCurrentWeapon() const;
+	UFUNCTION() void ContinuePrimaryInput();
+	void EquipmentChanged();
 	TWeakObjectPtr<UNGCombatComponent> ActiveCombat;
+	TWeakObjectPtr<UNGEquipmentComponent> ActiveEquipment;
+	FDelegateHandle EquipmentChangedHandle;
+	int32 PrimaryRevision = 0;
 };
 
 /** Requests item activation to equip, or the existing validated unequip RPC. */

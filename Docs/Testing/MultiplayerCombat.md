@@ -101,7 +101,7 @@ Defaults основного проекта и пользовательские �
 - Новый `Tools/Testing/Run-NGCombatSmoke.ps1`.
 - Обновлён `Docs/Architecture/GameplayFoundation.md`, создан `Docs/Testing/MultiplayerCombat.md`.
 
-`LyraAnalysis.md` сохранён как утверждённое исследование. Прочие изменения Git status существовали до начала реализации; они не являются частью этого прохода. Логи и build artifacts находятся в Saved/Binaries/Intermediate и не предназначены для source commit.
+Прочие изменения Git status существовали до начала реализации; они не являются частью этого прохода. Логи и build artifacts находятся в Saved/Binaries/Intermediate и не предназначены для source commit.
 
 ## NGJumpAbility — реализация 2026-11-01, runtime не проверен
 
@@ -135,21 +135,6 @@ Defaults основного проекта и пользовательские �
 
 Наблюдённая ошибка после открытия редактора: логи NGAbilityEditor.log и NEXTGENONE.log содержат PIE crash в ALSMantleComponent::BeginPlay из-за потерянного MantleTimeline после замены SCS class. Агент не инициировал PIE. Добавлены восстановление ссылки перед ALS BeginPlay и исправление миграции nested subobject; ассет пересохранён, финальный UBT PASS, NGSetup -AbilitiesOnly exit 0 (NG_MANTLE_TIMELINE: MantleTimeline). Повторный PIE после исправления не выполнялся; подтверждение устранения этого краша — первый обязательный пункт будущего согласованного тестового этапа. Editor MCP после падения не был доступен; редактор оставлен закрытым.
 
-## GA_Punch — 2026-11-01, runtime ожидает апрува
-
-Выполнена только реализация и сборка: UBT Editor Development PASS, без compiler diagnostics (NGPunchBuild.log); создание/компиляция ассетов NGSetup -PunchOnly exit 0, 0 errors, 10 warnings (NGPunchAssets.log). В DA_PlayerAbilities добавлена GA_Punch без замены остальных записей, исходный набор скопирован в Saved/RefactorBackup/Abilities. PIE/сетевые/автоматические gameplay tests этого прохода не запускались, Editor MCP при закрытом редакторе недоступен.
-
-После отдельного апрува проверить в согласованном объёме:
-
-- Два клиента + сервер: U, подойти к противнику, ЛКМ. Серверное попадание должно изменить HP 100→80; наблюдатели и WBP_HealthPanel видят обновление. Цель смещается от атакующего, collision не пропускает через стену.
-- Промах, стенка между игроками, цель позади, несколько игроков друг за другом: не более одной цели, не сквозь препятствия. Capsule sweep имеет объём, это не точное попадание по костям кулака.
-- Spam/cancel/equip/unequip не обходят 0.55-секундный cooldown; во время Windup повторная активация и конфликтующие действия не запускаются.
-- Death/unpossess/respawn атакующего до момента попадания: старый Pawn не наносит отложенный удар. Corpse не повреждает новую жизнь, смертельный удар не включает движение мёртвой цели.
-- Попадание в цель во время Dash/Mantle: movement ability отменяется, root motion не подавляет knockback и старый mantle timeline не возвращает Walking.
-- При экипировке ЛКМ стреляет; после U — бьёт. Косметические delegates/опциональный PunchMontage видны обоим клиентам; урон не зависит от монтажа/AnimNotify.
-
-Непроверенные ограничения: коррекции owning client после server LaunchCharacter, latency, packet loss, ragdoll, произвольная gravity, точная синхронизация выбранного пользователем montage с Windup. Предсказание/rewind удара и физическое отбрасывание corpse не реализованы. Требуемое ручное действие для анимации — назначить совместимый PunchMontage в GA_Punch; без него игровая логика остаётся доступна, но взмах кулака не анимирован.
-
 ## Уточнение Air Dash — 2026-11-01
 
 Деш изменён по запросу пользователя: активация только при ALS InAir и CharacterMovement.IsFalling, с повторной проверкой Falling перед Commit. Root motion сохраняет горизонтальный импульс после окончания через MaintainLastRootMotionVelocity; ограничение до walking MaxSpeed снято. Gravity продолжает действовать. Кнопка Q, скорость, длительность и cooldown остаются прежними. Вертикальный рывок и управление направлением WASD не добавлены.
@@ -158,9 +143,9 @@ Defaults основного проекта и пользовательские �
 
 В LiveCodingConsole также есть диагностические сообщения Cannot find image section .voltbl; несмотря на них, итоговый статус — Patch creation successful и Live coding succeeded. Копия вывода сохранена как Saved/Logs/NGAirDashLiveCodingConsole.log. Это не подтверждение runtime-результата.
 
-## Lyra inventory / pistol / rifle — 2026-11-01, до тестового апрува
+## Inventory / pistol / rifle — 2026-11-01, до тестового апрува
 
-Добавлена реализация переноса, описанная в Docs/Research/LyraPort.md. UBT Editor Development и обработка ассетов NGSetup -LyraWeapons выполнены; логи NGLyraPortBuild.log / NGLyraWeaponAssets.log. Командлет exit 0, 0 errors / 10 warnings, содержит NG_INVENTORY_HFSM_BOUND и NG_LYRA_WEAPONS_SAVED. Первоначальная сборка порта имела deprecation warning NonInstanced и затем недостающий SlateCore link symbol; оба исправлены. Итоговый compiler result фиксируется в NGLyraPortBuild.log. Игровые тесты не запускались, исторические Combat PASS не подтверждают этот порт.
+Реализация инвентаря и оружия добавлена 2026-11-01. UBT Editor Development и адресный авторинг ассетов выполнены; исторические логи находятся в Saved/Logs. Игровые тесты этого прохода не запускались.
 
 После отдельного апрува согласовать и выполнить:
 
@@ -205,9 +190,9 @@ Connection UI pending: direct 127.0.0.1 / LAN address join, invalid address reje
 Implemented physics-body projectile collision, GAS damage followed by multicast physical-animation recoil and per-weapon impulse. Full offline NEXTGENONEEditor compilation passed; asset authoring uses NGSetup -BodyImpactOnly. Logs: Saved/Logs/NGBodyImpactBuild.log and NGBodyImpactAssets.log. No PIE, gameplay, multiplayer, ragdoll or smoke tests executed.
 
 Only after separate approval: one server/two clients, visible reaction and HP reduction for arms/legs/torso/head; no damage from a capsule-only miss; wall occlusion; multiple shotgun pellets and overlapping/repeated reactions; fade back to ALS without lasting simulation or capsule displacement; existing ALS ragdoll, mantle and get-up; lethal hit and old corpse/respawn rejection; server bone pose while off-screen; UI HP updates. Visual strength, constraint stability, dedicated-server physics/body hit registration, other meshes/Physics Assets, bandwidth/performance, latency/loss and custom gravity are unverified. Do not initiate these runs without approval.
-## Lyra particles — 2026-11-01
+## Weapon particles — 2026-11-01
 
-Executed: C++ editor compilation and headless Niagara/Blueprint asset compilation/import. No gameplay/rendering/PIE/network tests. Effects include muzzle, shell ejection, ballistic movement-driven tracer, default concrete and character-sparks impacts. Glass imported for manual assignment, not auto-surface routing. Compile diagnostics and disabled-emitter handling are described in Docs/Gameplay/LyraWeaponVFX.md; do not interpret NullRHI ReadyToRun=false as a rendered test or claim that LWC warnings were eliminated.
+Executed: C++ editor compilation and headless Niagara/Blueprint asset compilation/import. No gameplay/rendering/PIE/network tests. Effects include muzzle, shell ejection, ballistic movement-driven tracer, default concrete and character-sparks impacts. Glass imported for manual assignment, not auto-surface routing. Compile diagnostics and disabled-emitter handling are described in Docs/Gameplay/WeaponVFX.md; do not interpret NullRHI ReadyToRun=false as a rendered test or claim that LWC warnings were eliminated.
 
 Pending after explicit approval: pistol/rifle/shotgun muzzle sockets/direction, shell mesh/scale/ejection, tracer alignment with arc and impact, multiple pellets, character vs world impact placement, switching weapons while bullets are in flight, cleanup after death/range/EndPlay and Runtime travel, no Niagara spawning on dedicated server, client visibility/relevance and high-fire-rate GPU/component budget. LWC, shader/cook, packet loss and latency need separate scope. No such runs were started.
 ## Tab menu removal / settings diagnostics — 2026-11-01
@@ -286,7 +271,7 @@ Simplification requested by user: bHasBlueprintInputEvents and State/Component R
 
 Inventory window simplification (2026-11-03): NGInventoryWindowMounter removed; InventoryStateComponent no longer uses UIWidgetMounter, project Controller, input actions/subsystems/policies or runtime /Game fallback paths. State Enter/Exit owns the configured NGInventoryPanel window. Explicit Close/RequestClose removes it and queues the configured named FSM event; state Exit/Abort does not emit another close event. Panel-native key routing removed. Existing item equip/drop transport is unchanged. User will configure Blueprint state placement, PanelClass, CloseEvent, input policy/actions/focus and window close button. No Blueprint authoring, PIE or tests initiated by the agent for this package.
 
-Setup cleanup (2026-11-03): NGSettingsAssets.cpp deleted; NGSetupCommandlet reduced to explicit ImportWeaponVFX/WeaponVFXOnly dispatch. Historical automatic setup, map/default rewriting and one-time asset migrations removed. Earlier NGSetup command lines in this document are historical evidence, not supported current operations. Full offline NEXTGENONEEditor Win64 Development build PASS, UBT exit 0, no compiler diagnostics (Saved/Logs/AgentBuild.log). No commandlet runs, Blueprint edits, PIE or tests performed for this cleanup. Source backup: Saved/SetupCleanup/20261103-225303/.
+Setup cleanup (2026-11-03): NGSettingsAssets.cpp deleted; NGSetupCommandlet reduced to explicit WeaponVFXOnly dispatch. Historical automatic setup, map/default rewriting and one-time asset migrations removed. Earlier NGSetup command lines in this document are historical evidence, not supported current operations. Full offline NEXTGENONEEditor Win64 Development build PASS, UBT exit 0, no compiler diagnostics (Saved/Logs/AgentBuild.log). No commandlet runs, Blueprint edits, PIE or tests performed for this cleanup. Source backup: Saved/SetupCleanup/20261103-225303/.
 
 Inventory mounting revision (2026-11-03): InventoryStateComponent now derives from UIWidgetMounterComponent and uses its WidgetClass/PlaceholderID/Layer and mount/demount lifecycle. Own PanelClass/ZOrder/window creation removed. Close only queues CloseEvent; state Exit/Abort demounts through the base class and unbinds the panel delegate. No project Controller or input-system dependency added. Blueprint setup remains manual. Full offline NEXTGENONEEditor Development build PASS, UBT exit 0 (AgentBuild.log); no Blueprint authoring or tests performed.
 

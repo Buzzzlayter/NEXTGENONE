@@ -4,7 +4,7 @@ Implemented 2026-11-01. No gameplay tests executed; runtime/network results rema
 
 ## Weapon path
 
-GA_Fire remains ServerOnly. Combat validates the current Pawn/ASC, equipment/item membership, action tags, ammo and finite weapon parameters. The persistent PlayerState fire limiter is shared across reactivation, equip and weapon changes. The server uses an eye trace to choose an initial aim point, checks its stable character-relative launch anchor against walls, prepares all pellets, then consumes one magazine round. That aiming trace does not deal damage. Physical projectile collision is the only ranged damage path.
+GA_Fire remains ServerOnly. The ability owns required/blocked state tags and commits a GAS cooldown effect (`Cooldown.Combat.Fire`) with the weapon's FireInterval. The effect lives on the PlayerState ASC and survives ability reactivation, unequip and weapon changes; there is no separate NextFireTime timer in ASC or Combat. Empty magazines and invalid definitions are rejected before commit. A committed attempt that later fails geometric/spawn validation keeps its cooldown and consumes no ammunition. Combat validates the current Pawn/ASC, equipment/item membership, ammo and finite weapon parameters. The server uses an eye trace to choose an initial aim point, checks its stable character-relative launch anchor against walls, prepares all pellets, then consumes one magazine round. That aiming trace does not deal damage. Physical projectile collision is the only ranged damage path.
 
 BP_BallisticProjectile derives from ANGBallisticProjectile with UNGBallisticMovement (UProjectileMovementComponent subclass). Swept sphere collision and forced substeps integrate initial velocity, gravity and linear drag. Gravity direction is sampled from CharacterMovement on launch; gravity magnitude uses world gravity times weapon GravityScale. Velocity/drop/drag are simulated server-side; replicated movement plus cosmetic client integration shows the projectile. The projectile ignores its shooter and uses a separate BallisticProjectile object channel so projectiles ignore each other and world pickups remain non-blocking.
 
@@ -20,9 +20,9 @@ Magazine ammo remains a stat on each weapon instance. Reserve is now the count o
 
 Starter guns and their initial reserve items are granted once per PlayerState, not replenished on every Pawn/bind. The existing debug F equip fallback is still a development tool. Selection 1/2/3 filters weapon items so ammo stacks do not displace gun selection.
 
-## Lyra assets
+## Imported weapon assets
 
-The existing pistol/rifle are retained. Added DA_Shotgun and ID_Shotgun using actual local Lyra Shotgun mesh, skeleton/physics asset, material/textures and weapon fire/reload sequences. Default shotgun: eight pellets, nine damage per pellet, 4-degree cone, 350 m/s, eight-shell magazine. Pistol and rifle use individual projectile speeds and matching ammo definitions. Imported individual Lyra shot SoundWaves for all three guns. These are native adaptations, not copies of Lyra's damage/inventory framework or its main-menu graph. No ALS plugin/AnimBP edits.
+The existing pistol/rifle are retained. Added DA_Shotgun and ID_Shotgun using imported shotgun mesh, skeleton/physics asset, material/textures and weapon fire/reload sequences. Default shotgun: eight pellets, nine damage per pellet, 4-degree cone, 350 m/s, eight-shell magazine. Pistol and rifle use individual projectile speeds and matching ammo definitions. Imported individual shot SoundWaves for all three guns. These are native adaptations, not copies of an external damage/inventory framework or its main-menu graph. No ALS plugin/AnimBP edits.
 
 ## Build and assets
 
@@ -32,9 +32,9 @@ Editor C++ build: PASS, no compiler diagnostics. NGSetup -BallisticsOnly: exit 0
 
 New: Gameplay/NGBallisticProjectile.h/.cpp, NGConnectionSubsystem.h/.cpp, NGConnectionPanel.h/.cpp (under Source/NEXTGENONE); Source/NEXTGENONEServer.Target.cs; Scripts/StartDedicatedServer.ps1, StartDedicatedServer.sh, PackageDedicatedServer.ps1; Config/Steam.example.ini; this document and Docs/Networking/DedicatedServer.md.
 
-Updated: Gameplay/NGCombat.h/.cpp, NextgenonePlayerState.h, NextgenonePlayerController.h/.cpp, NGSettingsPanel.h/.cpp, NGSetupCommandlet.cpp, Inventory/NGInventoryPanel.cpp; Config/DefaultEngine.ini; architecture, multiplayer testing and LyraPort docs.
+Updated: Gameplay/NGCombat.h/.cpp, NextgenonePlayerState.h, NextgenonePlayerController.h/.cpp, NGSettingsPanel.h/.cpp, NGSetupCommandlet.cpp, Inventory/NGInventoryPanel.cpp; Config/DefaultEngine.ini; architecture, multiplayer testing documentation.
 
-New project assets: Gameplay/Weapons/BP_BallisticProjectile, DA_Shotgun; Gameplay/Inventory/ID_Shotgun, ID_Ammo_Pistol, ID_Ammo_Rifle, ID_Ammo_Shotgun; Gameplay/UI/WBP_ServerConnection. Updated existing weapon definitions, Pistol/Rifle item fragments, Character, settings/inventory UI and fire/reload abilities. Added 11 selected Lyra Shotgun assets plus three SoundWaves (see manifest). Main map and project GameMode defaults were not switched.
+New project assets: Gameplay/Weapons/BP_BallisticProjectile, DA_Shotgun; Gameplay/Inventory/ID_Shotgun, ID_Ammo_Pistol, ID_Ammo_Rifle, ID_Ammo_Shotgun; Gameplay/UI/WBP_ServerConnection. Updated existing weapon definitions, Pistol/Rifle item fragments, Character, settings/inventory UI and fire/reload abilities. Added 11 selected shotgun assets plus three SoundWaves (see manifest). Main map and project GameMode defaults were not switched.
 # Прицеливание от камеры (2026-11-04)
 
 ## Удаление встроенного тестового оружия
@@ -47,7 +47,7 @@ Character больше не создаёт TestWeapon и не загружает
 
 `UNGAimAbility` — LocalPredicted equipment ability. Оружие выдаёт её по `WeaponDefinition.AimAbilityClass` (по умолчанию native UNGAimAbility) с Input.Aim, снимает вместе с Fire/Reload по своим handles. Не добавлять второй экземпляр в Alive. SourceObject — существующий CombatComponent; проверяется текущий ASC Avatar и экипировка.
 
-На активации CommitAbility и Infinite `UNGAimingEffect` дают State.Weapon.Aiming. Effect нужен для репликации состояния также simulated proxies, независимо от настройки репликации ActivationOwnedTags. Отпускание через WaitInputRelease завершает способность и снимает только её effect handle. Снятие оружия/UnPossess/смерть отменяют её существующим lifecycle; появление blocked tags Dash/Mantle/Punch/Reload/Dead завершает активный ADS. После отмены нужно отпустить и нажать ввод заново. При смене Avatar Combat отписывается от старого ASC.
+На активации CommitAbility и Infinite `UNGAimingEffect` дают State.Weapon.Aiming. Effect нужен для репликации состояния также simulated proxies, независимо от настройки репликации ActivationOwnedTags. Отпускание через WaitInputRelease завершает способность и снимает только её effect handle. Снятие оружия/UnPossess/смерть отменяют её существующим lifecycle; появление blocked tags Dash/Mantle/Reload/Dead завершает активный ADS. После отмены нужно отпустить и нажать ввод заново. При смене Avatar Combat отписывается от старого ASC.
 
 `Combat.IsAiming` читает GAS-тег только для текущего Avatar и экипировки. OnAimChanged/ALS presentation обновляются от tag event. Отдельные replicated bAiming и ServerSetAiming удалены. `RequestAim(bool)` и Character.AimAction оставлены только как input→GAS переходники, без собственного состояния или сетевого протокола.
 
@@ -55,7 +55,7 @@ Blueprint-сетап пользователя: в CharacterDefinition.InputConfi
 
 Fire остаётся ServerOnly со свежим лучом в ServerRequestFire, серверным снарядом/уроном/патронами/rate limit. ADS не является условием выстрела. Разброс и текущая точность не изменены: возможность точного попадания от бедра пока сохраняется по явному решению пользователя. Сборка и runtime/сетевая работа нового GAS lifecycle не проверены; Blueprint и input assets агент не менял.
 
-Уточнение по Lyra: `LyraGameplayAbility_RangedWeapon.cpp` использует клиентский TargetData и проектирование начала луча вперёд к плоскости Pawn (`GetTargetingTransform`). В просмотренной локальной версии `OnTargetDataReadyCallback` содержит `bIsTargetDataValid=true`; готовой строгой серверной валидации там нет. Мы сохраняем собственный серверный trace и физический снаряд.
+Сервер самостоятельно проверяет направление выстрела и создаёт физический снаряд; клиентский TargetData не определяет попадание и урон.
 
 `NGAimComponent.GetTargetingOrigin` теперь одинаково используется локальным прицеливанием и серверным выстрелом: переносит начало вдоль того же луча вперёд до Pawn, сохраняя экранное направление. Валидация камеры дополнительно делает sphere sweep с origin/radius/channel исходного `AALSBaseCharacter.GetThirdPersonTraceParams`; исходный eye-to-camera trace также сохранён. ALS plugin и Camera AnimBP не изменены. Это проверка столкновений и границ доверия, а не точное серверное восстановление камеры: pivot/rotation lag и offsets исходной камеры зависят от AnimBP-кривых, плечо в исходном ALS локальное. Произвольная камера внутри разрешённого объёма всё ещё возможна. Для более строгой политики нужен общий серверно-доступный профиль камеры с синхронизированным выбором режима/плеча, а не запуск Camera AnimBP на dedicated server.
 

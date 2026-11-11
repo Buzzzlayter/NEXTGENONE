@@ -35,6 +35,36 @@ def asset_snapshot(asset):
             for grant in asset.get_editor_property("abilities")
         ]
         result["effects"] = [effect.get_path_name() if effect else None for effect in asset.get_editor_property("effects")]
+    if result["class"].endswith(".NGWeaponDefinition"):
+        result["appearance"] = {
+            name: value.get_path_name() if value else None
+            for name in ("mesh", "skeletal_mesh")
+            for value in (asset.get_editor_property(name),)
+        }
+        result["appearance"]["attach_socket"] = str(asset.get_editor_property("attach_socket"))
+        result["appearance"]["visual_transform"] = asset.get_editor_property("visual_transform").export_text()
+    if isinstance(asset, __import__("unreal").Blueprint):
+        unreal = __import__("unreal")
+        default = unreal.get_default_object(asset.generated_class())
+        if isinstance(default, unreal.NGInventoryItemDefinition):
+            result["item"] = {
+                "display_name": str(default.get_editor_property("display_name")),
+                "max_stack_size": default.get_editor_property("max_stack_size"),
+                "item_tags": default.get_editor_property("item_tags").export_text(),
+                "fragments": [],
+            }
+            for fragment in default.get_editor_property("fragments"):
+                if not fragment:
+                    result["item"]["fragments"].append(None)
+                    continue
+                entry = {"class": fragment.get_class().get_path_name()}
+                # Some non-BlueprintType fragment classes use a base Python wrapper;
+                # their native property names remain accessible without snake-case mapping.
+                field = {"NGInventoryFragment_Equipment": "Definition", "NGInventoryFragment_ItemActions": "ActivationAbility"}.get(entry["class"].split(".")[-1])
+                if field:
+                    value = fragment.get_editor_property(field)
+                    entry[field] = value.get_path_name() if value else None
+                result["item"]["fragments"].append(entry)
     return result
 
 
@@ -47,7 +77,17 @@ def editor_phase():
     report = {"phase": phase, "success": False, "assets": {}, "errors": []}
     try:
         for redirect in manifest["redirects"]:
-            if not unreal.load_object(None, redirect["new"]):
+            kind = redirect.get("kind")
+            if kind in ("GameName", "Package"):
+                destination = unreal.load_package(redirect["new"])
+            elif kind == "Property":
+                owner, name = redirect["new"].rsplit(".", 1)
+                destination = unreal.load_class(None, owner)
+                if destination:
+                    unreal.get_default_object(destination).get_editor_property(name)
+            else:
+                destination = unreal.load_object(None, redirect["new"])
+            if not destination:
                 raise RuntimeError("Missing destination type: " + redirect["new"])
         assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
         for entry in manifest["assets"]:
@@ -61,7 +101,7 @@ def editor_phase():
         if phase == "verify":
             baseline = json.loads(manifest_path.with_name("resave.json").read_text(encoding="utf-8"))
             if report["assets"] != baseline["assets"]:
-                raise RuntimeError("Asset classes, Blueprint parents or Ability Set grants differ after redirect removal")
+                raise RuntimeError("Asset classes, Blueprint parents, grants, item fragments or weapon appearance differ after redirect removal")
         report["success"] = True
     except Exception as error:
         report["errors"].append(str(error))
@@ -73,8 +113,11 @@ def editor_phase():
 
 
 def process_running():
-    output = subprocess.check_output(["tasklist", "/FI", "IMAGENAME eq UnrealEditor.exe", "/FO", "CSV", "/NH"])
-    return b"unrealeditor.exe" in output.lower()
+    output = subprocess.check_output([
+        "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+        "Get-Process | Where-Object { $_.ProcessName -eq 'UnrealEditor' } | Select-Object -ExpandProperty Id",
+    ])
+    return bool(output.strip())
 
 
 def contains_name(data, value):
@@ -125,7 +168,9 @@ def run_editor(editor, project, manifest, phase):
     env["NG_CORE_REDIRECT_MANIFEST"] = str(manifest)
     env["NG_CORE_REDIRECT_PHASE"] = phase
     command = [str(editor), str(project), "-run=pythonscript", "-script=" + str(Path(__file__).resolve()),
-               "-unattended", "-nop4", "-NullRHI", "-nosound", "-NoLiveCoding", "-ddc=InstalledNoZenLocalFallback", "-abslog=" + str(log)]
+               "-unattended", "-nop4", "-SCCProvider=None", "-NullRHI", "-nosound", "-NoLiveCoding", "-NoZenAutoLaunch",
+               "-ddc=InstalledNoZenLocalFallback", "-LocalDataCachePath=" + str(project.parent / "Saved/DerivedDataCache"),
+               "-abslog=" + str(log)]
     with manifest.with_name(phase + "-console.log").open("w", encoding="utf-8") as output:
         completed = subprocess.run(command, env=env, stdout=output, stderr=subprocess.STDOUT)
     report_path = manifest.with_name(phase + ".json")
@@ -133,7 +178,8 @@ def run_editor(editor, project, manifest, phase):
     if completed.returncode or not report.get("success"):
         raise RuntimeError(phase + " failed; see " + str(log) + "; " + str(report.get("errors", [])))
     # A non-null Blueprint alone does not prove all imports resolved. Reject scoped linker errors too.
-    target_names = [redirect["old"].split(".")[-1] for redirect in json.loads(manifest.read_text(encoding="utf-8"))["redirects"]]
+    target_names = [redirect["old"].split(".")[1] if redirect.get("kind") == "Property" else redirect["old"].split(".")[-1]
+                    for redirect in json.loads(manifest.read_text(encoding="utf-8"))["redirects"]]
     for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
         if re.search(r"(?i)(error:|failed to load|unknown structure|could not find|failed to find|verifyimport)", line) and any(name in line for name in target_names):
             raise RuntimeError("Unresolved migration reference: " + line)
@@ -143,13 +189,34 @@ def run_editor(editor, project, manifest, phase):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", type=Path, default=Path.cwd() / "NEXTGENONE.uproject")
-    parser.add_argument("--old-module", required=True)
-    parser.add_argument("--new-module", required=True)
+    parser.add_argument("--old-module")
+    parser.add_argument("--new-module")
+    parser.add_argument("--plan-file", type=Path, help="Explicit reviewed plan for mixed Class/Struct/Property/Package/GameName redirects")
     parser.add_argument("--engine-root", type=Path)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     project = args.project.resolve(strict=True)
-    manifest_data = plan(project, args.old_module, args.new_module)
+    if args.plan_file:
+        manifest_data = json.loads(args.plan_file.read_text(encoding="utf-8"))
+        if Path(manifest_data["project"]).resolve() != project or manifest_data.get("plugin_candidates"):
+            raise RuntimeError("Plan project mismatch or unresolved plugin candidates")
+        config = project.parent / "Config/DefaultEngine.ini"
+        if Path(manifest_data["config"]).resolve() != config:
+            raise RuntimeError("Plan config mismatch")
+        lines = set(config.read_text(encoding="utf-8-sig").splitlines())
+        if not manifest_data["redirects"] or any(r["line"] not in lines for r in manifest_data["redirects"]):
+            raise RuntimeError("Redirect plan is stale")
+        for entry in manifest_data["assets"]:
+            file = (project.parent / entry["file"]).resolve(strict=True)
+            if not file.is_relative_to(project.parent / "Content") or file.suffix not in (".uasset", ".umap"):
+                raise RuntimeError("Plan asset outside project Content: " + str(file))
+            expected = "/Game/" + file.relative_to(project.parent / "Content").with_suffix("").as_posix()
+            if entry["package"] != expected:
+                raise RuntimeError("Plan package mismatch: " + entry["package"])
+    else:
+        if not args.old_module or not args.new_module:
+            parser.error("Specify --old-module and --new-module, or --plan-file")
+        manifest_data = plan(project, args.old_module, args.new_module)
     print("Plan: redirects=" + str(len(manifest_data["redirects"])) + ", assets=" + str(len(manifest_data["assets"])), flush=True)
     if not args.apply:
         for entry in manifest_data["assets"]:

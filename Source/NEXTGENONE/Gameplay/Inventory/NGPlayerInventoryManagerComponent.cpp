@@ -13,6 +13,8 @@
 #include "Gameplay/Interaction/NGItemPickup.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Inventory/NGInventoryFragment_ItemActions.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
+#include "Gameplay/Equipment/NGEquipmentDefinition.h"
 
 UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -194,7 +196,7 @@ void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(
 	if (!CanAccessInventory(Target)) return;
 	if (!IsValid(ExpectedItem) || Source->GetItemAtSlot(SourceSlot) != ExpectedItem || Target->GetItemAtSlot(TargetSlot) != ExpectedTarget)
 	return;
-	Source->TransferTo(Target, SourceSlot, TargetSlot, Amount);
+	ExecuteTransferOnServer(Source, SourceSlot, Target, TargetSlot, Amount);
 }
 
 void UNGPlayerInventoryManagerComponent::GrantStarterInventory()
@@ -215,11 +217,13 @@ void UNGPlayerInventoryManagerComponent::GrantStarterInventory()
 	if (Failures) UE_LOG(LogTemp, Error, TEXT("%s: starter inventory partially granted (%d failures); no automatic retry."), *GetPathName(), Failures);
 }
 
-bool UNGPlayerInventoryManagerComponent::RequestActivationItem(UNGInventoryItemInstance* Item)
+bool UNGPlayerInventoryManagerComponent::RequestActivationItem(UNGInventoryItemInstance* Item, UNGInventoryManagerComponent* Source)
 {
 	if (!IsLocalController() && !GetOwner()->HasAuthority()) return false;
-	if (GetOwner()->HasAuthority()) ServerActivationItem_Implementation(GetInventoryPawn(), Item, GetSlotIndex(Item));
-	else ServerActivationItem(GetInventoryPawn(), Item, GetSlotIndex(Item));
+	if (!Source) Source = this;
+	if (!IsValid(Source)) return false;
+	if (GetOwner()->HasAuthority()) ServerActivationItem_Implementation(GetInventoryPawn(), Source, Item, Source->GetSlotIndex(Item));
+	else ServerActivationItem(GetInventoryPawn(), Source, Item, Source->GetSlotIndex(Item));
 	return true;
 }
 
@@ -230,10 +234,23 @@ bool UNGPlayerInventoryManagerComponent::RequestActivationSlot(int32 ActionSlot)
 	return Item && RequestActivationItem(Item);
 }
 
-void UNGPlayerInventoryManagerComponent::ServerActivationItem_Implementation(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 ExpectedSlot)
+void UNGPlayerInventoryManagerComponent::ServerActivationItem_Implementation(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* Item, int32 ExpectedSlot)
 {
 	if (!ExpectedPawn || ExpectedPawn != GetInventoryPawn()) return;
-	if (!IsValid(Item) || ExpectedSlot < 0 || GetItemAtSlot(ExpectedSlot) != Item) return;
+	if (!CanAccessInventory(Source) || !IsValid(Item) || ExpectedSlot < 0 || Source->GetItemAtSlot(ExpectedSlot) != Item) return;
+	if (Source != this)
+	{
+		// External secondary action is a transfer into the item's typed equipment slot.
+		const auto* Definition = UNGEquipmentComponent::GetDefinition(Item);
+		if (!Definition || !Definition->SlotTag.MatchesTag(TAG_NGSlotEquipment)) return;
+		const int32 Destination = FindSlotByTag(Definition->SlotTag, 0);
+		if (Destination == INDEX_NONE || !FMath::IsFinite(InventoryOperationInterval)) return;
+		const double Now = GetWorld()->GetTimeSeconds();
+		if (Now < NextOperationTime) return;
+		NextOperationTime = Now + FMath::Max(.01f, InventoryOperationInterval);
+		ExecuteTransferOnServer(Source, ExpectedSlot, this, Destination, 0);
+		return;
+	}
 	ActivateItemOnServer(Item);
 }
 
@@ -295,4 +312,26 @@ ANGItemPickup* UNGPlayerInventoryManagerComponent::DropItemOnServer(APawn* Pawn,
 	Pickup->PublishDrop();
 	NotifyInventoryChanged();
 	return Pickup;
+}
+
+bool UNGPlayerInventoryManagerComponent::MoveEquipmentItemOnServer(UNGInventoryItemInstance* Item, int32 TargetSlot)
+{
+    return ExecuteTransferOnServer(this, GetSlotIndex(Item), this, TargetSlot, 0);
+}
+bool UNGPlayerInventoryManagerComponent::ExecuteTransferOnServer(UNGInventoryManagerComponent* Source, int32 SourceSlot,
+    UNGInventoryManagerComponent* Target, int32 TargetSlot, int32 Amount)
+{
+    auto* Pawn = GetInventoryPawn();
+    const auto* Interaction = Pawn ? Pawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+    auto* Equipment = Pawn ? Pawn->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
+    if (!GetOwner()->HasAuthority() || !Interaction || !Interaction->IsCurrentInteractor() || !Equipment
+        || !CanAccessInventory(Source) || !CanAccessInventory(Target)) return false;
+    auto* Item = Source->GetItemAtSlot(SourceSlot); auto* Other = Target->GetItemAtSlot(TargetSlot);
+    if (!Item) return false;
+    FString Error;
+    if (Target == this && (!Equipment->PreflightPlacement(Item, TargetSlot, Error)
+        || (GetSlotTag(TargetSlot).MatchesTag(TAG_NGSlotEquipment) && (Source->GetCount(Item) != 1 || Amount > 1)))) return false;
+    if (Source == this && Other && Target == this && !Equipment->PreflightPlacement(Other, SourceSlot, Error)) return false;
+    // Cross-container occupied-slot refusal remains the existing inventory policy.
+    return Source->TransferTo(Target, SourceSlot, TargetSlot, Amount);
 }

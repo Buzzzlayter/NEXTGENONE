@@ -4,14 +4,14 @@
 
 | Definition в /Game/Gameplay/Inventory | Текстура относительно /Game/VisualSandbox/2DAssets |
 |---|---|
-| ID_Pistol | WeaponCards/T_Lyra_Pistol |
-| ID_Rifle | WeaponCards/T_Lyra_Rifle |
-| ID_Shotgun | WeaponCards/T_Lyra_Shotgun |
 | ID_Ammo_Pistol | Items/T_Round_9mm |
 | ID_Ammo_Rifle | Items/T_Round_7_62 |
 | ID_Ammo_Shotgun | Items/T_Round_12_Gauge |
 | ID_Medkit | Items/T_IFAK |
 | ID_Money | Items/T_Mone_Icon |
+
+Для ID_Pistol, ID_Rifle и ID_Shotgun назначены соответствующие карточки оружия из
+`WeaponCards/`; точная ссылка хранится в поле Icon каждого ItemDefinition.
 
 ID_Medkit и ID_Money — Blueprint-наследники общего NGInventoryItemDefinition, без equipment/stat fragments. MaxStackSize: аптечка 10, деньги 10000; значения редактируются в defaults. Деньги представлены обычным переносимым loot-стеком; применение аптечки как GAS-способности в этот пакет не входит.
 

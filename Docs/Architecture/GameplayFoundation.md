@@ -4,7 +4,7 @@
 
 Baseline: 2026-10-31, утверждён пользователем 2026-11-01. GAS и Combat Foundation реализованы. Ниже сохранено исходное обоснование; фактическая реализация и уточнения перечислены в разделе 13. Результаты запуска: [MultiplayerCombat.md](../Testing/MultiplayerCombat.md).
 
-Исследование: [LyraAnalysis.md](../Research/LyraAnalysis.md). Ветка: `research/gameplay-foundation`. Существующие незакоммиченные изменения пользователя сохранены. При первоначальной реализации ALS plugin и defaults карт не менялись. Последующие изменения сетевой границы ALS разрешены пользователем и описаны в [ALSAuthority.md](../Networking/ALSAuthority.md).
+Ветка: `research/gameplay-foundation`. Существующие незакоммиченные изменения пользователя сохранены. При первоначальной реализации ALS plugin и defaults карт не менялись. Последующие изменения сетевой границы ALS разрешены пользователем и описаны в [ALSAuthority.md](../Networking/ALSAuthority.md).
 
 ## 1. Аудит исходного состояния до реализации (2026-10-31)
 
@@ -13,7 +13,7 @@ Baseline: 2026-10-31, утверждён пользователем 2026-11-01. 
 | Область | Установленный факт | Значение для интеграции |
 |---|---|---|
 | Модули | `.uproject`: NEXTGENONE, UIModule, ALSv4_Community | Памятка об одном модуле устарела; новый модуль пока не нужен |
-| Движок | EngineAssociation 5.8; локальный Build.version: 5.8.0 | API проверять по `S:/UE_5.8`, а не по Lyra 5.4 |
+| Движок | EngineAssociation 5.8; локальный Build.version: 5.8.0 | API проверять по `S:/UE_5.8`, с учётом версии проекта |
 | Карта и режим | DefaultEngine.ini выбирает ALS_DemoLevel и ALS_GameMode_SP | Это defaults; World Settings конкретной карты могут переопределять режим |
 | ALS GameMode CDO | Pawn ALS_CharacterBP_C, Controller ALS_Player_Controller_C, обычные Engine.PlayerState/GameStateBase/HUD | GAS и существующий HUD сюда ещё не подключены |
 | Character | ALS_CharacterBP → `/Script/ALSV4_CPP.ALSCharacter` | Нужен собственный производный персонаж с GAS hooks |
@@ -61,7 +61,7 @@ Baseline: 2026-10-31, утверждён пользователем 2026-11-01. 
 
 Mixed означает режим репликации Gameplay Effects; это не автоматическая настройка всех атрибутов и не OwnerOnly для любого поля. Health/MaxHealth получают явный RepNotify с GAS macro. В первом срезе это означает видимость здоровья relevant наблюдателям; если дизайн требует скрытого здоровья, позже нужен отдельный owner-only путь, а не надежда на Mixed.
 
-PlayerState должен иметь корректный owner Controller для GAS owning connection. Частоту его обновлений измерять; не копировать Lyra 100 Hz без профилирования. Не вводить Iris/ReplicationGraph как условие старта.
+PlayerState должен иметь корректный owner Controller для GAS owning connection. Частоту его обновлений измерять; не выставлять 100 Hz без профилирования. Не вводить Iris/ReplicationGraph как условие старта.
 
 ## 4. Lifecycle ASC и respawn
 
@@ -160,7 +160,7 @@ GrenadeDefinition: projectile class/default primitive visual, speed, fuse, radiu
 | Integration/UI | Только необходимая привязка snapshot/delegates |
 | Game | PlayerState и тестовый GameMode |
 
-Build.cs: добавить GameplayAbilities, GameplayTags, GameplayTasks; ALSV4_CPP только для производных интеграционных классов. `.uproject`: явно включить GameplayAbilities. Не добавлять LyraGame, GameFeatures, CommonUI, OnlineSubsystem или message-router dependency ради одного выстрела.
+Build.cs: добавить GameplayAbilities, GameplayTags, GameplayTasks; ALSV4_CPP только для производных интеграционных классов. `.uproject`: явно включить GameplayAbilities. Не добавлять GameFeatures, CommonUI, OnlineSubsystem или message-router dependency ради одного выстрела.
 
 Создать проектный Character Blueprint с собственным C++ parent и существующими ALS mesh/AnimBP/settings. Безопасное наследование от plugin Blueprint и подстановка собственного C++ parent требуют отдельного подхода: нельзя одновременно назначить два parent. Практический путь — одна проектная копия ALS_CharacterBP с сохранением graph/defaults и reparent на ANGCharacter, затем compile/проверка ссылок; оригинальный plugin asset не менять. Это точечная копия, а не массовая миграция контента.
 
@@ -204,7 +204,7 @@ Build.cs: добавить GameplayAbilities, GameplayTags, GameplayTasks; ALSV4
 - `/Game/GameplayFoundation/BP_NGCharacter` и `BP_NGController` — точечные копии ALS Blueprint с сохранением графов/defaults и собственными C++ parents. AnimBP остаётся существующим ALS. Карта `/Game/GameplayFoundation/Maps/CombatTest` имеет свой GameMode override; GlobalDefaultGameMode, GameDefaultMap и EditorStartupMap не переключались.
 - Editor-only NGSetup commandlet создаёт только эти тестовые assets, отказывается перезаписывать существующие, компилирует новые копии и сохраняет только собственные packages. Blueprint loading тестового GameMode перенесён в InitGame после регистрации native CDO.
 
-Из зависимостей добавлены только GameplayAbilities, GameplayTags, GameplayTasks и ALSV4_CPP для производных типов. UnrealEd/Kismet/BlueprintGraph/AssetTools используются условно для editor setup. LyraGame, GameFeatures, CommonUI, новый inventory framework и grenade system не добавлены.
+Из зависимостей добавлены только GameplayAbilities, GameplayTags, GameplayTasks и ALSV4_CPP для производных типов. UnrealEd/Kismet/BlueprintGraph/AssetTools используются условно для editor setup. GameFeatures, CommonUI, новый inventory framework и grenade system не добавлены.
 
 Тестовый RPC harness активируется только в non-Shipping с `-NGCombatSmoke` и отдельным NGCombatTestGameMode. Он проверяет реальные client→server GAS/RPC requests и client replication reports. Production игровой ввод: E — equip, U — unequip, ЛКМ — одиночный fire; команды NGEquip/NGUnequip/NGFire доступны для development-проверки. Никаких self-running tests в обычном запуске карты нет.
 
@@ -282,7 +282,7 @@ ReleaseHealthPawn и ReleaseHealthBindings снимают только собс�
 5. В существующем controller/input graph передавать Started/Completed/Canceled в ASC текущего Pawn. Для прыжка маршрут ALS уже добавлен в C++; второй Space binding не нужен. Новые Input.* tags зарегистрировать через Gameplay Tags settings.
 6. Для оружейных способностей сохранять equipment grants и снятие по handles. Для постоянных способностей — player grants. Новая жизнь не выдаёт ещё одну копию постоянного набора.
 
-Материалы/меши/анимации оружия из Lyra можно рассматривать отдельно после проверки зависимостей и условий использования. Импорт оружия не должен приносить вторую inventory/equipment систему Lyra или заменять текущий ASC. В этом проходе Lyra и weapon pack не импортировались.
+Импортируемые материалы/меши/анимации оружия можно рассматривать отдельно после проверки зависимостей и условий использования. Импорт оружия не должен приносить вторую inventory/equipment систему или заменять текущий ASC. В этом проходе weapon pack не импортировался.
 
 ### Границы GCFSM, GAS и UI
 
@@ -346,7 +346,7 @@ CombatComponent остаётся единственным владельцем �
 
 Открывать указанные GA_* и менять Class Defaults. Эти классы наследуют native Activate/End, поэтому пустой Event Graph не означает отсутствие логики. Не добавлять параллельные Jump, LaunchCharacter, MantleStart, ApplyDamage и отдельные Server RPC в их Event ActivateAbility. Для прыжка доступны OnJumpStarted/OnJumpStopped; для деша — OnDashStarted и GameplayCue. Новые механики, отличные от этих native алгоритмов, можно создавать отдельными GameplayAbility и включать в Ability Set.
 
-Для настройки подбора вручную разместить BP_WeaponPickup на Gameplay и направить взгляд на него. Автоматически карта и project defaults в этом проходе не изменялись. Для настройки ALS mantle assets использовать копию BP_ALSMantleExecutor в /Game, а не plugin asset. Lyra content не импортировался.
+Для настройки подбора вручную разместить BP_WeaponPickup на Gameplay и направить взгляд на него. Автоматически карта и project defaults в этом проходе не изменялись. Для настройки ALS mantle assets использовать копию BP_ALSMantleExecutor в /Game, а не plugin asset.
 
 ### Проверка и ограничения
 
@@ -364,51 +364,19 @@ UBT NEXTGENONEEditor Win64 Development: PASS; лог Saved/Logs/NGAbilityFoundat
 - Обновлены `Docs/Architecture/GameplayFoundation.md`, `Docs/Testing/MultiplayerCombat.md`.
 - `NGTestGameMode.cpp` в рабочем дереве также содержит предыдущее изменение assertions под Jump grant; в этом проходе он не запускался. Пользовательские изменения вне перечисленного не откатывались. Файлы плагина ALS, основной карты и project defaults не редактировались.
 
-## 19. GA_Punch: кулаки, GAS-урон и отталкивание — 2026-11-01
+## 20. Интеграция inventory и пистолета/автомата — 2026-11-01
 
-В `/Game/Gameplay/Abilities` добавлены `GA_Punch` и `GE_PunchCooldown`. В существующий DA_PlayerAbilities добавлена только запись Input.Combat.Punch; другие grants и пользовательский выбор класса не заменяются. Перед дополнением набора сохранена копия в Saved/RefactorBackup/Abilities/DA_PlayerAbilities_BeforePunch_*.uasset. PlayerState также имеет idempotent native fallback для этого input tag.
+По новому прямому поручению пользователя инвентарь включён в scope этого прохода. Это реализация, не новое архитектурное исследование.
 
-ЛКМ использует существующий input action: при bEquipped=true — RequestFire, без экипированного оружия — GA_Punch. Убирать оружие можно U. Удар разрешён живому текущему avatar на земле, с контроллером, без оружия и конфликтующего действия ALS. Во время State.Action.Punch заблокированы прыжок, деш, mantle, pickup и стрельба; позднее получение оружия отменяет результат удара при проверке попадания.
-
-GA_Punch имеет ServerOnly execution и ServerOnlyTermination. После CommitAbility ждёт Windup и повторно проверяет сохранённый Pawn/текущий ASC/avatar. Затем сервер делает один sphere sweep впереди груди по Visibility и дополнительную проверку прямой видимости. Первый блокирующий объект останавливает удар: одна цель за активацию, без прохождения сквозь стены или толпу. Клиент не передаёт жертву, урон или силу толчка. Числовые настройки проверяются на finite и ограничиваются на сервере.
-
-Урон применяется существующим UNGCombatComponent::ApplyDamageToPawn через UNGDamageEffect/HealthSet. WBP_HealthPanel получает изменение HP через существующую подписку; второй системы здоровья нет. Мёртвые/устаревшие Pawn не получают новый урон в следующую жизнь.
-
-Для пережившей попадание текущей цели сервер отменяет активные способности с asset tag Ability.Type.Movement (Jump/Dash/Mantle), затем вызывает LaunchCharacter с заменой скорости и ForceNetUpdate. Отталкивание исполняется CharacterMovement с коллизией и сетевыми коррекциями. Root-motion task деша не должен перекрывать импульс. Это перемещение живого Character, а не симуляция/бросок ragdoll-тела; при смертельном ударе corpse не запускается и DisabledMovement не снимается. Направление толчка вычисляется от атакующего по плоскости gravity цели, подъём — против её gravity.
-
-Настройки GA_Punch → Class Defaults:
-
-| Поле | Значение |
-|---|---|
-| Damage | 20 |
-| Reach | 140 см движения центра сферы; эффективная дальность также включает HitRadius и капсулу жертвы |
-| HitRadius | 28 см |
-| Windup | 0.12 секунды до серверной проверки |
-| KnockbackSpeed | 650 см/с |
-| KnockbackLift | 140 см/с |
-| PunchMontage | Опциональный монтаж, по умолчанию не назначен |
-
-GE_PunchCooldown по умолчанию длится 0.55 секунды и выдаёт Cooldown.Combat.Punch на ASC PlayerState. EndAbility, повторный клик и переэкипировка не удаляют этот эффект. Даже промах расходует cooldown. Время начала удара привязано к серверу, без client prediction и rewind.
-
-CombatComponent добавляет read-only OnPunchStarted(Direction) и OnPunchHit(Target, ImpactPoint), доставляемые unreliable multicast для косметики. Назначенный PunchMontage проигрывается через существующий mesh/AnimBP на клиентах; полноценная анимация кулаков не включена. Для UI/FX можно подписаться в Character Blueprint на Combat delegates. Cosmetics/AnimNotify не применяют урон и не определяют серверное попадание; при добавлении монтажа настраивать Windup отдельно и использовать подходящий skeleton/ALS slot. Не заменять AnimBP.
-
-Проверка этого прохода: полная UBT NEXTGENONEEditor Win64 Development PASS, без compiler diagnostics (Saved/Logs/NGPunchBuild.log). NGSetup -PunchOnly создал и скомпилировал два Blueprint и дополнил Ability Set: exit 0, 0 errors, 10 warnings окружения/ALS Python names (Saved/Logs/NGPunchAssets.log). Карта не загружалась, PIE/автотесты/сетевые тесты не запускались. Runtime, фактический knockback owning client и его коррекции, прерывание mantle/dash, работа настроенного montage и UI остаются непроверенными до апрува.
-
-Изменённые файлы: новые `Source/NEXTGENONE/Gameplay/Abilities/NGPunchAbility.h/.cpp`, `Content/Gameplay/Abilities/GA_Punch.uasset`, `GE_PunchCooldown.uasset`; дополнен `DA_PlayerAbilities.uasset`. Изменены `NGAbilitySystem.h/.cpp`, `NGCombat.h/.cpp`, `NGDashAbility.cpp`, `NGJumpAbility.cpp`, `NGMantleAbility.cpp`, `NGWeaponPickup.cpp`, `NextgenonePlayerState.cpp`, `NextgenonePlayerController.cpp`, `NGSetupCommandlet.cpp` и эти архитектурные/тестовые документы. ALS plugin, AnimBP, WBP_HealthPanel и project defaults не изменялись.
-
-## 20. Перенос Lyra inventory и пистолета/автомата — 2026-11-01
-
-По новому прямому поручению пользователя инвентарь включён в scope этого прохода. Фактический порт и список файлов зафиксированы в [LyraPort.md](../Research/LyraPort.md). Это реализация, не новое архитектурное исследование.
-
-Из локальной Lyra 5.4 перенесены Fast Array inventory/tag stacks, item definition/instance/fragments и equipment-associated GAS ability base, адаптированные к UE 5.8. Инвентарь принадлежит существующему NextgenonePlayerState, реплицируется только владельцу и переживает смену Pawn. CombatComponent управляет текущей экипировкой и grants по handles; GA_Fire/GA_Reload наследуют перенесённый equipment ability base и используют Combat как SourceObject. Existing ASC/HealthSet/owner-avatar lifecycle сохранены.
+Из внешнего примера UE 5.4 перенесены Fast Array inventory/tag stacks, item definition/instance/fragments и equipment-associated GAS ability base, адаптированные к UE 5.8. Инвентарь принадлежит существующему NextgenonePlayerState, реплицируется только владельцу и переживает смену Pawn. CombatComponent управляет текущей экипировкой и grants по handles; GA_Fire/GA_Reload наследуют перенесённый equipment ability base и используют Combat как SourceObject. Existing ASC/HealthSet/owner-avatar lifecycle сохранены.
 
 Поле MagazineAmmo на Combat удалено: магазин/резерв — stat tags item instance. Переключение не создаёт новый предмет и не пополняет магазин. Сервер проверяет наличие предмета у своего владельца, ammo и PlayerState-wide fire limiter. Перезарядка — серверная ability с проверкой сохранённого предмета/текущего avatar на завершении. Старые corpses не могут менять item новой экипировки через запоздалый reload.
 
-Импортированы 42 реальных weapon resource assets Lyra в Content/Weapons, созданы DA_Pistol/DA_Rifle, ID_Pistol/ID_Rifle/ID_TestWeapon, GA_Reload и WBP_InventoryPanel. 1/2 выбирают стартовый пистолет/автомат; ПКМ задаёт aim state и ALS Aiming, ЛКМ — semi/auto fire, R — reload, U — unequip. Rifle/PistolTwoHanded overlays и тот же ALS HeldObjectRoot/AnimBP используются для поз; оружейные fire/reload sequences запускаются на mesh оружия. Персонажные монтажи требуют проверки skeleton/retarget и настройки в definitions, не объявлены автоматически совместимыми с ALS.
+Импортированы 42 реальных weapon resource assets в Content/Weapons, созданы DA_Pistol/DA_Rifle, ID_Pistol/ID_Rifle/ID_TestWeapon, GA_Reload и WBP_InventoryPanel. 1/2 выбирают стартовый пистолет/автомат; ПКМ задаёт aim state и ALS Aiming, ЛКМ — semi/auto fire, R — reload, U — unequip. Rifle/PistolTwoHanded overlays и тот же ALS HeldObjectRoot/AnimBP используются для поз; оружейные fire/reload sequences запускаются на mesh оружия. Персонажные монтажи требуют проверки skeleton/retarget и настройки в definitions, не объявлены автоматически совместимыми с ALS.
 
 Окно I/Esc подключено добавленным Inventory Window component в существующем FSMState_GameRuntime, с backup исходного asset. Используется существующий UIWidgetMounter и PlayerInputSubsystem; без отдельного placeholder — штатный owning-player viewport fallback монтера. При закрытии/выходе из Runtime освобождаются подписки, widget и input state. Кнопки предметов посылают server equip request с проверкой membership. Дизайн панели — простой список, подлежащий пользовательской настройке, не инвентарь с grid/split/drag/drop.
 
-Новых game-framework plugin dependencies нет; добавлены зависимости штатных UE-модулей NetCore/UMG/Slate/SlateCore и editor-only AssetRegistry/UMGEditor. UIModule и ALS plugin не модифицировались, основной GameMode/map/defaults не переключались. Новая готовность подтверждена сборкой и компиляцией ассетов; gameplay/network проверки ожидают отдельного апрува. Полный provenance, ручные действия, ограничения и пути логов — в LyraPort.md.
+Новых game-framework plugin dependencies нет; добавлены зависимости штатных UE-модулей NetCore/UMG/Slate/SlateCore и editor-only AssetRegistry/UMGEditor. UIModule и ALS plugin не модифицировались, основной GameMode/map/defaults не переключались. Новая готовность подтверждена сборкой и компиляцией ассетов; gameplay/network проверки ожидают отдельного апрува.
 
 ## 21. Universal interaction and inventory world transfer — 2026-11-01
 
@@ -429,7 +397,7 @@ FSMState_GameSettings uses WBP_GameSettings (native UNGSettingsPanel) instead of
 
 The original ALS debug component Blueprint spawned a HUD on each possession and created its overlay menu directly. BP_NGDebugComponent is a project copy: coloring/material graphs remain, possession-time widget spawning is disconnected, and overlay events route through a native subclass to UNGRuntimeUIStateComponent. That HFSM component owns both ALS_HUD and OverlayStateSwitcher using WidgetMounter, follows possession, and cleans up on Exit/AbortEnter. The Character SCS points to the project copy. ALS plugin files and AnimBP are unchanged. Debug UI is omitted in Shipping. Widget class references are editable soft properties of the state component.
 
-Settings follow Lyra's separation of machine graphics and local preferences, category descriptions and explicit Apply, adapted to the existing UMG/HFSM. UGameUserSettings stores display mode, supported resolution, quality, FPS and VSync. UNGInputPreferences stores look sensitivity, Y inversion and overall volume in GameUserSettings.ini. Look preferences are applied in the project PlayerController; volume is applied to the world audio device on local Controller BeginPlay and on Apply. Back discards uncommitted field edits. Key descriptions document core mappings, without a key-remapping implementation. No CommonUI/GameSettings framework dependency was added.
+Settings separate machine graphics and local preferences, category descriptions and explicit Apply, adapted to the existing UMG/HFSM. UGameUserSettings stores display mode, supported resolution, quality, FPS and VSync. UNGInputPreferences stores look sensitivity, Y inversion and overall volume in GameUserSettings.ini. Look preferences are applied in the project PlayerController; volume is applied to the world audio device on local Controller BeginPlay and on Apply. Back discards uncommitted field edits. Key descriptions document core mappings, without a key-remapping implementation. No CommonUI/GameSettings framework dependency was added.
 
 GCFSMUtilities lacks DLL export for its native TriggerEvent symbol. UI navigation calls the same reflected UFunction using initialized parameter storage and checked properties, leaving the plugin unchanged. Personal settings transitions remain local to the HUD FSM; they do not become replicated gameplay state.
 
@@ -447,9 +415,9 @@ Ranged damage now comes from server-simulated ANGBallisticProjectile collision r
 
 Matching reserve ammunition is represented by ID_Ammo_Pistol, ID_Ammo_Rifle and ID_Ammo_Shotgun inventory definitions, not a second weapon reserve pool. The weapon instance retains magazine ammo only. Reload checks the current weapon, quietly consumes matching inventory quantities, updates the magazine, then publishes inventory changes; recursive completion is guarded. Existing reserve tags on old instances are ignored and no persistent save migration is claimed. Starter loadout is granted once per PlayerState. Selection filters weapon definitions, supporting 1/2/3 despite interspersed ammo stacks.
 
-Lyra Shotgun art/mechanical animations and three individual weapon shot SoundWaves were imported. DA_Shotgun uses eight server-spread pellets. BP_BallisticProjectile is extensible; weapon configuration holds projectile class, speed/gravity/drag/spread/pellets, ammo class and sound. No ALS/AnimBP replacement, character montage retarget or new inventory/health framework was introduced.
+Imported shotgun art/mechanical animations and three individual weapon shot SoundWaves were imported. DA_Shotgun uses eight server-spread pellets. BP_BallisticProjectile is extensible; weapon configuration holds projectile class, speed/gravity/drag/spread/pellets, ammo class and sound. No ALS/AnimBP replacement, character montage retarget or new inventory/health framework was introduced.
 
-Dedicated hosting was selected by the user. UNGConnectionSubsystem handles direct IPv4/DNS client travel, last-address persistence, bounded wait and network/travel status. WBP_ServerConnection is nested in the Settings screen and follows existing FSMState_GameSettings lifetime. Steam is intentionally an inactive UI/config placeholder until the project has an App ID. There is no Steam authentication, server discovery or EOS/CommonUser framework integration. Lyra CommonSession's request/status separation was adapted to the existing UI.
+Dedicated hosting was selected by the user. UNGConnectionSubsystem handles direct IPv4/DNS client travel, last-address persistence, bounded wait and network/travel status. WBP_ServerConnection is nested in the Settings screen and follows existing FSMState_GameSettings lifetime. Steam is intentionally an inactive UI/config placeholder until the project has an App ID. There is no Steam authentication, server discovery or EOS/CommonUser framework integration.
 
 NEXTGENONEServer.Target.cs and Windows/Linux launch + source-engine packaging scripts were added. The installed engine marker exists at S:/UE_5.8/Engine/Build/InstalledBuild.txt: a standalone server binary needs a source engine with server target support. No engine switch, cook, packaging, server launch, deployment, firewall modification or gameplay test was performed. Editor build PASS (UBT exit 0); asset commandlet exit 0, 0 errors / 14 ALS/environment warnings. Details and files: Docs/Gameplay/BallisticsAndAmmo.md; operational instructions: Docs/Networking/DedicatedServer.md.
 ## 25. Bone collision and physical bullet reaction — 2026-11-01
@@ -459,13 +427,13 @@ NextgenoneCharacter now owns UNGHitReactionComponent (UPhysicalAnimationComponen
 HitReaction multicasts bone-space impact location, bone, direction and bounded weapon impulse. Each machine briefly simulates the affected skeletal branch with physical-animation drives and fades body-specific blend weights back to their saved values. Originally external simulated bodies are not disabled by recovery. Root/pelvis are excluded from partial simulation (torso fallback defaults to spine_01). ALS retains locomotion/capsule and ragdoll ownership; entering ragdoll clears these drives without switching ragdoll bodies off. Exact Chaos poses are cosmetic and not state-replicated. No AnimBP/plugin edits or new health/death system were introduced.
 
 Server-side mesh animation/bones are always updated, URO disabled and dedicated-server mesh physics enabled so body hit detection can follow the pose. This has a CPU cost and requires later scale measurement. PhysicsCore is now an explicit dependency for body-instance operations. WeaponDefinition.BodyImpactImpulse is separate from damage and applies per pellet. Full rig/Physics Asset compatibility and arbitrary-gravity body response remain unverified. Details: Docs/Gameplay/BulletBodyImpact.md.
-## 26. Lyra weapon Niagara — 2026-11-01
+## 26. Weapon Niagara — 2026-11-01
 
-Seven selected Lyra Niagara systems and their closed content dependencies were imported to /Game/Effects, without source Lyra/ALS modification or a Lyra gameplay framework dependency. Niagara is explicitly enabled and used by the runtime module. WeaponDefinition holds muzzle, shell, moving-projectile tracer, world impact and character impact systems plus shell mesh/socket settings. Existing custom values are preserved. The unused glass effect is available for manual assignment rather than falsely claiming surface-type routing.
+Seven imported Niagara systems and their closed content dependencies were imported to /Game/Effects, without modifying the original ALS content or adding an external gameplay framework dependency. Niagara is explicitly enabled and used by the runtime module. WeaponDefinition holds muzzle, shell, moving-projectile tracer, world impact and character impact systems plus shell mesh/socket settings. Existing custom values are preserved. The unused glass effect is available for manual assignment rather than falsely claiming surface-type routing.
 
 Client/listen-host cosmetic helpers spawn trigger-driven FX and bound their lifetime; dedicated servers do not spawn them. Ballistic actors drive tracer segments from actual local movement and stop/clean the trail on impact/EndPlay. Shot and impact RPCs carry a weapon-definition snapshot so in-flight impacts retain their weapon FX after re-equip. Existing cosmetic delegates remain available. FX never apply damage or modify authoritative combat state.
 
-Niagara parameter contracts were inspected: bool triggers, tracer vector arrays vs impact position arrays, typed NiagaraPosition muzzle values. Headless compilation checks active script statuses and allows UpToDateWithWarnings while rejecting Error/Unknown/Dirty. Impact CPU-script LWC diagnostics remain, with successful GPU compute compilation; render readiness is unavailable under NullRHI. No visual/gameplay tests were performed. Details, imported asset list and verification limits: Docs/Gameplay/LyraWeaponVFX.md.
+Niagara parameter contracts were inspected: bool triggers, tracer vector arrays vs impact position arrays, typed NiagaraPosition muzzle values. Headless compilation checks active script statuses and allows UpToDateWithWarnings while rejecting Error/Unknown/Dirty. Impact CPU-script LWC diagnostics remain, with successful GPU compute compilation; render readiness is unavailable under NullRHI. No visual/gameplay tests were performed. Details, imported asset list and verification limits: Docs/Gameplay/WeaponVFX.md.
 ## 27. ALS demo menus removed, diagnostics in Settings — 2026-11-01
 
 The Tab action was confirmed as IMC_Debug.DebugToggleHudAction. Runtime no longer instantiates ALS_HUD or OverlayStateSwitcher and no longer listens for overlay-menu events. Legacy soft references are cleared in the saved Runtime component. Only the existing Esc -> Settings navigation remains there. Original ALS plugin assets are preserved.
@@ -479,7 +447,7 @@ This supersedes the earlier base AbilitySet description. UNGAbilitySet and DA_Pl
 
 Each UNGControlStateDefinition contains Abilities (FNGAbilityGrant), Effects, MappingContexts and gameplay-input policy. The existing NGCharacterStateResources gives/removes state-owned specs/effects using handles. FNGAbilityGrant carries class, input tag, level and bActivateOnEnter. After acquiring all resources and registering the state scope, the adapter activates flagged grants; failed activation rolls back entry. Repeated scope refresh does not duplicate grants/entry activation. Temporary effects require Duration/Infinite and no aggregated stacking. Initialization health remains outside Alive entry so switching states does not heal.
 
-Alive directly owns Jump, Dash, Mantle, Interact and Punch with their previous input tags/levels. Dead directly owns NGDeathAbility with no InputTag and bActivateOnEnter=true. The dedicated NGCharacterDeathStateComponent is deleted; no special death GAS event or base grant is needed. Health requests the FSM transition. GA_Death only activates if its spec belongs to a currently registered state scope of the correct Avatar, with the Dead gameplay-effect tag present. State Exit/Unbind owns cleanup; ability completion does not clear other state grants.
+Alive directly owns Jump, Dash, Mantle, Interact with their previous input tags/levels. Dead directly owns NGDeathAbility with no InputTag and bActivateOnEnter=true. The dedicated NGCharacterDeathStateComponent is deleted; no special death GAS event or base grant is needed. Health requests the FSM transition. GA_Death only activates if its spec belongs to a currently registered state scope of the correct Avatar, with the Dead gameplay-effect tag present. State Exit/Unbind owns cleanup; ability completion does not clear other state grants.
 
 Existing equipment ownership remains in Combat: weapon definitions still choose Fire/Reload classes, now granted directly through FNGAbilityGrant without constructing an AbilitySet. The server fire-rate limiter remains on PlayerState and is not reset by state/equipment grant churn.
 

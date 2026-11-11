@@ -6,6 +6,7 @@
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Player/NextgenonePlayerController.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
+#include "Gameplay/Abilities/NGWeaponAbilities.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Inventory/NGInventoryItemDefinition.h"
@@ -129,25 +130,34 @@ void ANGCombatTestGameMode::SmokeTick()
                 if (Spec.GetDynamicSpecSourceTags().HasTagExact(Tag)) ++Count;
             if (Count != 1) { Fail(TEXT("duplicate/missing equipment input grants")); return; }
         }
-        // Probe the authoritative gate directly. FireOnServer without a fresh remote view is invalid.
+        // Probe GAS cooldown independently of ADS and remote shot-view validation.
         auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(A->GetAbilitySystemComponent());
         const float ProbeInterval = FMath::Max(.25f, Def->FireInterval);
-        if (!ASC || !ASC->TryCommitFire(A, ProbeInterval) || ASC->TryCommitFire(A, ProbeInterval))
+        if (!ASC) { Fail(TEXT("missing shooter ASC")); return; }
+        auto Cooldown = ASC->MakeOutgoingSpec(UNGFireCooldownEffect::StaticClass(), 1.f, ASC->MakeEffectContext());
+        if (!Cooldown.IsValid()) { Fail(TEXT("cannot create fire cooldown")); return; }
+        Cooldown.Data->SetDuration(ProbeInterval, true);
+        if (!ASC->ApplyGameplayEffectSpecToSelf(*Cooldown.Data.Get()).IsValid()
+            || GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get()))
         { Fail(TEXT("immediate limiter reactivation accepted")); return; }
         auto* ProbeItem = A->Combat->GetEquippedItem();
-        A->Combat->UnequipOnServer();
         auto* Player = A->GetPlayerState<ANextgenonePlayerState>();
-        if (!Player || !Player->Inventory->ActivateItemOnServer(ProbeItem))
-        { Fail(TEXT("configured item equip ability failed")); return; }
-        if (ASC->CanFireNow(A)) { Fail(TEXT("reequip reset persistent fire limiter")); return; }
-        UE_LOG(LogTemp, Display, TEXT("NG_LIMITER_PASS direct_server_gate reactivation=blocked reequip=blocked"));
+        if (!Player || !ProbeItem) { Fail(TEXT("missing equipped probe item")); return; }
+        const int32 WeaponSlot = Player->Inventory->GetSlotIndex(ProbeItem);
+        const int32 StorageSlot = Player->Inventory->FindFirstAvailableSlot(ProbeItem->GetItemDef(), 1, TAG_NGSlotStorage);
+        if (StorageSlot == INDEX_NONE || !Player->Inventory->MoveEquipmentItemOnServer(ProbeItem, StorageSlot)
+            || !Player->Inventory->MoveEquipmentItemOnServer(ProbeItem, WeaponSlot))
+        { Fail(TEXT("weapon slot unequip/re-equip transfer failed")); return; }
+        if (GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get()))
+        { Fail(TEXT("reequip reset persistent fire cooldown")); return; }
+        UE_LOG(LogTemp, Display, TEXT("NG_LIMITER_PASS GAS_cooldown reactivation=blocked reequip=blocked"));
         Phase = 10; PhaseTime = Now; Reports.Reset(); ExpectedReport = 7; return;
     }
     if (Phase == 10)
     {
         // The ADS check must not pass merely because the previous limiter probe is still active.
         const auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(A->GetAbilitySystemComponent());
-        if (!ASC || !ASC->CanFireNow(A)) return;
+        if (!ASC || !GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get())) return;
         if (A->Combat->IsAiming()) { Fail(TEXT("hip-fire fixture unexpectedly has ADS")); return; }
         SendShooter(7);
         Phase = 11; PhaseTime = Now; return;
@@ -157,7 +167,7 @@ void ANGCombatTestGameMode::SmokeTick()
         if (!Reports.Contains(Players[0])) { SendShooter(7); return; }
         if (Now - PhaseTime < ShotWait) return;
         const auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(A->GetAbilitySystemComponent());
-        if (!ASC || !ASC->CanFireNow(A) || !FMath::IsNearlyEqual(B->GetHealth(), ExpectedHealth)
+        if (!ASC || !GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get()) || !FMath::IsNearlyEqual(B->GetHealth(), ExpectedHealth)
             || A->Combat->GetMagazineAmmo() != ExpectedAmmo)
         { Fail(TEXT("hip fire changed health/ammo or consumed an available fire gate")); return; }
         UE_LOG(LogTemp, Display, TEXT("NG_HIP_FIRE_PASS gate=open before_and_after ADS=off"));

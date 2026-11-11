@@ -2,6 +2,7 @@
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
 
 ANextgenonePlayerState::ANextgenonePlayerState()
 {
@@ -20,7 +21,7 @@ bool ANextgenonePlayerState::StartLife(ANextgenoneCharacter* Pawn)
 
     AActor* Previous = AbilitySystem->GetAvatarActor();
     auto* PreviousMachine = Previous ? Previous->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
-    if (Previous && Previous != Pawn && PreviousMachine && !PreviousMachine->CanReleaseAvatar())
+    if (Previous != Pawn && PreviousMachine && !PreviousMachine->CanReleaseAvatar())
     {
         if (PendingLifePawn != Pawn) UE_LOG(LogTemp, Display, TEXT("%s: deferring %s until %s finishes state resource entry."), *GetName(), *Pawn->GetName(), *Previous->GetName());
         PendingLifePawn = Pawn;
@@ -30,7 +31,10 @@ bool ANextgenonePlayerState::StartLife(ANextgenoneCharacter* Pawn)
     TGuardValue<bool> LifeGuard(bChangingLife, true);
     if (PreviousMachine) PreviousMachine->OnResourcesReady.RemoveAll(this);
     if (AActor* PriorAvatar = AbilitySystem->GetAvatarActor(); PriorAvatar && PriorAvatar != Pawn)
+    {
+        if (auto* Equipment = PriorAvatar->FindComponentByClass<UNGEquipmentComponent>()) Equipment->Shutdown();
         if (auto* Machine = PriorAvatar->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->SuspendResources();
+    }
     // Cancel old actions before changing actor info: callbacks must never operate on the next Avatar.
     AbilitySystem->ClearAbilityInput();
     AbilitySystem->CancelAllAbilities();
@@ -68,7 +72,10 @@ void ANextgenonePlayerState::EndPlay(EEndPlayReason::Type Reason)
     PendingLifePawn.Reset();
     if (HasAuthority())
         if (AActor* Avatar = AbilitySystem->GetAvatarActor())
+        {
+            if (auto* Equipment = Avatar->FindComponentByClass<UNGEquipmentComponent>()) Equipment->Shutdown();
             if (auto* Machine = Avatar->FindComponentByClass<UNGCharacterStateMachineComponent>())
             { Machine->OnResourcesReady.RemoveAll(this); Machine->SuspendResources(); }
+        }
     Super::EndPlay(Reason);
 }

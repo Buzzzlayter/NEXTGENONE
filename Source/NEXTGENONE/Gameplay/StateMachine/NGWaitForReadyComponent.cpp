@@ -2,7 +2,6 @@
 #include "GameplayTags/NGGameplayTags.h"
 #include "NGCharacterStateMachineComponent.h"
 #include "AbilitySystem/NGAbilitySystem.h"
-#include "AbilitySystemGlobals.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/Pawn.h"
@@ -41,8 +40,7 @@ FName UNGWaitForReadyComponent::FindMissingDependency() const
 	const auto* Machine = PlayerPawn->FindComponentByClass<UNGCharacterStateMachineComponent>();
 	if (!Machine || !Machine->IsGameplayReady(RequiredCharacterState)) return TEXT("CharacterState");
 	const auto* ASC = Machine->GetReadyASC();
-	if (!ASC || ASC->GetOwnerActor() != Player || ASC->GetAvatarActor() != PlayerPawn
-		|| UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Player) != ASC) return TEXT("AbilitySystem");
+	if (ASC->GetOwnerActor() != Player) return TEXT("AbilitySystem");
 	const auto* Health = ASC->GetSet<UNGHealthSet>();
 	if (!Health || Health->MaxHealth.GetCurrentValue() <= 0.f || Health->Health.GetCurrentValue() <= 0.f
 		|| ASC->HasMatchingGameplayTag(TAG_NGDead)) return TEXT("Health");

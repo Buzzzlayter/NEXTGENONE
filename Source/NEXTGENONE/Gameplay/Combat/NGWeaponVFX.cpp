@@ -1,6 +1,5 @@
 #include "Gameplay/Combat/NGWeaponVFX.h"
 #include "Gameplay/Combat/NGCombat.h"
-#include "Gameplay/Character/NextgenoneCharacter.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
@@ -25,14 +24,14 @@ UNiagaraComponent* Attached(UNiagaraSystem* System,USkeletalMeshComponent* Mesh,
 	return UNiagaraFunctionLibrary::SpawnSystemAtLocation(Mesh,System,Fallback,Rotation,FVector::OneVector,true,false);
 }
 }
-void NGWeaponVFX::Shot(ANextgenoneCharacter* Pawn,const UNGWeaponDefinition* Weapon,FVector Start,FVector Direction)
+void NGWeaponVFX::Shot(USkeletalMeshComponent* Mesh,const UNGWeaponDefinition* Weapon,FVector Start,FVector Direction)
 {
-	if (!Pawn || !Weapon || Pawn->GetNetMode()==NM_DedicatedServer) return;
-	if (auto* FX=Attached(Weapon->MuzzleFX,Pawn->SkeletalMesh,Weapon->MuzzleFXSocket,Start,Direction.Rotation()))
+	if (!Mesh || !Weapon || Mesh->GetNetMode()==NM_DedicatedServer) return;
+	if (auto* FX=Attached(Weapon->MuzzleFX,Mesh,Weapon->MuzzleFXSocket,Start,Direction.Rotation()))
 	{
 		FX->SetVariableVec3(TEXT("User.Direction"),Direction); FX->SetVariableBool(TEXT("User.Trigger"),true); FX->Activate(true); StopSpawningAfter(FX,.08f);
 	}
-	if (auto* FX=Attached(Weapon->ShellEjectFX,Pawn->SkeletalMesh,Weapon->ShellEjectFXSocket,Start,Direction.Rotation()))
+	if (auto* FX=Attached(Weapon->ShellEjectFX,Mesh,Weapon->ShellEjectFXSocket,Start,Direction.Rotation()))
 	{
 		if (Weapon->ShellMesh) FX->SetVariableStaticMesh(TEXT("User.ShellEjectStaticMesh"),Weapon->ShellMesh);
 		FX->SetVariableBool(TEXT("User.Trigger"),true); FX->Activate(true); StopSpawningAfter(FX,.08f);

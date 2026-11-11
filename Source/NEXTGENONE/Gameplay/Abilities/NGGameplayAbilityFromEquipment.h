@@ -1,5 +1,4 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-// Adapted from Lyra: existing CombatComponent is the equipment grant source.
 
 #pragma once
 
@@ -7,7 +6,7 @@
 
 #include "NGGameplayAbilityFromEquipment.generated.h"
 
-class UNGCombatComponent;
+class UNGEquipmentInstance;
 class UNGInventoryItemInstance;
 
 /**
@@ -24,10 +23,11 @@ public:
 
 	UNGGameplayAbilityFromEquipment(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	UFUNCTION(BlueprintCallable, Category="Lyra|Ability")
-	UNGCombatComponent* GetAssociatedEquipment() const;
-
-	UFUNCTION(BlueprintCallable, Category = "Lyra|Ability")
+    virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+        const FGameplayTagContainer* SourceTags=nullptr, const FGameplayTagContainer* TargetTags=nullptr,
+        FGameplayTagContainer* RelevantTags=nullptr) const override;
+    UNGEquipmentInstance* GetEquipmentInstance() const;
+	UFUNCTION(BlueprintCallable, Category = "Equipment|Ability")
 	UNGInventoryItemInstance* GetAssociatedItem() const;
 
 #if WITH_EDITOR

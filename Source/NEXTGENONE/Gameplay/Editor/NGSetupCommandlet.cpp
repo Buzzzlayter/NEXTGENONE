@@ -1,7 +1,8 @@
 #include "Gameplay/Editor/NGSetupCommandlet.h"
 
 #if WITH_EDITOR
-int32 NGImportWeaponVFX();
+int32 NGMigrateEquipmentAssets();
+int32 NGMigrateWeaponSlotAssets();
 int32 NGConfigureWeaponVFX();
 #endif
 
@@ -16,14 +17,17 @@ UNGSetupCommandlet::UNGSetupCommandlet()
 int32 UNGSetupCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
-	const bool bImport = FParse::Param(*Params, TEXT("ImportWeaponVFX"));
+	const bool bEquipment = FParse::Param(*Params, TEXT("EquipmentOnly"));
+	const bool bWeaponSlot = FParse::Param(*Params, TEXT("WeaponSlotOnly"));
 	const bool bConfigure = FParse::Param(*Params, TEXT("WeaponVFXOnly"));
-	if (bImport == bConfigure)
+	if (int32(bConfigure) + int32(bEquipment) + int32(bWeaponSlot) != 1)
 	{
-		UE_LOG(LogTemp, Error, TEXT("NGSetup: specify exactly one operation: -ImportWeaponVFX or -WeaponVFXOnly. Legacy setup/migration operations were removed."));
+		UE_LOG(LogTemp, Error, TEXT("NGSetup: specify exactly one operation: -WeaponVFXOnly, -EquipmentOnly or -WeaponSlotOnly. Legacy setup/migration operations were removed."));
 		return 1;
 	}
-	return bImport ? NGImportWeaponVFX() : NGConfigureWeaponVFX();
+	if (bEquipment) return NGMigrateEquipmentAssets();
+	if (bWeaponSlot) return NGMigrateWeaponSlotAssets();
+	return NGConfigureWeaponVFX();
 #else
 	return 1;
 #endif

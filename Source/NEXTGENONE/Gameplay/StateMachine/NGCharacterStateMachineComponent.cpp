@@ -9,6 +9,7 @@
 #include "GameplayCueManager.h"
 #include "AbilitySystemGlobals.h"
 #include "AbilitySystem/NGAbilitySystem.h"
+#include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Net/UnrealNetwork.h"
 
 bool UNGCharacterStateMachineComponent::StartIfReady()
@@ -29,10 +30,32 @@ bool UNGCharacterStateMachineComponent::StartIfReady()
 
 void UNGCharacterStateMachineComponent::NotifyGameplayReady(UAbilitySystemComponent* ASC)
 {
-	ReadyASC = ASC;
+	if (bEnding) return;
+	if (ReadyASC.Get() != ASC)
+	{
+		UnbindAbilitySpecNotifications();
+		ReadyASC = ASC;
+	}
+	if (!AbilitySpecsReplicatedHandle.IsValid())
+		if (auto* PlayerASC = Cast<UNGPlayerAbilitySystemComponent>(ASC))
+			AbilitySpecsReplicatedHandle = PlayerASC->OnAbilitySpecsReplicated.AddUObject(this, &ThisClass::NotifyAbilitySpecsReplicated);
 	if (bResourcesFailed) { OnRep_ResourceFailure(); return; }
 	StartIfReady(); RefreshResources();
 	if (RequestedStateEvent.IsValid()) QueueServerEvent(RequestedStateEvent);
+}
+
+void UNGCharacterStateMachineComponent::UnbindAbilitySpecNotifications()
+{
+	if (auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(ReadyASC.Get())) ASC->OnAbilitySpecsReplicated.Remove(AbilitySpecsReplicatedHandle);
+	AbilitySpecsReplicatedHandle.Reset();
+}
+
+void UNGCharacterStateMachineComponent::NotifyAbilitySpecsReplicated(const UAbilitySystemComponent* ASC)
+{
+	if (bEnding || bResourcesFailed || !ASC || GetReadyASC() != ASC) return;
+	// Entry completion and ability replication are independent. Consumers recheck
+	// IsGameplayReady; this also invalidates readiness when required specs disappear.
+	OnResourcesReady.Broadcast(GetOwner());
 }
 
 bool UNGCharacterStateMachineComponent::QueueServerEvent(FGameplayTag Event)
@@ -219,6 +242,7 @@ void UNGCharacterStateMachineComponent::RefreshResources()
 
 void UNGCharacterStateMachineComponent::SuspendResources()
 {
+	UnbindAbilitySpecNotifications();
 	for (const auto& Resource : TArray<TWeakObjectPtr<UNGCharacterStateResources>>(ActiveResources))
 		if (Resource.IsValid()) Resource->ReleaseResources();
 }
@@ -226,7 +250,8 @@ void UNGCharacterStateMachineComponent::SuspendResources()
 void UNGCharacterStateMachineComponent::EndPlay(EEndPlayReason::Type Reason)
 {
 	bEnding = true;
-	SuspendResources(); ActiveResources.Reset(); ReadyASC.Reset();
+	SuspendResources(); ActiveResources.Reset();
+	ReadyASC.Reset();
 	// Stop() asserts if a GCFSM state is active. Pause the dying owner's ticker instead.
 	if (UGCFSMUtilities::GetRootStateFromContext(GetOwner(), false)) UGCFSMUtilities::PauseFSMs(GetOwner(), true);
 	Super::EndPlay(Reason);

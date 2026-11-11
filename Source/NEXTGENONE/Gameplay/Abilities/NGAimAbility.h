@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
+#include "Gameplay/Abilities/NGGameplayAbilityFromWeapon.h"
 #include "GameplayEffect.h"
 #include "NGAimAbility.generated.h"
 
@@ -17,14 +17,11 @@ public:
 
 /** Hold-to-aim. Equipment grants the ability; ALS/UI observe its effect tag. */
 UCLASS(Blueprintable)
-class NEXTGENONE_API UNGAimAbility : public UNGGameplayAbilityFromEquipment
+class NEXTGENONE_API UNGAimAbility : public UNGGameplayAbilityFromWeapon
 {
 	GENERATED_BODY()
 public:
 	UNGAimAbility();
-	virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
-		const FGameplayTagContainer* SourceTags=nullptr, const FGameplayTagContainer* TargetTags=nullptr,
-		FGameplayTagContainer* RelevantTags=nullptr) const override;
 	virtual void ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event) override;
 	virtual void EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,

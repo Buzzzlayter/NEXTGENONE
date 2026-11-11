@@ -1,5 +1,9 @@
 # Боевой ввод и Action Bar через GAS
 
+2026-11-10: C++ Equipment/Combat-проход и процедура миграции подготовлены; сборка,
+авторинг ассетов и runtime-приёмка не выполнялись. Текущий контракт и оставшиеся шаги —
+[Equipment.md](Equipment.md).
+
 Input-компонент обрабатывает ALS-движение и отправляет press/release тегов в ASC. Зависимостей на Combat и Inventory в нём нет. Конкретные команды исполняют способности.
 
 ## Назначено через Editor MCP — 2026-11-07
@@ -17,7 +21,7 @@ Input-компонент обрабатывает ALS-движение и отп
 | Основная атака | `Input.Combat.Primary` | `UNGPrimaryAttackAbility`, Alive |
 | Прицеливание | `Input.Aim` | Существующая AimAbility оружия, выдаёт Combat |
 | Перезарядка | `Input.Combat.Reload` | Существующая ReloadAbility оружия, выдаёт Combat |
-| Экипировать выбранный предмет | `Input.Equipment.Equip` | BP от `UNGEquipmentControlAbility`, `bEquip=true`, Alive |
+| Экипировать первое сохранённое оружие в пустой Weapon | `Input.Equipment.Equip` | BP от `UNGEquipmentControlAbility`, `bEquip=true`, Alive |
 | Убрать оружие | `Input.Equipment.Unequip` | Другой BP от `UNGEquipmentControlAbility`, `bEquip=false`, Alive |
 | Action 1–5 | `Input.ActionBar.Slot1` … `Slot5` | Пять BP от `UNGActivateActionSlotAbility`, `ActionSlot=0` … `4`, Alive |
 
@@ -27,7 +31,16 @@ NativeInputActions временно поддерживают общий проб
 
 ## Исполнение
 
-- PrimaryAttack — LocalOnly-способность, которая запускает существующую основную атаку Combat и ждёт отпускания. EndAbility, включая отмену, останавливает удержание. Без оружия сохраняется существующая маршрутизация основной атаки в удар кулаком.
+- Secondary action панели отправляет только предмет и inventory source через player RPC.
+  Серверный обработчик PlayerInventory выбирает по definition слот типизированной
+  экипировки (Weapon/Back/Feet/Torso) и выполняет существующий transfer. UI не знает Equipment.
+  Сервер проверяет доступ к контейнеру, снимки слотов и equipment preflight; занятый
+  несовместимым предметом слот не заменяется между контейнерами. Это не удалённое
+  использование расходников. Оружие переносится в Weapon так же, как джетпак в Back. Для предмета
+  уже в инвентаре игрока сохраняется прежняя ItemActions ability.
+
+- PrimaryAttack — LocalOnly-способность, которая повторяет выстрел через стандартную `UAbilityTask_WaitDelay` и ждёт отпускания через `WaitInputRelease`. Первый запрос отправляет сразу; для автоматического оружия повторяет Combat.RequestFire с интервалом из WeaponDefinition (минимум 0,05 с). GAS завершает tasks вместе с ability; EndAbility снимает подписку Equipment. Отдельного TimerHandle нет. Без актуального оружия способность завершается.
+- Ability подписана на Equipment.OnEquipmentChanged: смена HandsRevision или потеря актуальности установки сразу завершает удержание. Изменение только Back не прерывает Hands. Перед очередным запросом проверяется текущий Avatar и установка; из синхронного callback нельзя продолжить очередь с новым оружием.
 - Combat сохраняет подготовку клиентского луча и server-authoritative выстрел через ServerOnly GA_Fire. IA не должна запускать `Input.Combat.Fire` напрямую: это внутренний серверный маршрут после проверки луча.
 - EquipmentControl и ActivateActionSlot работают LocalOnly как команды владельца. Они используют существующие RPC с серверными проверками; локальная активация не подтверждает успешную серверную операцию.
 - ActivateActionSlot обращается к Inventory, который выбирает предмет и активирует его единственную ActivationAbility. В способности слота нет зависимости на Combat.
