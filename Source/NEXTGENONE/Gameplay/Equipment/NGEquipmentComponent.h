@@ -39,12 +39,9 @@ public:
 	void ActivateEquipment();
 	void Shutdown();
 	void RequestEquip(bool bEquip);
-	void UnequipHands();
-	bool EquipHands(UNGInventoryItemInstance* Item);
 	bool PreflightPlacement(UNGInventoryItemInstance* Item, int32 SlotIndex, FString& Error) const;
 	bool IsCurrent(const UNGEquipmentInstance* Instance) const;
 	UNGEquipmentInstance* FindInstance(FGameplayTag Slot) const;
-	UNGInventoryItemInstance* GetSelectedItem() const { return SelectedItem; }
 	int32 GetHandsRevision() const { return HandsRevision; }
 	void RefreshReplicatedState();
 	FSimpleMulticastDelegate OnEquipmentChanged;
@@ -52,7 +49,6 @@ public:
 private:
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) TArray<TObjectPtr<UNGEquipmentInstance>> Installations;
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) int32 HandsRevision = 0;
-	UPROPERTY(ReplicatedUsing=OnRep_Equipment) TObjectPtr<UNGInventoryItemInstance> SelectedItem;
 	UPROPERTY() TMap<TObjectPtr<UNGEquipmentInstance>, FNGEquipmentResources> Resources;
 	UPROPERTY() TMap<TObjectPtr<UNGEquipmentInstance>, TObjectPtr<USceneComponent>> Visuals;
 	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> Inventory;
@@ -67,7 +63,6 @@ private:
 	bool bSuspended = true;
 	bool bEnding = false;
 	int32 NextGeneration = 0;
-	UFUNCTION(Server, Reliable) void ServerUnequipHands();
 	UFUNCTION() void OnRep_Equipment();
 	UFUNCTION() void InventoryChanged();
 	bool CanApply() const;

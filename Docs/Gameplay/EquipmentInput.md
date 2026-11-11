@@ -21,7 +21,7 @@ Input-компонент обрабатывает ALS-движение и отп
 | Основная атака | `Input.Combat.Primary` | `UNGPrimaryAttackAbility`, Alive |
 | Прицеливание | `Input.Aim` | Существующая AimAbility оружия, выдаёт Combat |
 | Перезарядка | `Input.Combat.Reload` | Существующая ReloadAbility оружия, выдаёт Combat |
-| Экипировать выбранный предмет | `Input.Equipment.Equip` | BP от `UNGEquipmentControlAbility`, `bEquip=true`, Alive |
+| Экипировать первое сохранённое оружие в пустой Weapon | `Input.Equipment.Equip` | BP от `UNGEquipmentControlAbility`, `bEquip=true`, Alive |
 | Убрать оружие | `Input.Equipment.Unequip` | Другой BP от `UNGEquipmentControlAbility`, `bEquip=false`, Alive |
 | Action 1–5 | `Input.ActionBar.Slot1` … `Slot5` | Пять BP от `UNGActivateActionSlotAbility`, `ActionSlot=0` … `4`, Alive |
 
@@ -33,10 +33,10 @@ NativeInputActions временно поддерживают общий проб
 
 - Secondary action панели отправляет только предмет и inventory source через player RPC.
   Серверный обработчик PlayerInventory выбирает по definition слот типизированной
-  экипировки (Back/Feet/Torso) и выполняет существующий transfer. UI не знает Equipment.
+  экипировки (Weapon/Back/Feet/Torso) и выполняет существующий transfer. UI не знает Equipment.
   Сервер проверяет доступ к контейнеру, снимки слотов и equipment preflight; занятый
   несовместимым предметом слот не заменяется между контейнерами. Это не удалённое
-  использование расходников; оружие Hands этим маршрутом не активируется. Для предмета
+  использование расходников. Оружие переносится в Weapon так же, как джетпак в Back. Для предмета
   уже в инвентаре игрока сохраняется прежняя ItemActions ability.
 
 - PrimaryAttack — LocalOnly-способность, которая повторяет выстрел через стандартную `UAbilityTask_WaitDelay` и ждёт отпускания через `WaitInputRelease`. Первый запрос отправляет сразу; для автоматического оружия повторяет Combat.RequestFire с интервалом из WeaponDefinition (минимум 0,05 с). GAS завершает tasks вместе с ability; EndAbility снимает подписку Equipment. Отдельного TimerHandle нет. Без актуального оружия способность завершается.

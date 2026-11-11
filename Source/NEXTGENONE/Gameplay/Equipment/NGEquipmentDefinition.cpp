@@ -13,8 +13,8 @@ void UNGEquipmentDefinition::ResolveResources(TArray<FNGEquipmentAbilityGrant>& 
 
 bool UNGEquipmentDefinition::ValidateDefinition(FString& Error) const
 {
-	if (!SlotTag.IsValid() || (SlotTag != TAG_NGEquipmentHands && (!SlotTag.MatchesTag(TAG_NGSlotEquipment) || SlotTag == TAG_NGSlotEquipment)) || VisualTransform.ContainsNaN())
-	{ Error = TEXT("Equipment needs Hands or a typed inventory equipment slot and a finite visual transform."); return false; }
+	if (!SlotTag.MatchesTag(TAG_NGSlotEquipment) || SlotTag == TAG_NGSlotEquipment || VisualTransform.ContainsNaN())
+	{ Error = TEXT("Equipment needs a typed inventory equipment slot and a finite visual transform."); return false; }
 	if (VisualMode != ENGEquipmentVisualMode::SocketAttachment)
 	{ Error = TEXT("Modular skeletal clothing requires its separate presentation package; socket attachment is supported here."); return false; }
 	for (const UNGEquipmentAbilitySet* Set : AbilitySets) if (!Set) { Error = TEXT("Null equipment ability set."); return false; }
@@ -27,7 +27,8 @@ bool UNGEquipmentDefinition::ValidateDefinition(FString& Error) const
 		const auto* Ability = Grant.Ability.GetDefaultObject();
 		if (!Ability || Grant.Ability->HasAnyClassFlags(CLASS_Abstract) || Grant.Level < 1
 			|| !Grant.Ability->IsChildOf(UNGGameplayAbilityFromEquipment::StaticClass())
-			|| Ability->GetInstancingPolicy() == EGameplayAbilityInstancingPolicy::NonInstanced)
+			|| (Ability->GetInstancingPolicy() != EGameplayAbilityInstancingPolicy::InstancedPerActor
+				&& Ability->GetInstancingPolicy() != EGameplayAbilityInstancingPolicy::InstancedPerExecution))
 		{ Error = TEXT("Equipment grants require concrete instanced equipment abilities and a positive level."); return false; }
 		if (Entry.bRequiredStartup && (!Grant.bActivateOnEnter ||
 			(Ability->GetNetExecutionPolicy() != EGameplayAbilityNetExecutionPolicy::ServerOnly && Ability->GetNetExecutionPolicy() != EGameplayAbilityNetExecutionPolicy::ServerInitiated)))

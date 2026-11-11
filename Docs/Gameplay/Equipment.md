@@ -4,23 +4,59 @@
 Основание: [TechnicalConsolidation.md](../Architecture/TechnicalConsolidation.md),
 Equipment-проход 3–6/F из [плана](../Architecture/TechnicalConsolidationPlan.md).
 
-Статус: C++ и адресная процедура авторинга подготовлены. Выполнен только статический
-просмотр кода/diff и сверка использованных API с локальными исходниками UE 5.8.
-UBT/Live Coding, запуск редактора/commandlet, Blueprint compilation, Data Validation,
-cook, PIE и игровые/сетевые проверки агентом **не выполнялись**. Бинарные ассеты не менялись.
-Реализация и сохранение поведения в игре пока не подтверждены сборкой/runtime-приёмкой.
+Текущий проход: оружие переведено на обычный typed equipment-слот. После успешной
+пользовательской сборки 11 ноября 2026 обновлены 9 ассетов через MCP текущего редактора;
+`NGSetup -WeaponSlotOnly` не запускался. Ранее подготовленные ассеты джетпака и миграция
+redirects описаны ниже. Игровая приёмка не выполнялась.
+
+## Переход оружия в отдельную ячейку
+
+`Inventory.Slot.Equipment.Weapon` — одна отдельная ячейка того же inventory FastArray.
+`UNGWeaponDefinition.SlotTag` указывает на неё; item definitions оружия получают
+`Item.Equipment.Weapon`. Secondary action из Storage/Action переносит предмет в Weapon,
+повторный action из Weapon — в свободный подходящий обычный слот. Drag и ПКМ из
+открытого контейнера используют прежний server transfer/preflight; занятая ячейка
+между контейнерами не заменяется. Слоты Action продолжают активировать свои предметы,
+но больше не считаются местом экипировки оружия.
+
+Equipment применяет Weapon точно так же, как Back: только по фактическому размещению.
+Отдельные `SelectedItem`, EquipHands и RPC снятия установки без перемещения удалены.
+`HandsRevision` сохранён как ревизия применения оружия для RPC и отмены удержания;
+ALS по-прежнему показывает оружие в руках, отдельный socket visual не дублируется.
+Команда Equip для совместимости выбирает первое сохранённое оружие, только если Weapon
+пуст; Unequip активирует предмет из Weapon и переносит его в свободную обычную ячейку.
+
+После полной пользовательской сборки адресный `NGSetup -WeaponSlotOnly`:
+
+1. Сохраняет backup 9 packages в `Saved/RefactorBackup/WeaponSlot/<timestamp>/`.
+2. Дописывает Weapon в конец `DA_InventoryLayout_Player` с фильтром `Item.Equipment.Weapon`.
+3. Меняет только SlotTag у DA_Pistol/Rifle/Shotgun/TestWeapon и добавляет item tag
+   соответствующим ID_Pistol/Rifle/Shotgun/TestItem (MaxStackSize=1).
+
+Операция не добавляет стартовые предметы, не перемещает старые слоты и не меняет
+патроны, модели, ввод, карту или джетпак. Не использовать для этого `-EquipmentOnly`.
+Для отдельной UMG-ячейки: панель от `UNGInventoryPanel`,
+`SlotFilter=Inventory.Slot.Equipment.Weapon`, Inventory Window с Source=Player и своим
+PlaceholderID.
+
+Фактический авторинг выполнен через текущий редактор: Weapon добавлен по индексу 26,
+всего 27 слотов. Прежние 26 ячеек и все прочие отражённые поля 9 ассетов сверены
+до/после изменений и после сохранения; стартовое содержимое не затрагивалось.
+Backup исходных файлов, before/after snapshots и результат:
+`Saved/RefactorBackup/WeaponSlot/20261111_204402/`.
+Отдельной свежей загрузки и PIE в этом проходе не было.
 
 ## Согласованные правила
 
 - Inventory и ASC остаются на PlayerState. Runtime Equipment находится на текущем Pawn.
-- После смерти предметы, включая содержимое Back/Feet/Torso, остаются в Inventory.
+- После смерти предметы, включая содержимое Weapon/Back/Feet/Torso, остаются в Inventory.
   Ресурсы старого Pawn снимаются. После готовности нового Alive Avatar typed equipment
-  применяется заново; оружие автоматически в руки не возвращается.
-- `Inventory.Slot.Equipment.Back/Feet/Torso` — обычные стабильные ячейки того же FastArray.
+  применяется заново, включая оружие, оставшееся в Weapon.
+- `Inventory.Slot.Equipment.Weapon/Back/Feet/Torso` — обычные стабильные ячейки того же FastArray.
   Новый контейнер, независимое назначение слотов и отдельный Equipment Layout не создаются.
-- Hands — активный предмет из Action. Выбор сохраняется при Unequip на текущем Pawn.
-  Команда Unequip снимает только Hands; Back при этом не меняется.
-- Secondary action устройства/одежды переносит предмет в ячейку `EquipmentDefinition.SlotTag`.
+- Оружие применяется из Weapon, без отдельного выбранного предмета из Action.
+  Команда Unequip перемещает оружие из Weapon; Back при этом не меняется.
+- Secondary action оружия/устройства/одежды переносит предмет в ячейку `EquipmentDefinition.SlotTag`.
   Если он уже там, действие переносит его в первую свободную подходящую обычную ячейку.
   При отсутствии места операция отклоняется целиком.
 - Неподходящий drag не меняет серверный inventory: UI перечитывает прежнее размещение.
@@ -47,7 +83,7 @@ Combat не зависит от конкретного Character или PlayerSt
 | --- | --- |
 | PlayerState | Единственные ASC, HealthSet и Inventory; граница новой жизни |
 | Character | Передаёт контекст компонентам, включает и снимает оборудование по lifecycle |
-| Item activation ability | Выбирает действие: EquipHands либо перенос в typed/обычную ячейку через существующий Inventory API |
+| Item activation ability | Перенос в typed/обычную ячейку через существующий Inventory API |
 | Equipment component | Применяет размещённые вещи к Pawn: установки, выдача/снятие GAS-ресурсов, visuals и deferred readiness |
 | Equipment instance | SourceObject одной установки; owner-only spec handles и локальный учёт startup-попыток |
 | Combat | Механизмы выстрела/reload и наблюдение Hands/ammo; получает Inventory от Character |
@@ -83,8 +119,8 @@ GE других источников не запускают эту обрабо
 
 Character также вызывает `Combat.BindInventory(Inventory/nullptr)`. Combat снимает
 подписки на Inventory и наблюдаемый item при отвязке, не ожидая уничтожения старого Pawn.
-Изменение Back не переподписывает его на тот же Hands item. При смерти Combat останавливает
-primary input; снятием установок управляет Character через Equipment. Существующие
+Изменение Back не переподписывает его на тот же Hands item. При смерти input lifecycle завершает
+primary ability; снятием установок управляет Character через Equipment. Существующие
 Blueprint getters/delegates и командные wrappers Combat сохранены для совместимости;
 они не владеют копией состояния Equipment. После CommitAbility item activation повторно
 проверяет исходный Avatar, чтобы callback прежней жизни не переносил вещи на новой.
@@ -128,8 +164,11 @@ While-equipped GE — Infinite, без Period/Executions и без stacking. К�
 
 Combat исполняет fire/reload и косметику, наблюдает ammo/aim; authoritative equipment
 record, selection и grant/revoke находятся в Equipment. Его существующие Blueprint
-getters/delegates/RequestEquip сохранены как совместимые
+getters/delegates сохранены как совместимые
 Hands adapters без отдельного состояния. Удалять их можно только после проверки BP consumers.
+
+Команда экипировки идёт из `UNGEquipmentControlAbility` прямо в Equipment. Неиспользуемая
+обёртка `Combat.RequestEquip` удалена после поиска C++-вызовов и упоминаний в проектных ассетах.
 
 Fire сохраняет fresh-view RPC → server validation → ServerOnly GA_Fire, ADS gate,
 server projectile anchor и persistent rate gate PlayerState ASC. Перед spawn/debit

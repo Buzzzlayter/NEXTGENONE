@@ -110,9 +110,7 @@ public:
 	void BindAbilitySystem(UAbilitySystemComponent* ASC);
 	void SetWeaponMesh(USkeletalMeshComponent* Mesh);
 	FSimpleMulticastDelegate OnPresentationChanged;
-	UFUNCTION(BlueprintCallable) void RequestEquip(bool bEquip);
 	UFUNCTION(BlueprintCallable) void RequestFire();
-	void UnequipOnServer();
 	// Called by NGFireAbility after GAS checks state tags and commits the fire cooldown.
 	bool FireOnServer(UNGEquipmentInstance* Source);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastReload(UNGWeaponDefinition* ReloadWeapon, int32 Revision);

@@ -141,10 +141,13 @@ void ANGCombatTestGameMode::SmokeTick()
             || GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get()))
         { Fail(TEXT("immediate limiter reactivation accepted")); return; }
         auto* ProbeItem = A->Combat->GetEquippedItem();
-        A->Combat->UnequipOnServer();
         auto* Player = A->GetPlayerState<ANextgenonePlayerState>();
-        if (!Player || !Player->Inventory->ActivateItemOnServer(ProbeItem))
-        { Fail(TEXT("configured item equip ability failed")); return; }
+        if (!Player || !ProbeItem) { Fail(TEXT("missing equipped probe item")); return; }
+        const int32 WeaponSlot = Player->Inventory->GetSlotIndex(ProbeItem);
+        const int32 StorageSlot = Player->Inventory->FindFirstAvailableSlot(ProbeItem->GetItemDef(), 1, TAG_NGSlotStorage);
+        if (StorageSlot == INDEX_NONE || !Player->Inventory->MoveEquipmentItemOnServer(ProbeItem, StorageSlot)
+            || !Player->Inventory->MoveEquipmentItemOnServer(ProbeItem, WeaponSlot))
+        { Fail(TEXT("weapon slot unequip/re-equip transfer failed")); return; }
         if (GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get()))
         { Fail(TEXT("reequip reset persistent fire cooldown")); return; }
         UE_LOG(LogTemp, Display, TEXT("NG_LIMITER_PASS GAS_cooldown reactivation=blocked reequip=blocked"));

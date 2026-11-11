@@ -82,8 +82,7 @@ void UNGEquipWeaponItemAbility::ActivateAbility(FGameplayAbilitySpecHandle Handl
 	auto* Inventory = GetInventory();
 	const auto* Definition = UNGEquipmentComponent::GetDefinition(Item);
 	bool bEquipped = false;
-	if (Definition && Definition->SlotTag == TAG_NGEquipmentHands) bEquipped = Equipment->EquipHands(Item);
-	else if (Definition)
+	if (Definition)
 	{
 		const int32 CurrentSlot = Inventory->GetSlotIndex(Item);
 		int32 Destination = INDEX_NONE;

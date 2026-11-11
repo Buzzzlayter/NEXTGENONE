@@ -34,7 +34,6 @@ void UNGEquipmentComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ThisClass, Installations); DOREPLIFETIME(ThisClass, HandsRevision);
-	DOREPLIFETIME_CONDITION(ThisClass, SelectedItem, COND_OwnerOnly);
 }
 bool UNGEquipmentComponent::ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* Flags)
 {
@@ -113,7 +112,7 @@ bool UNGEquipmentComponent::IsCurrent(const UNGEquipmentInstance* Instance) cons
 	{
 		if (Inventory->GetCount(Instance->Item) != 1) return false;
 		const auto Slot = Inventory->GetSlotTag(Inventory->GetSlotIndex(Instance->Item));
-		return Instance->Slot == TAG_NGEquipmentHands ? Slot.MatchesTag(TAG_NGSlotAction) : Slot == Instance->Slot;
+		return Slot == Instance->Slot;
 	}
 	return Instance->Item && Instance->Item->GetItemDef();
 }
@@ -150,27 +149,21 @@ void UNGEquipmentComponent::RequestEquip(bool bEquip)
 {
 	const auto* Pawn = Cast<APawn>(GetOwner());
 	if (!Pawn || !CanApply() || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
-	if (bEquip) { if (Inventory.IsValid() && SelectedItem) Inventory->RequestActivationItem(SelectedItem); }
-	else if (Pawn->HasAuthority()) UnequipHands(); else ServerUnequipHands();
-}
-void UNGEquipmentComponent::ServerUnequipHands_Implementation() { UnequipHands(); }
-void UNGEquipmentComponent::UnequipHands()
-{
-	if (!GetOwner()->HasAuthority()) return;
-	Remove(FindInstallation(TAG_NGEquipmentHands)); Publish();
-}
-bool UNGEquipmentComponent::EquipHands(UNGInventoryItemInstance* Item)
-{
-	if (!GetOwner()->HasAuthority() || bChanging || !Inventory.IsValid() || !Inventory->Contains(Item) || Inventory->GetCount(Item) != 1) return false;
-	auto* Definition = GetDefinition(Item); FString Error;
-	if (!Definition || Definition->SlotTag != TAG_NGEquipmentHands) return false;
-	TGuardValue<bool> Changing(bChanging, true);
-	if (!Inventory->GetSlotTag(Inventory->GetSlotIndex(Item)).MatchesTag(TAG_NGSlotAction) || !Preflight(Item, Definition, Error))
-	{ UE_LOG(LogTemp, Warning, TEXT("Equipment preflight rejected %s: %s"), *GetNameSafe(Item), *Error); return false; }
-	if (auto* Existing = FindInstance(TAG_NGEquipmentHands); Existing && Existing->GetItem() == Item) return true;
-	Remove(FindInstallation(TAG_NGEquipmentHands));
-	SelectedItem = Item;
-	const bool Success = Install(Item, Definition); Publish(); return Success;
+	auto* Item = Inventory->GetItemAtSlot(Inventory->FindSlotByTag(TAG_NGSlotEquipmentWeapon, 0));
+	if (Item)
+	{
+		if (!bEquip) Inventory->RequestActivationItem(Item);
+		return;
+	}
+	if (!bEquip) return;
+	// Compatibility for the explicit equip command: use the first stored weapon.
+	for (int32 I = 0; I < Inventory->GetSlotCount(); ++I)
+	{
+		auto* Candidate = Inventory->GetItemAtSlot(I);
+		const auto* Definition = GetDefinition(Candidate);
+		if (Definition && Definition->SlotTag == TAG_NGSlotEquipmentWeapon)
+		{ Inventory->RequestActivationItem(Candidate); return; }
+	}
 }
 bool UNGEquipmentComponent::Install(UNGInventoryItemInstance* Item, UNGEquipmentDefinition* Definition)
 {
@@ -233,7 +226,7 @@ bool UNGEquipmentComponent::FinishInstall(UNGEquipmentInstance* Instance)
 	}
 	if (!Preflight(Instance->Item, Instance->Definition, Error) || !IsCurrent(Instance)) return Abort();
 	if (IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(Instance);
-	if (Instance->Slot == TAG_NGEquipmentHands) ++HandsRevision;
+	if (Instance->Slot == TAG_NGSlotEquipmentWeapon) ++HandsRevision;
 	Instance->Item->SetEquipped(true);
 	if (!IsCurrent(Instance)) return Abort();
 	return true;
@@ -243,7 +236,7 @@ void UNGEquipmentComponent::Remove(UNGEquipmentInstance* Instance)
 	if (!Instance || !Installations.Contains(Instance)) return;
 	// Invalidate before any cancellation/GE/item callback, including same-item re-equip.
 	Instance->bInstalled = false; Installations.Remove(Instance);
-	if (Instance->Slot == TAG_NGEquipmentHands) ++HandsRevision;
+	if (Instance->Slot == TAG_NGSlotEquipmentWeapon) ++HandsRevision;
 	FNGEquipmentResources Owned;
 	Resources.RemoveAndCopyValue(Instance, Owned);
 	Owned.Handles.Remove(Owned.GrantedASC);
@@ -270,7 +263,6 @@ void UNGEquipmentComponent::Reconcile()
 	TGuardValue<bool> Changing(bChanging, true);
 	const auto Previous = Installations;
 	for (UNGEquipmentInstance* Instance : Previous) if (Instance && !IsCurrent(Instance)) Remove(Instance);
-	if (SelectedItem && !Inventory->Contains(SelectedItem)) SelectedItem = nullptr;
 	for (auto It = FailedItems.CreateIterator(); It; ++It)
 		if (!It->IsValid() || !Inventory->Contains(It->Get()) || !Inventory->GetSlotTag(Inventory->GetSlotIndex(It->Get())).MatchesTag(TAG_NGSlotEquipment)) It.RemoveCurrent();
 	for (int32 I = 0; I < Inventory->GetSlotCount(); ++I)
@@ -315,7 +307,7 @@ void UNGEquipmentComponent::RefreshVisuals()
 	for (UNGEquipmentInstance* Instance : Installations)
 	{
 		const auto* Def = Instance ? Instance->GetDefinition() : nullptr;
-		if (!Instance || !Instance->bInstalled || !Def || Instance->Slot == TAG_NGEquipmentHands || Visuals.Contains(Instance)) continue;
+		if (!Instance || !Instance->bInstalled || !Def || Instance->Slot == TAG_NGSlotEquipmentWeapon || Visuals.Contains(Instance)) continue;
 		USceneComponent* Visual = nullptr;
 		if (Def->Mesh) { auto* Mesh = NewObject<UStaticMeshComponent>(GetOwner()); Mesh->SetStaticMesh(Def->Mesh); Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); Visual = Mesh; }
 		else if (Def->SkeletalMesh) { auto* Mesh = NewObject<USkeletalMeshComponent>(GetOwner()); Mesh->SetSkeletalMesh(Def->SkeletalMesh); Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); Visual = Mesh; }

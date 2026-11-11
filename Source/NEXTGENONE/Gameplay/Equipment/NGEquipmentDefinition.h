@@ -39,7 +39,7 @@ class NEXTGENONE_API UNGEquipmentDefinition : public UDataAsset
 {
 	GENERATED_BODY()
 public:
-	/** Hands for action-selected weapons; otherwise the exact typed inventory slot. */
+	/** Exact typed inventory equipment slot, including Weapon and Back. */
 	UPROPERTY(EditDefaultsOnly, Category="Equipment") FGameplayTag SlotTag;
 	UPROPERTY(EditDefaultsOnly, Category="Equipment|GAS") TArray<TObjectPtr<UNGEquipmentAbilitySet>> AbilitySets;
 	UPROPERTY(EditDefaultsOnly, Category="Equipment|GAS") TArray<FNGEquipmentAbilityGrant> Abilities;

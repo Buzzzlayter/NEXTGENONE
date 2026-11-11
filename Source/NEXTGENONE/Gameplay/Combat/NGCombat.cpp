@@ -48,7 +48,7 @@ void UNGCombatComponent::InventoryChanged() { OnRep_Ammo(); }
 UNGEquipmentInstance* UNGCombatComponent::GetWeaponInstance() const
 {
     const auto* Equipment = GetEquipmentComponent();
-    return Equipment ? Equipment->FindInstance(TAG_NGEquipmentHands) : nullptr;
+    return Equipment ? Equipment->FindInstance(TAG_NGSlotEquipmentWeapon) : nullptr;
 }
 FNGEquipmentState UNGCombatComponent::GetEquipment() const
 {
@@ -63,8 +63,8 @@ FNGEquipmentState UNGCombatComponent::GetEquipment() const
 }
 UNGInventoryItemInstance* UNGCombatComponent::GetEquippedItem() const
 {
-    const auto* Equipment = GetEquipmentComponent();
-    return Equipment ? Equipment->GetSelectedItem() : nullptr;
+    const auto* Weapon = GetWeaponInstance();
+    return Weapon ? Weapon->GetItem() : nullptr;
 }
 void UNGCombatComponent::EquipmentChanged()
 {
@@ -88,14 +88,6 @@ void UNGCombatComponent::EndPlay(const EEndPlayReason::Type Reason)
 	BindAbilitySystem(nullptr);
 	BindInventory(nullptr);
 	Super::EndPlay(Reason);
-}
-void UNGCombatComponent::RequestEquip(bool bEquip)
-{
-    if (auto* Equipment = GetEquipmentComponent()) Equipment->RequestEquip(bEquip);
-}
-void UNGCombatComponent::UnequipOnServer()
-{
-    if (auto* Equipment = GetEquipmentComponent()) Equipment->UnequipHands();
 }
 bool UNGCombatComponent::IsAiming() const
 {

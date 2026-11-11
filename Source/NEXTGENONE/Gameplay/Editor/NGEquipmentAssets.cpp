@@ -151,4 +151,68 @@ int32 NGMigrateEquipmentAssets()
 	UE_LOG(LogTemp, Display, TEXT("Equipment migration saved %d assets; backup=%s. No gameplay checks performed."), ToSave.Num(), *BackupRoot);
 	return 0;
 }
+
+/** Weapon-slot migration only: no starter grants, input, Pawn, map or jetpack changes. */
+int32 NGMigrateWeaponSlotAssets()
+{
+	const FString BackupRoot = FPaths::ProjectSavedDir() / TEXT("RefactorBackup/WeaponSlot") / FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"));
+	TArray<UObject*> Assets;
+	TArray<UNGWeaponDefinition*> Weapons;
+	TArray<UBlueprint*> Items;
+	auto Load = [](const FString& Package) -> UObject*
+	{
+		return LoadObject<UObject>(nullptr, *(Package + TEXT(".") + FPackageName::GetLongPackageAssetName(Package)));
+	};
+	auto* Layout = Cast<UNGInventoryLayoutDefinition>(Load(TEXT("/Game/Gameplay/Inventory/Layouts/DA_InventoryLayout_Player")));
+	if (!Layout) return 220;
+	Assets.Add(Layout);
+	for (const auto& Pair : {
+		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_Pistol"), TEXT("ID_Pistol")),
+		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_Rifle"), TEXT("ID_Rifle")),
+		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_Shotgun"), TEXT("ID_Shotgun")),
+		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_TestWeapon"), TEXT("ID_TestItem"))})
+	{
+		auto* Weapon = Cast<UNGWeaponDefinition>(Load(FString(TEXT("/Game/Gameplay/Weapons/")) + Pair.Key));
+		auto* ItemBP = Cast<UBlueprint>(Load(FString(TEXT("/Game/Gameplay/Inventory/")) + Pair.Value));
+		if (!Weapon || !ItemBP || !ItemBP->GeneratedClass || !ItemBP->GeneratedClass->IsChildOf(UNGInventoryItemDefinition::StaticClass())) return 221;
+		const auto* Item = GetDefault<UNGInventoryItemDefinition>(ItemBP->GeneratedClass);
+		if (Item->GetEquipmentDefinition() != Weapon) return 222;
+		Weapons.Add(Weapon); Items.Add(ItemBP); Assets.Add(Weapon); Assets.Add(ItemBP);
+	}
+	TArray<FString> Manifest;
+	for (auto* Asset : Assets)
+	{
+		const FString Package = Asset->GetOutermost()->GetName();
+		const FString File = FPackageName::LongPackageNameToFilename(Package, TEXT(".uasset"));
+		const FString Backup = BackupRoot / Package.RightChop(6) + TEXT(".uasset");
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(Backup), true);
+		if (IFileManager::Get().Copy(*Backup, *File, false) != COPY_OK) return 223;
+		Manifest.Add(Package);
+	}
+	FFileHelper::SaveStringArrayToFile(Manifest, *(BackupRoot / TEXT("Packages.txt")));
+	Layout->Modify();
+	auto* WeaponSlot = Layout->Slots.FindByPredicate([](const auto& Slot) { return Slot.SlotTag == TAG_NGSlotEquipmentWeapon; });
+	if (!WeaponSlot)
+	{
+		WeaponSlot = &Layout->Slots.AddDefaulted_GetRef();
+		WeaponSlot->SlotTag = TAG_NGSlotEquipmentWeapon;
+	}
+	WeaponSlot->AcceptedItems = FGameplayTagQuery::MakeQuery_MatchTag(TAG_NGItemEquipmentWeapon);
+	for (int32 I = 0; I < Weapons.Num(); ++I)
+	{
+		Weapons[I]->Modify(); Weapons[I]->SlotTag = TAG_NGSlotEquipmentWeapon;
+		Items[I]->Modify();
+		auto* Item = GetMutableDefault<UNGInventoryItemDefinition>(Items[I]->GeneratedClass);
+		Item->Modify(); Item->MaxStackSize = 1; Item->ItemTags.AddTag(TAG_NGItemEquipmentWeapon);
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Items[I]);
+	}
+	for (auto* Asset : Assets)
+	{
+		const FString File = FPackageName::LongPackageNameToFilename(Asset->GetOutermost()->GetName(), TEXT(".uasset"));
+		FSavePackageArgs Args; Args.TopLevelFlags = RF_Public | RF_Standalone; Args.SaveFlags = SAVE_NoError;
+		if (!UPackage::SavePackage(Asset->GetOutermost(), Asset, *File, Args)) return 224;
+	}
+	UE_LOG(LogTemp, Display, TEXT("Weapon slot migration saved %d assets; original slots retained, no starter changes; backup=%s"), Assets.Num(), *BackupRoot);
+	return 0;
+}
 #endif

@@ -61,12 +61,13 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipment, "Inventory.Slot.Equipment");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipmentBack, "Inventory.Slot.Equipment.Back");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipmentFeet, "Inventory.Slot.Equipment.Feet");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipmentTorso, "Inventory.Slot.Equipment.Torso");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGEquipmentHands, "Equipment.Slot.Hands");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGSlotEquipmentWeapon, "Inventory.Slot.Equipment.Weapon");
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputJetpack, "Input.Jetpack");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGJetpackActive, "State.Action.Jetpack");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGJetpackEquipped, "Equipment.Jetpack");
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentBack, "Item.Equipment.Back");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentWeapon, "Item.Equipment.Weapon");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentFeet, "Item.Equipment.Feet");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentTorso, "Item.Equipment.Torso");
