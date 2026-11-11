@@ -1,76 +1,58 @@
-# Бот: первый исполняемый граф
+# Настройка поведения бота
 
-## Созданные ассеты
+## Текущий контракт
 
-- /Game/Gameplay/AI/BP_NGBotCharacter — копия настроенного BP_NextgenoneCharacter с прежними ALS AnimBP, Character FSM Alive/Dead и компонентами. AIControllerClass=BP_NGAIController, AutoPossessAI=PlacedInWorldOrSpawned, AutoPossessPlayer=Disabled.
-- /Game/Gameplay/AI/BP_NGAIController — наследник NGAIController, BehaviorMachineName=FSM. Граф в EventGraph: Waiting → Move → Ability → Pause → Move; NotReady возвращает в Waiting, включая петлю через reroute. В Waiting назначен NGAIWaitForGameplayState. Failed/Aborted действий направлены в Pause, повторная попытка через секунду.
-- /Game/Gameplay/AI/FSM_AI_Pause — конкретный Blueprint-класс от UHFSMState с Context типа NGAIController. Дополнительной логики/таймеров в Blueprint нет: паузу выполняет штатный TimeOut GCFSM на ноде (1 секунда); выход таймаута ведёт к Move. Пустой Done заменён этим классом.
+AI-граф размещается в отдельном Blueprint от `UNGAIBehavior`, а не в AIController Blueprint. Контроллеру назначается `BehaviorClass`. Для разных поведений создаются разные классы объектов; один класс можно назначить нескольким контроллерам — runtime-экземпляры независимы. Один экземпляр живёт вместе с контроллером и не пересоздаётся при потере готовности или смене Pawn.
 
-Оба ассета сохранены. Пользователь назначил NGAIMoveState и NGAIAbilityState; агент сохранил и прочитал обратно параметры: Destination=(300,0,0), bRelativeToPawn=true, AcceptanceRadius=50, ActionTimeout=10 у Move; InputTag=Input.Jump, HoldDuration=0.2, ActionTimeout=3 у Ability. Blueprint compilation выполнена на текущих загруженных native-типах. После переноса Context непосредственно в Wait и Action нужна полная пользовательская сборка, перезапуск Editor и повторная компиляция Blueprint. Персонаж на карту агентом не добавлялся; PIE/сеть не запускались.
+Controller creates the Behavior object once. Pawn initialization waits for ready Character FSM resources, then calls BP Start and installs runtime state/failure observers. These observers do not rerun initialization. BP Stop handles leaving Alive, resource failure, UnPossess and EndPlay; the next possession initializes its Pawn separately. No readiness polling or defensive start/stop flags.
 
-Причина ручного выбора двух классов: MCP set_pin_value вызывает падение редактора при реконструкции GCFSM-ноды с новыми ExposeOnSpawn-пинами. В исходниках BlueprintGraphPin.cpp SetPinValue после TrySetDefaultValue обращается к прежнему NativePin, а GCFSM пересоздаёт пины синхронно. Первый контроллер не успел сохраниться при этом crash; после пользовательского перезапуска он восстановлен и сохранён со связями. Повторно выбирать эти классы через этот MCP-вызов нельзя до исправления editor API.
+Запуск, пауза и завершение GCFSM задаются пользователем внутри BP-событий Start/Stop. C++ не запускает, не пересоздаёт и не освобождает граф автоматически. Controller не хранит ActiveAction и не регистрирует действия. Ресурсами владеют состояния: Finish/Exit очищают только собственные path request, input, делегаты и таймеры. Объект поведения и его переменные сохраняются; память восприятия имеет собственный lifecycle привязки к Pawn.
 
-## Что добавлено
+Добавления ReleaseContext/RemoveContext в GCFSM убраны. Публичный UGCFSM::Stop нельзя вызывать на машине с активным состоянием: остановку описывать корректными переходами графа либо паузой.
 
-### Автоматические выходы классов
+## Настройка после пользовательской сборки
 
-Новый C++-контракт UGCFSMState::GetDeclaredTransitionEvents() возвращает события класса. Он вызывается редактором на CDO, поэтому реализация не должна обращаться к World или живому Context. UNGAIActionState объявляет Succeeded/Failed/Aborted, UNGAIWaitForGameplayState — Ready. Эти же имена из NGAIEvents.h используются при отправке событий в runtime. Ready теперь фиксирован; редактируемый Controller.ReadyEvent удалён. Внешний NotReady по-прежнему настраивается на Controller и добавляется в переходы ноды вручную.
+Для разных размещённых NPC с одним Controller Blueprint используется native-наследник `ANGBotCharacter` от `ANextgenoneCharacter`. Только у бота есть `AIBehaviorClass` с EditAnywhere: можно настроить default Bot Blueprint и отдельно экземпляры уровня через Details → AI → AI Behavior Class. None использует BehaviorClass контроллера. Контроллер выбирает класс при possession до ожидания готовности; тот же класс сохраняет существующий объект поведения, другой класс создаёт новый после Stop прежнего. Изменение поля во время игры не переключает граф автоматически. Для Pawn другого типа используется default контроллера.
 
-После пользовательской полной сборки и перезапуска Editor выполнить Refresh/Reconstruct Nodes у нод AI, затем Compile и сохранить контроллер. Выходы добавляются при выборе статического Implementation Class и реконструкции. Старые Succeeded/Failed/Aborted/Ready с теми же именами сохраняют свои связи без дублей. Неподключённый стартовый Event заменяется декларациями класса; прочие ручные события остаются. Редактор хранит принадлежность автособытий классу: при смене класса исчезнувшие события удаляются из активного набора, связанные пины сохраняются штатным orphan-механизмом UE. Их нужно вручную переподключить или удалить; это не продолжающие работать переходы.
+После пользовательской сборки открыть BP_NGBotCharacter → Class Settings → Parent Class = NGBotCharacter, скомпилировать и сохранить. Сохранить существующие графы Character FSM, Mesh, AnimBP и AIControllerClass. В ANextgenoneCharacter поля поведения больше нет.
 
-SuccessEvent/FailureEvent/AbortedEvent больше не являются свойствами или входными пинами действий. Если ранее им назначались нестандартные значения или подключались провода, их нужно перенести на фиксированные выходы и удалить оставшиеся orphan-входы. Объявленные события нельзя переименовать в Details независимо от класса. При динамическом Class-пине автоматический контракт неизвестен; для этого эксперимента выбирать класс прямо на ноде. Classes без деклараций и local/submachine-ноды сохраняют ручной авторинг событий. Стандартные TimeOut/Tick не менялись.
+1. Для своего поведения создать Blueprint от `NGAIBehavior`; готовый пример — `BP_AIBehavior_Enemy`.
+2. Event Start запускает GCFSM, Event Stop отправляет событие перехода из рабочих состояний через Exit к FSM Stop. Pause FSM сохраняет активные ресурсы и не заменяет завершение.
+3. Назначить BehaviorClass в `BP_NGAIController` либо AI Behavior Class на экземпляре `BP_NGBotCharacter`. Controller Blueprint не должен содержать граф поведения.
+4. На Bot Pawn: Parent Class=`NGBotCharacter`, AIControllerClass=`BP_NGAIController`, AutoPossessAI=`PlacedInWorldOrSpawned`, AutoPossessPlayer=`Disabled`. Сохранить ALS AnimBP и Character FSM Alive/Dead.
+5. Настроить inventory layout и InitialContents с оружием/патронами. Способности выдаются Character states и equipment, а не AI-контроллером. Для движения нужен NavMesh.
 
-Изменения автоматических выходов просмотрены статически, но не собраны и не проверены в редакторе или игре. Ранее сохранённый граф ещё использует предыдущие загруженные native-типы. Известный crash MCP при выборе класса с ExposeOnSpawn этим пакетом не исправляется — безопасный выбор класса выполнять вручную в UI.
+У `UNGAIActionState` Context теперь типа `UNGAIBehavior`. GCFSM присваивает его до Enter. Состояние получает контроллер через объект поведения, без GetFirstPlayerController и без LocalPlayer. Context не является параметром ExposeOnSpawn.
 
-### Проверка пользователя
+Для паузы выбрать native-класс `NGAIPauseState`: единственный выход Succeeded, параметр Cooldown (по умолчанию 1 с). Отсчёт идёт через Tick FSM и останавливается вместе с графом; отдельного таймера, GAS и ActionTimeout нет. Нулевое значение завершается на ближайшем Tick; отрицательное/нечисловое нормализуется в ноль с предупреждением. Нода напрямую наследует UHFSMState. Отдельный Blueprint паузы не требуется; старые ноды FSM_AI_Pause заменить при миграции графа.
 
-Пользователь сообщил, что добавил NavMesh, протестировал бота и цепочка заработала. Это подтверждение пользователя для предыдущей версии графа; состав сетевой сессии и негативные сценарии не уточнялись. Оно не подтверждает новые автоматические выходы. Агент тестирование не запускал.
+## Сохранённые ассеты
 
-C++ в NEXTGENONE/Gameplay/AI. Сборку C++ выполняет пользователь. Blueprint контроллера с циклом скомпилирован через MCP с warnings_as_errors=true и сохранён, класс паузы сохранён; ссылки/параметры прочитаны обратно. UBT, Live Coding, PIE и сеть агентом не запускались. Компиляция Blueprint не подтверждает игровой результат.
+`BP_AIBehavior_Enemy` содержит две параллельные машины навигации и оружия. Event Start запускает обе; Event Stop отправляет общее событие Stop, обработанное каждой машиной. Актуальные связи и ограничения описаны в [BotCombat.md](BotCombat.md). `BP_AIBehavior_Simple` — отдельное пользовательское поведение.
 
-- NGAIController создаёт PlayerState и запускает нереплицируемую GCFSM на сервере. Не зависит от ANextgenoneCharacter: текущий Pawn должен иметь CharacterStateMachine и проектный ASC на PlayerState.
-- NGAIWaitForGameplayState подтверждает возврат графа в ожидание. Ready выдаётся после готовности Alive/ASC и этого барьера.
-- NGAIActionState хранит результат Running/Succeeded/Failed/Aborted и причину; допускается одно активное действие. Выполнение привязано к Pawn, ASC, поколению Avatar, possession и конкретному входу состояния.
-- NGAIMoveState использует MoveTo, отклоняет partial path и ждёт результата своего request ID. При выходе отменяет только свой запрос.
-- NGAIAbilityState вызывает общий press/release. Требует ровно один неактивный InstancedPerActor spec с точным InputTag. Запуск запроса не считается успехом: ожидается фактическое завершение ability; cancel даёт Aborted. NonInstanced/InstancedPerExecution и одновременные исполнения не поддержаны первым пакетом.
+Выбор ImplementationClass через MCP вызывает crash при реконструкции пинов в текущем инструменте. Класс выбирать вручную до исправления инструмента; исходники движка в этом пакете не изменялись.
 
-AI не выдаёт способности и предметы: они по-прежнему принадлежат Character state definitions и экипировке. Жизнь/смерть управляются прежней Character FSM. Никаких player UI/IMC для исполнения AI не требуется; рабочий CharacterDefinition/InputConfig сохранить из-за общей валидации state definitions.
+## Ноды и выходы
 
-## Blueprint-сетап после полной сборки
+Иерархия плоская: FindTarget, Move, Ability и FireBurst напрямую наследуют NGAIActionState. Пауза напрямую наследует UHFSMState. Для всех вариантов движения используется NGAIMoveState с DestinationType (Point/LastKnownTarget/Reposition). Общая механика удержания GAS вынесена в обычную структуру FNGAIAbilityInput, без дополнительных UObject-баз. У FireBurst свой BurstDuration; наследуемых InputTag/HoldDuration больше нет.
 
-AI-действия — готовые C++-наследники UHFSMState, без промежуточных action-компонентов и без обязательных Blueprint-наследников. В ноде GCFSM выбирать конкретный Implementation Class; параметры EditAnywhere + BlueprintReadWrite + ExposeOnSpawn появляются входными пинами. Можно задавать константы либо подключать вычисленные значения. Плагин присваивает их перед Enter. При динамически подключённом Class-пине специализированные пины могут не отображаться — выбрать класс прямо на ноде. После изменения C++ обновить ноды (Refresh/Reconstruct Nodes).
+Действия — native-наследники UHFSMState с параметрами EditAnywhere / BlueprintReadWrite / ExposeOnSpawn на нодах. У каждой ноды должен быть Implementation Class. Значения задаются до Enter; не менять параметры владения во время исполнения.
 
-Пины Move: Destination, bRelativeToPawn, AcceptanceRadius. Пины Ability: InputTag, HoldDuration. Общий вход: ActionTimeout. Выходы результата создаются из контракта класса автоматически. ActionTimeout — watchdog действия; встроенный TimeOut GCFSM остаётся отдельным механизмом и не переименовывается.
+`GetDeclaredTransitionEvents()` объявляет Succeeded/Failed на CDO; редактор добавляет их при реконструкции. Внешние события можно добавлять вручную. Совпадающие связи сохраняются, исчезнувшие связанные пины остаются orphan до исправления графа.
 
-Если ранее вручную добавлялись NGAI*StateComponent в Components, убрать эти инстансы и выбрать соответствующий NGAI*State в Implementation Class ноды. Это смена модели component → state, автоматический ClassRedirect между несовместимыми базовыми типами не добавляется. Общие компоненты UI/HFSM не менялись.
+Move владеет одним path request, Ability — одним уже выданным InstancedPerActor spec и его input lifetime. Старые callbacks проверяют Pawn, ASC/AvatarGeneration, possession, экземпляр поведения и запуск состояния. Старое поведение не может отправить результат в новую машину.
 
-1. Создать BP_NGAIController от NGAIController. BehaviorMachineName — имя GCFSM-графа, например BotBehavior. Событие готовности фиксировано: Ready; NotReadyEvent=NotReady. Не добавлять Launch FSM в BeginPlay: запуск выполняется C++.
-2. Создать bot-вариант существующего настроенного BP персонажа. Сохранить Character FSM, Alive/Dead definitions и ALS AnimBP. AI Controller Class=BP_NGAIController, Auto Possess AI=Placed in World or Spawned; Auto Possess Player выключить. GameMode должен создавать NextgenonePlayerState.
-3. Поставить бота на доступную навигацию. Добавить/проверить NavMeshBoundsVolume на нужной площадке; выбор цели и обход препятствий обеспечивает стандартный Navigation.
-4. В BP_NGAIController использовать существующий граф FSM либо новое имя, совпадающее с BehaviorMachineName. Текущая схема плоская: WaitingForGameplay, Move, Ability, Pause. У каждой ноды назначен Implementation Class. Wait и Action непосредственно наследуют UHFSMState и содержат Transient BlueprintReadOnly Context типа NGAIController: GCFSM сам заполняет его при Initialize до Enter и проверяет совместимость типов. Отдельную Context-переменную для этих native-классов в Blueprint создавать не нужно. Context не является ExposeOnSpawn-параметром. Не использовать UI input-компоненты.
-5. У WaitingForGameplay выбрать Implementation Class=NGAIWaitForGameplayState. Ready → Move. NotReady через reroute обратно в WaitingForGameplay сбрасывает прежний цикл при новом possession.
-6. У Move, Ability и Pause подключить NotReady → WaitingForGameplay. Объединение этих переходов в родительском Active — возможное дальнейшее упрощение графа, в текущем сохранённом ассете его нет.
-7. У Pause выбрать Implementation Class=FSM_AI_Pause. В Details ноды TimeOut=1 секунда; выход TimeOut → Move. Это штатный GCFSM TimeOut, а не ActionTimeout. После успешного выполнения или ошибки цепочка ждёт секунду и повторяет попытку. Выбор цели/GOAP отсутствует: это только циклическая последовательность.
-8. У Move выбрать Implementation Class=NGAIMoveState. На пинах Destination=(300,0,0), bRelativeToPawn=true — пройти на 300 см вперёд относительно положения/ориентации при каждом входе. Либо bRelativeToPawn=false и задать мировую точку. AcceptanceRadius=50, ActionTimeout=10. Succeeded → Ability; Failed/Aborted → Pause.
-9. У Ability выбрать Implementation Class=NGAIAbilityState. Для первичной проверки без оружия на пинах InputTag=Input.Jump, HoldDuration=0.2, ActionTimeout=3; Jump должна быть выдана Alive. Succeeded/Failed/Aborted → Pause. Завершение Jump ability подтверждает её lifecycle, а не приземление или успешный traversal.
-10. Для ADS вместо Jump задать InputTag=Input.Aim, HoldDuration=1, ActionTimeout=3. Aim ability должна быть уже выдана экипированным оружием. Первый пакет не добавляет автоматическую экипировку: отсутствующий spec даст Failed. Подготовка оружия ботом — следующий пакет.
+## Проверки
 
-Имена result-событий определяет класс состояния. Один action-state исполняет одно действие; дополнительные action-компоненты не добавлять. Не запускать параллельно Blueprint MoveTo или ту же ability из другого источника: они не принадлежат этому исполнению. Стрелять, наносить урон или менять боезапас из графа нельзя. Во время исполнения не изменять InputTag и параметры cleanup через Set: входные значения задаются до Enter.
+Перед остановкой Controller снимает подписки и очищает ObservedCharacterFSM; только затем вызывает BP Stop. Без актуальной привязки получение ready ASC и повторный запуск невозможны. Штатные HasActorBegunPlay/IsActorBeingDestroyed закрывают обращения вне lifecycle Actor; отдельного bStopping нет.
 
-## Lifecycle и ограничения
+Выполнен статический просмотр исходников/API и diff; граф BP_AIBehavior_Enemy скомпилирован и сохранён через Editor MCP, связи прочитаны обратно. Пользователь ранее подтверждал работу прежнего Move/Jump-графа с NavMesh; это не проверка нового объекта поведения или боевого пакета.
 
-Readiness обновляется по OnStateChanged/OnResourcesReady Character FSM, дополнительно — таймером раз в 0.1 с на possessed Controller. Таймер покрывает смену ресурсов/ASC без изменения state tag; это не скан мира и не планирование каждый кадр. У активного действия отдельный watchdog 0.1 с проверяет поколение/готовность/timeout. Зависание пути завершится по timeout, отдельный stuck-detector ещё не добавлен.
+Сборку выполняет пользователь. PIE, сетевые проверки и smoke tests этого пакета не запускались. Проверить после отдельного разрешения: первый запуск без Wait, два бота с общим BehaviorClass, разные классы поведения, смерть/UnPossess внутри ability, новый Avatar с тем же объектом поведения, корректность BP Start/Stop и world teardown.
 
-При потере gameplay-ready активное действие немедленно освобождает ресурсы, граф получает NotReady. При UnPossess очистка выполняется до отвязки Pawn, граф ставится на паузу. При новом possession снимается пауза и отправляется NotReady; до входа WaitingForGameplay старт действий запрещён. При EndPlay выполняется та же очистка и граф остаётся на паузе до уничтожения Controller. Публичный UGCFSM::Stop не вызывается на активной машине: исходный plugin требует сначала выйти из состояния.
+После изменения выходов собрать C++ и выполнить Refresh/Reconstruct Nodes. У действий остаются Succeeded/Failed; отмена хранится как внутренний Aborted, но в графе идёт через Failed. Связанные старые пины Aborted редактор сохраняет как orphan: перенести их связи на Failed и затем удалить orphan. Пользовательские события не удаляются автоматически.
 
-Release/Cancel адресуются сохранённым ASC/spec и только прежнему Avatar. Поздние path/ability callbacks фильтруются по запуску, request/spec/instance; результат фиксируется один раз. Notification графу откладывается до следующего тика, отменяется при Exit и проверяет прежний active state и possession. События результата имеют короткий срок жизни 0.1 с: нельзя вручную ставить граф на паузу посреди действия и ожидать отложенный результат. Тактическую паузу пока делать выходом из action-state.
 
-Не реализованы: динамическая цель и Focus-компонент, планирование, perception/memory, экипировка ботом, ограниченные очереди, выбор маршрута Jump/Mantle, отряд. Успех GAS ability сам по себе не подтверждает достижение игровой цели. GOAP и новые AI-framework dependencies не добавлены.
+### Initialization and runtime events
 
-## Проверить после отдельного апрува
-
-- Переход Waiting → Move только после настоящего Alive/ASC; движение, прыжок, пауза и повторный цикл.
-- Недостижимая точка, timeout, повторный вход, отмена/замена path request.
-- CanActivate rejected, отсутствующая/дублированная input ability, удержание и release ADS, синхронное завершение и cancel.
-- Смерть, UnPossess/повторный possession, смена Avatar и EndPlay: ни оставшегося движения/ADS, ни callback старого запуска на новой жизни.
-- Dedicated server и два клиента: движение, ADS/смерть на proxies, отсутствие LocalPlayer-зависимостей; отдельно late join и Mixed ASC replication.
+`BindPawn` subscribes to resource readiness and checks the initial snapshot once. `InitializeGameplay` removes that initialization subscription when the current Avatar is ready, then installs state-change/resource-failure subscriptions and invokes BP Start once. Runtime events do not repeat initialization or rescan readiness. Leaving Alive or a resource failure invokes BP Stop and removes runtime subscriptions. A new possession establishes a fresh initialization subscription; the Behavior object is retained. No bChangingBehavior/bBehaviorStarted, next-frame retry or recurring readiness polling. State lifecycle and resource cleanup remain the graph's responsibility.

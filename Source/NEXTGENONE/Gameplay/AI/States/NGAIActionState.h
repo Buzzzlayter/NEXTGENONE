@@ -6,6 +6,7 @@
 class ANGAIController;
 class UNGAbilitySystemComponent;
 class APawn;
+class UNGAIBehavior;
 
 enum class ENGAIActionResult : uint8 { Running, Succeeded, Failed, Aborted };
 
@@ -19,13 +20,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Action", meta=(ExposeOnSpawn="true", ClampMin="0.1")) float ActionTimeout = 10.f;
 	virtual void Enter() override;
 	virtual void Exit(FName Event) override;
-	void AbortAction(FName Reason);
 	ENGAIActionResult GetResult() const { return Result; }
 	FName GetResultReason() const { return ResultReason; }
 protected:
 	/** Assigned by GCFSM before Enter; also used for editor context validation. */
 	UPROPERTY(Transient, BlueprintReadOnly, Category="AI|Context")
-	TObjectPtr<ANGAIController> Context;
+	TObjectPtr<UNGAIBehavior> Context;
 
 	virtual void StartAction() PURE_VIRTUAL(UNGAIActionState::StartAction, );
 	virtual void ReleaseActionResources() {}
@@ -38,8 +38,8 @@ protected:
 	uint64 RunSerial = 0;
 	bool bRunning = false;
 private:
+	void AbortAction(FName Reason);
 	uint32 AvatarGeneration = 0;
-	uint64 PossessionSerial = 0;
 	ENGAIActionResult Result = ENGAIActionResult::Aborted;
 	FName ResultReason;
 	FTimerHandle WatchdogTimer;

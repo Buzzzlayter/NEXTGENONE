@@ -103,6 +103,8 @@ public:
 	UFUNCTION(BlueprintPure) bool IsAiming() const;
 	UFUNCTION(BlueprintPure) UNGInventoryItemInstance* GetEquippedItem() const;
 	UNGEquipmentInstance* GetWeaponInstance() const;
+	/** Server projectile anchor; AI line-of-fire checks must use the same origin as combat. */
+	FVector GetShotOrigin() const;
 	UFUNCTION(BlueprintCallable) void RequestReload();
 	static UNGWeaponDefinition* GetWeaponDefinition(const UNGInventoryItemDefinition* ItemDefinition);
 	bool CompleteReloadOnServer(UNGEquipmentInstance* Source);

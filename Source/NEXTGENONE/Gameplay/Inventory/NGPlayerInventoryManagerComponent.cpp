@@ -6,6 +6,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Controller.h"
 #include "Engine/World.h"
 #include "Misc/ScopeExit.h"
 #include "Gameplay/Player/NGPlayerContext.h"
@@ -61,10 +62,11 @@ APlayerController* UNGPlayerInventoryManagerComponent::GetPlayerController() con
 APawn* UNGPlayerInventoryManagerComponent::GetInventoryPawn() const
 {
 	const auto* Player = Cast<APlayerState>(GetOwner());
-	const auto* PC = GetPlayerController();
+	const auto* Controller = Player ? Cast<AController>(Player->GetOwner()) : nullptr;
 	auto* CurrentPawn = Player ? Player->GetPawn() : nullptr;
-	return PC && IsValid(CurrentPawn) && PC->GetPawn() == CurrentPawn
-		&& CurrentPawn->GetPlayerState() == Player && PC->PlayerState == Player ? CurrentPawn : nullptr;
+	return Controller && IsValid(CurrentPawn) && Controller->GetPawn() == CurrentPawn
+		&& CurrentPawn->GetController() == Controller && CurrentPawn->GetPlayerState() == Player
+		&& Controller->GetPlayerState<APlayerState>() == Player ? CurrentPawn : nullptr;
 }
 bool UNGPlayerInventoryManagerComponent::IsLocalController() const { const auto* PC = GetPlayerController(); return PC && PC->IsLocalController(); }
 
@@ -164,7 +166,7 @@ void UNGPlayerInventoryManagerComponent::ClientCloseInventoryView_Implementation
 bool UNGPlayerInventoryManagerComponent::CanAccessInventory(UNGInventoryManagerComponent* Inventory) const
 {
 	if (!IsValid(Inventory) || !IsValid(Inventory->GetOwner())) return false;
-	if (Inventory->GetOwner() == (GetPlayerController() ? GetPlayerController()->GetPlayerState<APlayerState>() : nullptr) || Inventory->GetOwner() == GetInventoryPawn()) return true;
+	if (Inventory->GetOwner() == GetOwner() || Inventory->GetOwner() == GetInventoryPawn()) return true;
 	if (GetViewedInventory() != Inventory) return false;
 	auto* PlayerPawn = GetInventoryPawn();
 	const auto* Interaction = PlayerPawn ? PlayerPawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;

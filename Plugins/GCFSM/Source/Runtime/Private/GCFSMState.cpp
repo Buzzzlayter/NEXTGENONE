@@ -243,6 +243,14 @@ bool UGCFSMState::IsFSMRunning(FName fsmName) const
 	return FSMs.Find(fsmName) != nullptr;
 }
 
+void UGCFSMState::TriggerTransitionEvent(FName eventName)
+{
+	auto* fsm = GetParentFSM();
+	if (!eventName.IsNone() && fsm && fsm->GetActiveState() == this)
+		fsm->TriggerEvent({eventName, GetRootTime(), FLT_MAX, false, false,
+			EGCFSMTriggerEventQueuePolicy::QueueUnlessAlreadyInQueue});
+}
+
 void UGCFSMState::TriggerEvent(const FGCFSMTriggeredEvent& event)
 {
 	if (IsValid(this)) //[[likely]]

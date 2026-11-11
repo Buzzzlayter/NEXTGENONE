@@ -6,7 +6,11 @@
 
 class UNGAbilitySystemComponent;
 class UNGCharacterStateMachineComponent;
-class UNGAIActionState;
+class UNGAIMemoryComponent;
+class UAISenseConfig_Sight;
+class UAISenseConfig_Hearing;
+class UNGAIBehavior;
+struct FGameplayTag;
 
 /** Project bot controller. Gameplay stays on the existing Character and PlayerState. */
 UCLASS()
@@ -16,15 +20,14 @@ class NEXTGENONE_API ANGAIController : public AAIController
 
 public:
 	ANGAIController();
-	UPROPERTY(EditDefaultsOnly, Category="AI|FSM") FName BehaviorMachineName;
-	UPROPERTY(EditDefaultsOnly, Category="AI|FSM") FName NotReadyEvent = TEXT("NotReady");
+	UPROPERTY(EditAnywhere, Category="AI|Behavior") TSubclassOf<UNGAIBehavior> BehaviorClass;
+	UNGAIBehavior* GetBehavior() const { return Behavior; }
+	UPROPERTY(EditAnywhere, Category="AI|Observation") bool bObserveTarget = true;
+	UNGAIMemoryComponent* GetMemory() const { return Memory; }
+	void RefreshObservation();
 
 	/** Server-side action entry point. ExpectedPawn prevents an old task from using a new Avatar. */
 	UNGAbilitySystemComponent* GetReadyAbilitySystem(const APawn* ExpectedPawn) const;
-	bool RegisterAction(UNGAIActionState* Action);
-	void UnregisterAction(UNGAIActionState* Action);
-	void RefreshGameplay();
-	uint64 GetPossessionSerial() const { return PossessionSerial; }
 
 protected:
 	virtual FVector GetFocalPointOnActor(const AActor* Actor) const override;
@@ -33,18 +36,20 @@ protected:
 	virtual void OnUnPossess() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 private:
-	friend class UNGAIWaitForGameplayState;
+	UPROPERTY(Transient) TObjectPtr<UNGAIBehavior> Behavior;
+	UPROPERTY(VisibleAnywhere, Category="AI") TObjectPtr<UNGAIMemoryComponent> Memory;
+	UPROPERTY(VisibleAnywhere, Instanced, Category="AI|Perception") TObjectPtr<UAISenseConfig_Sight> SightConfig;
+	UPROPERTY(VisibleAnywhere, Instanced, Category="AI|Perception") TObjectPtr<UAISenseConfig_Hearing> HearingConfig;
+	bool bOwnsObservationFocus = false;
 	TWeakObjectPtr<UNGCharacterStateMachineComponent> ObservedCharacterFSM;
-	TWeakObjectPtr<UNGAIActionState> ActiveAction;
 	FDelegateHandle StateChangedHandle;
 	FDelegateHandle ResourcesReadyHandle;
-	FTimerHandle ReadinessTimer;
-	bool bGameplayReady = false;
-	bool bStopping = false;
-	bool bWaitingForGraphReset = true;
-	uint64 PossessionSerial = 0;
-	void EnterGameplayWait();
+	FDelegateHandle ResourceFailureHandle;
 	void BindPawn();
 	void ReleasePawn();
-	void SendBehaviorEvent(FName Event);
+	void StopBehavior();
+	void TryInitializeGameplay(AActor* Avatar);
+	void InitializeGameplay();
+	void HandleGameplayStateChanged(FGameplayTag Previous, FGameplayTag Current);
+	void UnsubscribeGameplay();
 };
