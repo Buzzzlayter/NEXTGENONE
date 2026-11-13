@@ -128,9 +128,10 @@ bool UNGEquipmentComponent::Preflight(UNGInventoryItemInstance* Item, UNGEquipme
 	if ((Definition->Mesh || Definition->SkeletalMesh) && (!Target || Definition->AttachSocket.IsNone() || !Target->DoesSocketExist(Definition->AttachSocket)))
     { Error = TEXT("Equipment visual requires an existing socket or bone on the Avatar mesh."); return false; }
 	const auto* Replaced = FindInstallation(Definition->SlotTag);
+	// GAS defers ClearAbility during item activation; retired specs no longer reserve input tags.
 	for (const auto& Grant : Grants) if (Grant.Grant.InputTag.IsValid())
 		for (const auto& Spec : ASC->GetActivatableAbilities())
-			if (Spec.SourceObject.Get() != Replaced && Spec.GetDynamicSpecSourceTags().HasTagExact(Grant.Grant.InputTag))
+			if (!Spec.PendingRemove && Spec.SourceObject.Get() != Replaced && Spec.GetDynamicSpecSourceTags().HasTagExact(Grant.Grant.InputTag))
 			{ Error = FString::Printf(TEXT("InputTag %s already belongs to another grant."), *Grant.Grant.InputTag.ToString()); return false; }
 	Error.Reset(); return true;
 }
