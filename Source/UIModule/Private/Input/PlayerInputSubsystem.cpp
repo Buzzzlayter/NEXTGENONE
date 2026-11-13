@@ -6,6 +6,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Framework/Application/NavigationConfig.h"
 #include "GameFramework/PlayerController.h"
 #include "InputProcessors/PreprocessorManager.h"
 #include "EnhancedInputSubsystems.h"
@@ -124,6 +125,8 @@ void UPlayerInputSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		return;
 	}
 	PreprocessorManager = MakeShared<FPreprocessorManager>(GetLocalPlayer());
+	// Tab belongs to UI input actions; preserve directional and gamepad navigation.
+	FSlateApplication::Get().GetNavigationConfig()->bTabNavigation = false;
 	PreprocessorManager->SetInputMode(InputMode);
 	PreprocessorManager->GetInputDetector().OnInputTypeChanged.BindUObject(this, &ThisClass::InputTypeChanged);
 	if (!FSlateApplication::Get().RegisterInputPreProcessor(PreprocessorManager, 0))

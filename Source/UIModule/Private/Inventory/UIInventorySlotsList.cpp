@@ -1,10 +1,14 @@
 #include "Inventory/UIInventorySlotsList.h"
 #include "Inventory/UIInventorySlotWidget.h"
+#include "Blueprint/DragDropOperation.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/WrapBox.h"
+#include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
 
 void UUIInventorySlotsList::SetData(const TArray<FUIInventorySlotData>& InSlots, UObject* InOperationHandler)
 {
+	if (InSlots.IsEmpty()) CancelOwnedDragDrop();
 	Slots = InSlots;
 	OperationHandler = InOperationHandler;
 	Repaint();
@@ -12,10 +16,20 @@ void UUIInventorySlotsList::SetData(const TArray<FUIInventorySlotData>& InSlots,
 void UUIInventorySlotsList::NativeConstruct() { Super::NativeConstruct(); Repaint(); }
 void UUIInventorySlotsList::NativeDestruct()
 {
+	CancelOwnedDragDrop();
 	if (WrapBox) WrapBox->ClearChildren();
 	InventorySlots.Reset();
 	Super::NativeDestruct();
 }
+
+void UUIInventorySlotsList::CancelOwnedDragDrop() const
+{
+	if (!FSlateApplication::IsInitialized()) return;
+	const auto* Drag = UWidgetBlueprintLibrary::GetDragDroppingContent();
+	if (Drag && InventorySlots.Contains(Drag->GetTypedOuter<UUIInventorySlotWidget>()))
+		UWidgetBlueprintLibrary::CancelDragDrop();
+}
+
 void UUIInventorySlotsList::Repaint()
 {
 	if (!WrapBox || !SlotClass || SlotClass->HasAnyClassFlags(CLASS_Abstract) || !GetOwningPlayer()) return;
