@@ -1,22 +1,20 @@
 #pragma once
 
-#include "UObject/Object.h"
+#include "HFSMState.h"
 #include "NGAIBehavior.generated.h"
 
 class ANGAIController;
 
-/** One behavior object per controller; Blueprint owns the graph's start/stop policy. */
+/** Behavior state hosted by the shared Controller Blueprint FSM. */
 UCLASS(Abstract, Blueprintable, BlueprintType)
-class NEXTGENONE_API UNGAIBehavior : public UObject
+class NEXTGENONE_API UNGAIBehavior : public UHFSMState
 {
 	GENERATED_BODY()
 public:
 	UFUNCTION(BlueprintPure, Category="AI|Behavior")
 	ANGAIController* GetController() const;
-	virtual UWorld* GetWorld() const override;
-	void Initialize(ANGAIController* InController);
-	UFUNCTION(BlueprintImplementableEvent, Category="AI|Behavior") void Start();
-	UFUNCTION(BlueprintImplementableEvent, Category="AI|Behavior") void Stop();
-private:
-	TWeakObjectPtr<ANGAIController> Controller;
+protected:
+	/** GCFSM assigns this before Enter; the editor uses its type to validate nested task contexts. */
+	UPROPERTY(Transient, BlueprintReadOnly, Category="AI|Context")
+	TObjectPtr<ANGAIController> Context;
 };

@@ -3,7 +3,7 @@
 #include "HFSMState.h"
 #include "NGAIPauseState.generated.h"
 
-class UNGAIBehavior;
+class ANGAIController;
 
 /** Wait for a cooldown before the next AI action. */
 UCLASS(Blueprintable)
@@ -14,7 +14,7 @@ public:
 	virtual TArray<FName> GetDeclaredTransitionEvents() const override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Pause", meta=(ExposeOnSpawn="true", ClampMin="0")) float Cooldown = 1.f;
 protected:
-	UPROPERTY(Transient, BlueprintReadOnly, Category="AI|Context") TObjectPtr<UNGAIBehavior> Context;
+	UPROPERTY(Transient, BlueprintReadOnly, Category="AI|Context") TObjectPtr<ANGAIController> Context;
 	virtual void Enter() override;
 	virtual void Tick(float DeltaTime) override;
 private:

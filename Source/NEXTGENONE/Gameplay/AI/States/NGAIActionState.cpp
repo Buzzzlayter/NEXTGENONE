@@ -1,7 +1,6 @@
 #include "Gameplay/AI/States/NGAIActionState.h"
 
 #include "Gameplay/AI/NGAIController.h"
-#include "Gameplay/AI/NGAIBehavior.h"
 #include "Gameplay/AI/NGAIEvents.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "TimerManager.h"
@@ -15,10 +14,9 @@ TArray<FName> UNGAIActionState::GetDeclaredTransitionEvents() const
 
 void UNGAIActionState::Enter()
 {
-	AbortAction(TEXT("Reentered"));
-	++RunSerial;
+	ResetAction();
 	Super::Enter();
-	ActionController = Context ? Context->GetController() : nullptr;
+	ActionController = Context;
 	ExpectedPawn = ActionController.IsValid() ? ActionController->GetPawn() : nullptr;
 	ActionASC = ActionController.IsValid() ? ActionController->GetReadyAbilitySystem(ExpectedPawn.Get()) : nullptr;
 	const auto* ProjectASC = Cast<UNGPlayerAbilitySystemComponent>(ActionASC.Get());
@@ -26,11 +24,15 @@ void UNGAIActionState::Enter()
 	bRunning = true;
 	Result = ENGAIActionResult::Running;
 	ResultReason = NAME_None;
-	if (!GetWorld() || !ProjectASC || !FMath::IsFinite(ActionTimeout) || ActionTimeout < .1f
-		|| !Context || ActionController->GetBehavior() != Context.Get())
+	if (!GetWorld() || !ProjectASC || !FMath::IsFinite(ActionTimeout) || ActionTimeout < .1f)
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Action context or gameplay not ready")); return; }
-	Deadline = GetWorld()->GetTimeSeconds() + ActionTimeout;
-	GetWorld()->GetTimerManager().SetTimer(WatchdogTimer, this, &ThisClass::CheckAction, .1f, true);
+	const uint64 StartedRun = RunSerial;
+	GetWorld()->GetTimerManager().SetTimer(TimeoutTimer, FTimerDelegate::CreateWeakLambda(this, [this, StartedRun]()
+	{
+		if (StartedRun != RunSerial || !bRunning) return;
+		if (!IsCurrentRun(StartedRun)) { ResetAction(); return; }
+		FinishAction(ENGAIActionResult::Failed, TEXT("Action timed out"));
+	}), ActionTimeout, false);
 	StartAction();
 }
 
@@ -38,7 +40,6 @@ bool UNGAIActionState::HasCurrentAvatar() const
 {
 	const auto* ProjectASC = Cast<UNGPlayerAbilitySystemComponent>(ActionASC.Get());
 	return ActionController.IsValid() && ExpectedPawn.IsValid() && ProjectASC
-		&& Context && ActionController->GetBehavior() == Context.Get()
 		&& ActionController->GetPawn() == ExpectedPawn.Get() && ProjectASC->GetAvatarActor() == ExpectedPawn.Get()
 		&& ExpectedPawn->GetController() == ActionController.Get()
 		&& ProjectASC->GetAvatarGeneration() == AvatarGeneration;
@@ -46,15 +47,8 @@ bool UNGAIActionState::HasCurrentAvatar() const
 
 bool UNGAIActionState::IsCurrentRun(uint64 Serial) const
 {
-	return bRunning && Serial == RunSerial && HasCurrentAvatar();
-}
-
-void UNGAIActionState::CheckAction()
-{
-	if (!bRunning) return;
-	if (!HasCurrentAvatar() || ActionController->GetReadyAbilitySystem(ExpectedPawn.Get()) != ActionASC.Get())
-	{ AbortAction(TEXT("Avatar or gameplay readiness lost")); return; }
-	if (GetWorld()->GetTimeSeconds() >= Deadline) FinishAction(ENGAIActionResult::Failed, TEXT("Action timed out"));
+	return bRunning && Serial == RunSerial && HasCurrentAvatar()
+		&& GetParentFSM() && GetParentFSM()->GetActiveState() == this;
 }
 
 void UNGAIActionState::FinishAction(ENGAIActionResult Outcome, FName Reason)
@@ -63,7 +57,7 @@ void UNGAIActionState::FinishAction(ENGAIActionResult Outcome, FName Reason)
 	bRunning = false; // Cleanup may synchronously fire path/ability callbacks.
 	Result = Outcome;
 	ResultReason = Reason;
-	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(WatchdogTimer);
+	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(TimeoutTimer);
 	ReleaseActionResources();
 	UE_LOG(LogTemp, Verbose, TEXT("AI action %s: result=%d reason=%s"), *GetName(), static_cast<int32>(Outcome), *Reason.ToString());
 	const FName Event = Outcome == ENGAIActionResult::Succeeded ? NGAIEvents::Succeeded : NGAIEvents::Failed;
@@ -72,21 +66,30 @@ void UNGAIActionState::FinishAction(ENGAIActionResult Outcome, FName Reason)
 	// Defer graph notification until Enter/activation/callback stacks have unwound.
 	CompletionTimer = GetWorld()->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this, CompletedRun, Event]()
 	{
-		if (CompletedRun != RunSerial || bRunning || !HasCurrentAvatar()) return;
+		if (CompletedRun != RunSerial || bRunning || !HasCurrentAvatar()
+			|| !GetParentFSM() || GetParentFSM()->GetActiveState() != this) return;
 		TriggerTransitionEvent(Event);
 	}));
 }
 
-void UNGAIActionState::AbortAction(FName Reason)
+void UNGAIActionState::ResetAction()
 {
-	FinishAction(ENGAIActionResult::Aborted, Reason);
+	++RunSerial;
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(TimeoutTimer);
+		GetWorld()->GetTimerManager().ClearTimer(CompletionTimer);
+	}
+	if (!bRunning) return;
+	bRunning = false;
+	Result = ENGAIActionResult::Aborted;
+	ResultReason = TEXT("State exited or execution invalidated");
+	ReleaseActionResources();
 }
 
 void UNGAIActionState::Exit(FName Event)
 {
-	++RunSerial;
-	AbortAction(TEXT("State exited"));
-	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(CompletionTimer);
+	ResetAction();
 	ActionController.Reset(); ExpectedPawn.Reset(); ActionASC.Reset();
 	Super::Exit(Event);
 }

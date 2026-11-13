@@ -1,6 +1,5 @@
 #include "Gameplay/AI/States/NGAIPauseState.h"
 
-#include "Gameplay/AI/NGAIBehavior.h"
 #include "Gameplay/AI/NGAIEvents.h"
 
 TArray<FName> UNGAIPauseState::GetDeclaredTransitionEvents() const

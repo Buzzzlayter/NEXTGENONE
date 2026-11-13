@@ -1,5 +1,7 @@
 # Боты: восприятие и боевой цикл
 
+Актуальное изменение lifecycle: Behavior стал корневым HFSMState, запускаемым штатной FSM контроллера; прежние инструкции Start/Stop ниже требуют миграции на OnEnter/OnExit. См. [BotBehaviorHost.md](BotBehaviorHost.md). Ассеты ещё не мигрированы агентом.
+
 ## Параллельные машины в BP_AIBehavior_Enemy
 
 Граф изменён через Editor MCP: существующие классы/настройки сохранены, добавлены второй FSM entry и второй Launch. Связи прочитаны обратно, неподключённые старые Stop/reroute удалены. Blueprint скомпилирован с warnings_as_errors=true и сохранён. Это проверка авторинга, не runtime: C++-изоляция событий ещё требует пользовательской сборки. PIE/сеть не запускались.
@@ -17,7 +19,7 @@
 
 ## Владение
 
-- `ANGAIController`: стандартный AIPerception (Sight/Hearing), команды HFSM, команды Focus и политика отношения команд.
+- `ANGAIController`: стандартный AIPerception (Sight/Hearing), сигналы запуска/остановки Behavior и общий доступ к Pawn/GAS.
 - `UNGAIMemoryComponent` на Controller: ограниченная память наблюдений и текущая выбранная враждебная цель. Никакого сканирования всех Actor и Blackboard нет.
 - Character FSM по-прежнему владеет Alive/Dead и базовыми grants. AI не создаёт предметы, не выдаёт себе оружейные способности и не пишет здоровье/боезапас.
 - `FireBurst` удерживает общую Aim ability. Выстрелы идут press/release по `Input.Combat.Fire` в существующую equipment-granted ServerOnly Fire ability. Проверки GAS, источник экипировки, cooldown, расход патронов, баллистика и урон сохраняются.
@@ -31,7 +33,7 @@ Memory defaults: обновление 0.2 с, удержание скрытог�
 
 Память очищается при потере gameplay-ready, UnPossess и EndPlay. Её время удержания независимо от очистки внутреннего кэша AIPerception; `OnTargetPerceptionForgotten` не служит источником игровой памяти. Повторный запуск состояния не очищает память.
 
-`bObserveTarget` в Controller — галочка фонового наблюдения ALS. Видимая цель задаётся через `SetFocus`, скрытая — через `SetFocalPoint` последнего известного места. ControlRotation продолжает обрабатываться существующим ALS AnimBP. При выключении снимается фокус наблюдения. Боевой `FireBurst` отдельно владеет более высоким приоритетом Focus и снимает его при завершении: выключение фонового наблюдения не запрещает необходимое прицеливание при стрельбе.
+`NGAIObserveTargetComponent` (AI Observe Target) добавляется в Components нужного Behavior/состояния. Старый bObserveTarget и управление наблюдением в контроллере удалены. Enter подписывается на native OnMemoryUpdated памяти и сразу читает текущее состояние; Exit/уничтожение отписываются и освобождают собственный Focus. Отдельного Tick/таймера нет. Видимая цель задаётся SetFocus; скрытая — последней известной точкой, если включён bObserveLastKnownLocation (по умолчанию true). Компонент занимает Gameplay-приоритет; FireBurst использует более высокий и не блокируется. Добавлять только один активный наблюдатель на этот приоритет. Компонент не включает Aim и не запускает стрельбу; существующий ALS AnimBP использует ControlRotation как раньше. После пользовательской сборки добавить компонент вручную: ассеты агентом не менялись.
 
 Команда хранится и реплицируется только в `UNGTeamComponent`, созданном на PlayerState. В самом PlayerState полей/логики команды нет. Персонаж и контроллеры не реализуют командных интерфейсов и методов-переадресаций. `UNGTeamComponent::Find(Actor)` находит собственный компонент Actor либо компонент PlayerState для Pawn/Controller. `GetAttitudeTowards(Other)` определяет отношение. Отдельного NGTeams API нет. Компонент можно добавить обычному Actor; мутация разрешена только на сервере через SetTeamId.
 
@@ -53,7 +55,7 @@ FindTarget, Move, Ability и FireBurst имеют автоматические `
 | `NGAIMoveState` | Дойти до снимка последней известной позиции | DestinationType=`LastKnownTarget`, AcceptanceRadius=150, timeout 10 с |
 | `NGAIPauseState` | Пауза перед следующим действием | Cooldown=1 с; только выход Succeeded, без ActionTimeout |
 
-Все конкретные состояния — FindTarget, Move, Ability, FireBurst — непосредственно наследуют `NGAIActionState`. Варианты движения объединены в одну ноду Move с режимами `Point`, `LastKnownTarget`, `Reposition`; отдельные классы MoveToTarget/Reposition удалены. Destination/bRelativeToPawn применяются только в Point; диапазоны дистанций — только в Reposition. Режим Reposition ограничен восемью попытками проекции на NavMesh. Полный путь проверяет MoveTo с запрещённым partial path; неудача даёт Failed. Это смена позиции, а не поиск укрытия/обхода/безопасного места.
+Все конкретные состояния — FindTarget, Move, Ability, FireBurst — непосредственно наследуют `NGAIActionState`. Варианты движения объединены в одну ноду Move; отдельные классы MoveToTarget/Reposition удалены. Destination/bRelativeToPawn применяются только в Point; диапазоны дистанций — только в Reposition. После восьми неудачных попыток проекции вокруг цели Reposition делает до четырёх выборок через GetRandomReachablePointInRadius вокруг бота. FallbackRadius по умолчанию 500 см, 0 отключает fallback. Запасная точка должна быть дальше MinMoveDistance и AcceptanceRadius; ограничения MinTargetDistance/MaxTargetDistance для неё не применяются. Если доступное пространство слишком мало, состояние по-прежнему возвращает Failed. Полный путь проверяет MoveTo с запрещённым partial path; отказ пути не запускает повторный fallback. Это смена позиции, а не поиск укрытия/обхода/безопасного места. Режим QueryResult описан в [BotEQS.md](BotEQS.md).
 
 Ability и FireBurst используют обычную C++-структуру `FNGAIAbilityInput` для владения одним input/spec, таймером release и наблюдением завершения. Дополнительного UObject/компонента нет. FireBurst не наследуется от Ability и не имеет InputTag/HoldDuration: Aim фиксирован контрактом, длительность задаётся BurstDuration. Старые пользовательские значения HoldDuration у FireBurst при наличии таких нод нужно вручную перенести в BurstDuration после сборки.
 

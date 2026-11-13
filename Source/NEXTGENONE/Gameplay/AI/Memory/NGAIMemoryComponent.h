@@ -23,6 +23,8 @@ class NEXTGENONE_API UNGAIMemoryComponent : public UActorComponent
 {
 	GENERATED_BODY()
 public:
+	DECLARE_EVENT(UNGAIMemoryComponent, FOnMemoryUpdated);
+	FOnMemoryUpdated OnMemoryUpdated;
 	UPROPERTY(EditDefaultsOnly, Category="AI|Memory", meta=(ClampMin="0.1")) float RetentionSeconds = 8.f;
 	UPROPERTY(EditDefaultsOnly, Category="AI|Memory", meta=(ClampMin="0.05")) float UpdateInterval = .2f;
 	UPROPERTY(EditDefaultsOnly, Category="AI|Memory", meta=(ClampMin="1", ClampMax="256")) int32 MaxRememberedActors = 32;
@@ -31,6 +33,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	void SetEnabled(bool bEnable);
+	bool IsMemoryEnabled() const { return bEnabled; }
 	const FNGTargetMemory* GetTarget() const;
 private:
 	TMap<TWeakObjectPtr<AActor>, FNGTargetMemory> Observations;

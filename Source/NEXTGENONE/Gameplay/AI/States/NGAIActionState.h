@@ -6,7 +6,6 @@
 class ANGAIController;
 class UNGAbilitySystemComponent;
 class APawn;
-class UNGAIBehavior;
 
 enum class ENGAIActionResult : uint8 { Running, Succeeded, Failed, Aborted };
 
@@ -25,7 +24,7 @@ public:
 protected:
 	/** Assigned by GCFSM before Enter; also used for editor context validation. */
 	UPROPERTY(Transient, BlueprintReadOnly, Category="AI|Context")
-	TObjectPtr<UNGAIBehavior> Context;
+	TObjectPtr<ANGAIController> Context;
 
 	virtual void StartAction() PURE_VIRTUAL(UNGAIActionState::StartAction, );
 	virtual void ReleaseActionResources() {}
@@ -38,12 +37,11 @@ protected:
 	uint64 RunSerial = 0;
 	bool bRunning = false;
 private:
-	void AbortAction(FName Reason);
+	/** Release owned work without scheduling a result or a graph transition. */
+	void ResetAction();
 	uint32 AvatarGeneration = 0;
 	ENGAIActionResult Result = ENGAIActionResult::Aborted;
 	FName ResultReason;
-	FTimerHandle WatchdogTimer;
+	FTimerHandle TimeoutTimer;
 	FTimerHandle CompletionTimer;
-	double Deadline = 0.;
-	void CheckAction();
 };

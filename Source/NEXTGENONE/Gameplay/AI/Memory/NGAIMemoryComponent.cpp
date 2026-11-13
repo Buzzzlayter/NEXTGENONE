@@ -48,9 +48,9 @@ void UNGAIMemoryComponent::SetEnabled(bool bEnable)
 	SelectedTarget.Reset();
 	if (auto* AI = Cast<ANGAIController>(GetOwner()))
 	{
-		AI->RefreshObservation();
 		if (!bEnabled && AI->GetPerceptionComponent()) AI->GetPerceptionComponent()->ForgetAll();
 	}
+	OnMemoryUpdated.Broadcast();
 	if (bEnabled && GetWorld())
 	{
 		Refresh(); // Seed from already-perceived actors: possession can precede gameplay readiness.
@@ -93,7 +93,8 @@ void UNGAIMemoryComponent::Refresh()
 	const double Now = GetWorld()->GetTimeSeconds();
 	for (auto* Actor : Visible)
 	{
-		if (!IsCandidate(Actor)) continue;
+		const auto* VisiblePawn = Cast<APawn>(Actor);
+		if (!IsValid(VisiblePawn) || !IsCandidate(Actor)) continue;
 		auto* Record = Observations.Find(Actor);
 		if (!Record)
 		{
@@ -101,7 +102,7 @@ void UNGAIMemoryComponent::Refresh()
 			Record = &Observations.Add(Actor); Record->Actor = Actor;
 		}
 		// Only read a live transform after the sense confirms current visibility.
-		Record->LastSeenLocation = CastChecked<APawn>(Actor)->GetPawnViewLocation();
+		Record->LastSeenLocation = VisiblePawn->GetPawnViewLocation();
 		Record->LastSeenTime = Now;
 		Record->bVisible = true;
 	}
@@ -122,7 +123,7 @@ void UNGAIMemoryComponent::Refresh()
 		{ Best = &Candidate; BestDistance = Distance; }
 	}
 	SelectedTarget = Best ? Best->Actor : TWeakObjectPtr<AActor>();
-	AI->RefreshObservation();
+	OnMemoryUpdated.Broadcast();
 }
 
 const FNGTargetMemory* UNGAIMemoryComponent::GetTarget() const

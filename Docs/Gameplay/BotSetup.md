@@ -1,5 +1,7 @@
 # Настройка поведения бота
 
+Актуальное изменение lifecycle: Behavior стал корневым HFSMState, запускаемым штатной FSM контроллера; прежние инструкции Start/Stop ниже требуют миграции на OnEnter/OnExit. См. [BotBehaviorHost.md](BotBehaviorHost.md). Ассеты ещё не мигрированы агентом.
+
 ## Текущий контракт
 
 AI-граф размещается в отдельном Blueprint от `UNGAIBehavior`, а не в AIController Blueprint. Контроллеру назначается `BehaviorClass`. Для разных поведений создаются разные классы объектов; один класс можно назначить нескольким контроллерам — runtime-экземпляры независимы. Один экземпляр живёт вместе с контроллером и не пересоздаётся при потере готовности или смене Pawn.
@@ -34,6 +36,8 @@ Controller creates the Behavior object once. Pawn initialization waits for ready
 
 ## Ноды и выходы
 
+Для универсальных пространственных запросов используется `NGAIQueryState`: EQS asset → именованный результат → Move с DestinationType=`QueryResult`. Настройка и контракт результатов: [BotEQS.md](BotEQS.md).
+
 Иерархия плоская: FindTarget, Move, Ability и FireBurst напрямую наследуют NGAIActionState. Пауза напрямую наследует UHFSMState. Для всех вариантов движения используется NGAIMoveState с DestinationType (Point/LastKnownTarget/Reposition). Общая механика удержания GAS вынесена в обычную структуру FNGAIAbilityInput, без дополнительных UObject-баз. У FireBurst свой BurstDuration; наследуемых InputTag/HoldDuration больше нет.
 
 Действия — native-наследники UHFSMState с параметрами EditAnywhere / BlueprintReadWrite / ExposeOnSpawn на нодах. У каждой ноды должен быть Implementation Class. Значения задаются до Enter; не менять параметры владения во время исполнения.
@@ -56,3 +60,30 @@ Move владеет одним path request, Ability — одним уже вы�
 ### Initialization and runtime events
 
 `BindPawn` subscribes to resource readiness and checks the initial snapshot once. `InitializeGameplay` removes that initialization subscription when the current Avatar is ready, then installs state-change/resource-failure subscriptions and invokes BP Start once. Runtime events do not repeat initialization or rescan readiness. Leaving Alive or a resource failure invokes BP Stop and removes runtime subscriptions. A new possession establishes a fresh initialization subscription; the Behavior object is retained. No bChangingBehavior/bBehaviorStarted, next-frame retry or recurring readiness polling. State lifecycle and resource cleanup remain the graph's responsibility.
+
+### Остановка Behavior и очистка действий
+
+`OnStopBehavior` в Controller Blueprint должен отправлять событие выхода в машину,
+содержащую активное Behavior-состояние. Переход из Behavior завершает вложенные FSM
+через штатный `UGCFSMState::PrivateExit`, который вызывает `Exit` всех активных задач.
+Просто отправить несвязанный event или очистить память недостаточно: переход должен
+действительно покинуть Behavior. Отдельный вызов FSM Stop у каждой вложенной задачи
+для этого не нужен. Плагин GCFSM не изменялся.
+
+`UNGAIBehavior::CancelActions` и рекурсивный обход задач удалены. Если такой вызов есть
+в пользовательском BP, убрать его и сохранить переход выхода из Behavior. Статический
+поиск имени в сохранённых ассетах Content/Gameplay/AI совпадений не нашёл; это не
+заменяет проверку Blueprint-компиляцией после пользовательской C++-сборки.
+
+`UNGAIActionState` разделяет завершение и очистку:
+- `FinishAction` освобождает ресурсы и откладывает Succeeded/Failed на следующий кадр,
+  чтобы не выполнять переход внутри Enter или синхронного GAS callback.
+- `Exit` вызывает приватный `ResetAction`: инвалидирует RunSerial, снимает таймеры
+  и освобождает незавершённую работу без создания callback результата.
+- ActionTimeout обслуживается одним одноразовым таймером. Общий опрос readiness/Pawn
+  каждые 0,1 с и Deadline удалены. Проверки Pawn/AvatarGeneration/RunSerial сохранены
+  в асинхронных callbacks. Оперативную отмену при смерти/UnPossess обеспечивает выход
+  из Behavior, а не watchdog.
+
+Таймеры самих действий (Fire, удержание ability input, поиск цели) этим пакетом не
+менялись. Выполнены статический просмотр и diff --check; сборка и игра не запускались.

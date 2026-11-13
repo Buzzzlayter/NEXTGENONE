@@ -49,6 +49,12 @@ UNGAbilitySystemComponent* ANGAIController::GetReadyAbilitySystem(const APawn* E
 	return ASC && ASC->GetOwnerActor() == GetPlayerState<APlayerState>() ? ASC : nullptr;
 }
 
+TSubclassOf<UNGAIBehavior> ANGAIController::GetBehaviorClass() const
+{
+	const auto* Bot = Cast<ANGBotCharacter>(GetPawn());
+	return Bot && Bot->AIBehaviorClass ? Bot->AIBehaviorClass : BehaviorClass;
+}
+
 void ANGAIController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -67,15 +73,6 @@ void ANGAIController::BindPawn()
 	ReleasePawn();
 	APawn* ControlledPawn = GetPawn();
 	if (!ControlledPawn) return;
-	const auto* Bot = Cast<ANGBotCharacter>(ControlledPawn);
-	const TSubclassOf<UNGAIBehavior> SelectedBehavior = Bot && Bot->AIBehaviorClass
-		? Bot->AIBehaviorClass : BehaviorClass;
-	if (!SelectedBehavior) Behavior = nullptr;
-	else if (!Behavior || Behavior->GetClass() != SelectedBehavior.Get())
-	{
-		Behavior = NewObject<UNGAIBehavior>(this, SelectedBehavior);
-		Behavior->Initialize(this);
-	}
 	ObservedCharacterFSM = ControlledPawn->FindComponentByClass<UNGCharacterStateMachineComponent>();
 	if (auto* Machine = ObservedCharacterFSM.Get())
 	{
@@ -100,7 +97,7 @@ void ANGAIController::InitializeGameplay()
 	StateChangedHandle = Machine->OnStateChanged.AddUObject(this, &ThisClass::HandleGameplayStateChanged);
 	ResourceFailureHandle = Machine->OnResourceFailure.AddUObject(this, &ThisClass::StopBehavior);
 	Memory->SetEnabled(true);
-	if (Behavior) Behavior->Start();
+	OnStartBehavior();
 }
 
 void ANGAIController::HandleGameplayStateChanged(FGameplayTag Previous, FGameplayTag Current)
@@ -121,36 +118,19 @@ void ANGAIController::UnsubscribeGameplay()
 
 void ANGAIController::ReleasePawn()
 {
-	// Preserve whether Start was delivered, then detach before any BP cleanup callbacks.
 	const FDelegateHandle InitializedSubscription = StateChangedHandle;
 	UnsubscribeGameplay();
+	if (InitializedSubscription.IsValid()) OnStopBehavior();
 	ObservedCharacterFSM.Reset();
 	Memory->SetEnabled(false);
-	if (InitializedSubscription.IsValid() && Behavior) Behavior->Stop();
 }
 
 void ANGAIController::StopBehavior()
 {
 	if (!StateChangedHandle.IsValid()) return;
 	UnsubscribeGameplay();
+	OnStopBehavior();
 	Memory->SetEnabled(false);
-	if (Behavior) Behavior->Stop();
-}
-
-void ANGAIController::RefreshObservation()
-{
-	const auto* Target = bObserveTarget ? Memory->GetTarget() : nullptr;
-	if (Target)
-	{
-		if (Target->bVisible) SetFocus(Target->Actor.Get(), EAIFocusPriority::Gameplay);
-		else SetFocalPoint(Target->GetKnownLocation(), EAIFocusPriority::Gameplay);
-		bOwnsObservationFocus = true;
-	}
-	else if (bOwnsObservationFocus)
-	{
-		ClearFocus(EAIFocusPriority::Gameplay);
-		bOwnsObservationFocus = false;
-	}
 }
 
 void ANGAIController::OnUnPossess()
