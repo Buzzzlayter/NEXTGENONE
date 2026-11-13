@@ -6,6 +6,7 @@
 #include "Inventory/NGInventoryLayoutDefinition.h"
 #include "NativeGameplayTags.h"
 #include "Net/UnrealNetwork.h"
+#include "UObject/StrongObjectPtr.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(NGInventoryManagerComponent)
 
@@ -51,17 +52,26 @@ void FNGInventoryList::PostReplicatedReceive(const FFastArraySerializer::FPostRe
 	if (auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent)) Manager->NotifyInventoryChanged();
 }
 
+UNGInventoryItemInstance* FNGInventoryList::CreateInstance(TSubclassOf<UNGInventoryItemDefinition> ItemDef, const TMap<FGameplayTag, int32>* RestoredStats)
+{
+	auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent);
+	if (!Manager || !Manager->GetOwner()->HasAuthority() || !ItemDef) return nullptr;
+	auto* Item = NewObject<UNGInventoryItemInstance>(Manager->GetOwner());
+	Item->SetItemDef(ItemDef);
+	for (UNGInventoryItemFragment* Fragment : GetDefault<UNGInventoryItemDefinition>(ItemDef)->Fragments)
+		if (Fragment) Fragment->OnInstanceCreated(Item);
+	if (RestoredStats) Item->RestoreStatStacks(*RestoredStats);
+	return Item;
+}
+
 UNGInventoryItemInstance* FNGInventoryList::AddEntry(TSubclassOf<UNGInventoryItemDefinition> ItemDef, int32 StackCount, const TMap<FGameplayTag, int32>* RestoredStats, bool bNotify, int32 SlotIndex)
 {
 	auto* Manager = Cast<UNGInventoryManagerComponent>(OwnerComponent);
 	if (!Manager || !Manager->GetOwner()->HasAuthority() || !ItemDef || StackCount < 1) return nullptr;
 	const int32 Destination = SlotIndex == INDEX_NONE ? Manager->FindFirstAvailableSlot(ItemDef) : SlotIndex;
 	if (!Manager->CanPlaceItemAtSlot(ItemDef, Destination) || Manager->GetItemAtSlot(Destination)) return nullptr;
-	auto* Item = NewObject<UNGInventoryItemInstance>(Manager->GetOwner());
-	Item->SetItemDef(ItemDef);
-	for (UNGInventoryItemFragment* Fragment : GetDefault<UNGInventoryItemDefinition>(ItemDef)->Fragments)
-		if (Fragment) Fragment->OnInstanceCreated(Item);
-	if (RestoredStats) Item->RestoreStatStacks(*RestoredStats);
+	auto* Item = CreateInstance(ItemDef, RestoredStats);
+	if (!Item) return nullptr;
 	// Fragments may call gameplay code: resolve and validate the destination again.
 	auto* Entry = Manager->FindSlot(Destination);
 	if (!Entry || Entry->Instance || !Manager->CanPlaceItemAtSlot(ItemDef, Destination)) return nullptr;
@@ -509,32 +519,45 @@ bool UNGInventoryManagerComponent::TransferTo(UNGInventoryManagerComponent* Targ
 	auto* Other = Target->GetItemAtSlot(TargetSlot);
 	FNGItemState State = Item->CaptureState(Count);
 	if (Count < OldCount && !State.CanSplitStack()) return false;
-	const bool bMerge = Other && State.CanMergeStackWith(Other->CaptureState());
-	if (!bMerge && Target == this && Count == OldCount) return MoveItemToSlot(Item, TargetSlot);
-	// Cross-container swapping is intentionally rejected; move to an empty slot or merge compatible stacks.
-	if (Other && !bMerge) return false;
 	const int32 TargetCount = Other ? Target->GetCount(Other) : 0;
-	if (bMerge && Count > GetDefault<UNGInventoryItemDefinition>(Item->GetItemDef())->MaxStackSize - TargetCount) return false;
+	const FNGItemState OtherState = Other ? Other->CaptureState(TargetCount) : FNGItemState();
+	const int32 MaxStackSize = GetDefault<UNGInventoryItemDefinition>(State.ItemClass)->MaxStackSize;
+	const bool bMerge = Other && State.CanMergeStackWith(OtherState) && Count <= MaxStackSize - TargetCount;
+	if (!bMerge && Target == this && Count == OldCount) return MoveItemToSlot(Item, TargetSlot);
+	const bool bSwap = Other && !bMerge;
+	if (bSwap && (Count != OldCount || !CanPlaceItemAtSlot(OtherState.ItemClass, SourceSlot))) return false;
+	if (Count > MaxStackSize || State.ItemClass->HasAnyClassFlags(CLASS_Abstract)) return false;
+	if (bSwap && (TargetCount < 1 || TargetCount > GetDefault<UNGInventoryItemDefinition>(OtherState.ItemClass)->MaxStackSize
+		|| OtherState.ItemClass->HasAnyClassFlags(CLASS_Abstract))) return false;
 	FMutationScope Mutation(this, Target);
-	UNGInventoryItemInstance* DestinationItem = Other;
-	if (!bMerge)
-	{
-		DestinationItem = Target->AddItemInternal(State.ItemClass, State.Count, &State.StatStacks, false, TargetSlot);
-		if (!DestinationItem) return false;
-	}
-	// Revalidate after fragment initialization before committing the source removal.
+	FString Error;
+	if (!bMerge && !GetDefault<UNGInventoryItemDefinition>(State.ItemClass)->ValidateDefinition(Error)) return false;
+	if (bSwap && !GetDefault<UNGInventoryItemDefinition>(OtherState.ItemClass)->ValidateDefinition(Error)) return false;
+	// Prepare instances under their destination actors before publishing either slot.
+	TStrongObjectPtr<UNGInventoryItemInstance> NewTarget(bMerge ? nullptr : Target->InventoryList.CreateInstance(State.ItemClass, &State.StatStacks));
+	TStrongObjectPtr<UNGInventoryItemInstance> NewSource(bSwap ? InventoryList.CreateInstance(OtherState.ItemClass, &OtherState.StatStacks) : nullptr);
 	if (GetItemAtSlot(SourceSlot) != Item || GetCount(Item) != OldCount
+		|| Target->GetItemAtSlot(TargetSlot) != Other || (Other && Target->GetCount(Other) != TargetCount)
+		|| (!bMerge && !NewTarget.IsValid()) || (bSwap && !NewSource.IsValid())
 		|| !Item->CaptureState(Count).StatStacks.OrderIndependentCompareEqual(State.StatStacks)
-		|| !RemoveQuantityInternal(Item, Count, false))
+		|| (Other && !Other->CaptureState().StatStacks.OrderIndependentCompareEqual(OtherState.StatStacks))) return false;
+	auto* SourceEntry = FindSlot(SourceSlot);
+	auto* TargetEntry = Target->FindSlot(TargetSlot);
+	SourceEntry->Instance = Count == OldCount ? NewSource.Get() : Item;
+	SourceEntry->StackCount = bSwap ? TargetCount : OldCount - Count;
+	TargetEntry->Instance = bMerge ? Other : NewTarget.Get();
+	TargetEntry->StackCount = bMerge ? TargetCount + Count : Count;
+	InventoryList.MarkItemDirty(*SourceEntry); Target->InventoryList.MarkItemDirty(*TargetEntry);
+	if (IsUsingRegisteredSubObjectList())
 	{
-		if (!bMerge) Target->RemoveQuantityInternal(DestinationItem, Count, false);
-		return false;
+		if (Count == OldCount) RemoveReplicatedSubObject(Item);
+		if (bSwap && IsReadyForReplication()) AddReplicatedSubObject(NewSource.Get(), bOwnerOnly ? COND_OwnerOnly : COND_None);
 	}
-	if (bMerge)
-		for (auto& Entry : Target->InventoryList.Entries) if (Entry.Instance == Other)
-		{
-			Entry.StackCount += Count; Target->InventoryList.MarkItemDirty(Entry); break;
-		}
+	if (Target->IsUsingRegisteredSubObjectList())
+	{
+		if (bSwap) Target->RemoveReplicatedSubObject(Other);
+		if (!bMerge && Target->IsReadyForReplication()) Target->AddReplicatedSubObject(NewTarget.Get(), Target->bOwnerOnly ? COND_OwnerOnly : COND_None);
+	}
 	NotifyInventoryChanged();
 	Target->NotifyInventoryChanged();
 	return true;
