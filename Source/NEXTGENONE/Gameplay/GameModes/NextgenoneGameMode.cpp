@@ -4,6 +4,11 @@
 #include "Gameplay/Player/NextgenonePlayerState.h"
 #include "GameFramework/HUD.h"
 
+uint8 ANextgenoneGameMode::GetDefaultTeamId(const AController& Controller) const
+{
+	return Controller.IsPlayerController() ? PlayerTeamId : BotTeamId;
+}
+
 ANextgenoneGameMode::ANextgenoneGameMode()
 {
 	DefaultPawnClass = ANextgenoneCharacter::StaticClass();

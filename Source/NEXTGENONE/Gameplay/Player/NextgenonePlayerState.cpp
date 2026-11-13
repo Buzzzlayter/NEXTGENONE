@@ -3,9 +3,11 @@
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
+#include "Gameplay/Teams/NGTeamComponent.h"
 
 ANextgenonePlayerState::ANextgenonePlayerState()
 {
+	Team = CreateDefaultSubobject<UNGTeamComponent>(TEXT("Team"));
     AbilitySystem = CreateDefaultSubobject<UNGPlayerAbilitySystemComponent>(TEXT("AbilitySystem"));
     AbilitySystem->SetIsReplicated(true);
     AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);

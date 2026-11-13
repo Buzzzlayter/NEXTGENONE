@@ -10,7 +10,7 @@
 DECLARE_LOG_CATEGORY_EXTERN(LogGCFSM, Log, All);
 
 // Base color for all GCFSM nodes
-const FLinearColor GCFSMNodeColor { 1.0f, 0.8f, 0.0f };
+const FLinearColor GCFSMNodeColor { 0.08f, 0.08f, 0.08f };
 
 // Default menu category for all GCFSM nodes
 class FText GCFSMMenuCategory();

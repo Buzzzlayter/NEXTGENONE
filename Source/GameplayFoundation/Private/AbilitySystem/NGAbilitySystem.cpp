@@ -31,7 +31,8 @@ void UNGAbilitySystemComponent::NotifyAbilityInput(FGameplayAbilitySpec& Spec, b
 }
 void UNGAbilitySystemComponent::AbilityInputTagPressed(FGameplayTag InputTag)
 {
-	if (!InputTag.IsValid() || !AbilityActorInfo.IsValid() || !AbilityActorInfo->IsLocallyControlled()) return;
+	if (!InputTag.IsValid() || !AbilityActorInfo.IsValid() ||
+		(!AbilityActorInfo->IsLocallyControlled() && !IsOwnerActorAuthoritative())) return;
 	TArray<FGameplayAbilitySpecHandle> ToActivate;
 	{
 		ABILITYLIST_SCOPE_LOCK();
@@ -47,7 +48,8 @@ void UNGAbilitySystemComponent::AbilityInputTagPressed(FGameplayTag InputTag)
 }
 void UNGAbilitySystemComponent::AbilityInputTagReleased(FGameplayTag InputTag)
 {
-	if (!InputTag.IsValid() || !AbilityActorInfo.IsValid() || !AbilityActorInfo->IsLocallyControlled()) return;
+	if (!InputTag.IsValid() || !AbilityActorInfo.IsValid() ||
+		(!AbilityActorInfo->IsLocallyControlled() && !IsOwnerActorAuthoritative())) return;
 	ABILITYLIST_SCOPE_LOCK();
 	for (FGameplayAbilitySpec& Spec : GetActivatableAbilities())
 	{

@@ -149,6 +149,15 @@ void UNGCombatComponent::ServerRequestFire_Implementation(FVector_NetQuantize Vi
 		TOptional<FTransform>(FTransform(FVector(ViewDirection).Rotation(), ViewOrigin)));
 	ASC->TryActivateAbilityByInputTag(TAG_NGFireInput);
 }
+FVector UNGCombatComponent::GetShotOrigin() const
+{
+	const auto* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn) return GetOwner()->GetActorLocation();
+	const auto* Movement = Cast<UCharacterMovementComponent>(Pawn->GetMovementComponent());
+	const FVector Up = Movement ? -Movement->GetGravityDirection() : Pawn->GetActorUpVector();
+	return Pawn->GetActorLocation() + Up * 45.f + Pawn->GetActorForwardVector() * 30.f;
+}
+
 bool UNGCombatComponent::FireOnServer(UNGEquipmentInstance* Source)
 {
 	auto* Pawn = Cast<APawn>(GetOwner());
@@ -186,7 +195,7 @@ bool UNGCombatComponent::FireOnServer(UNGEquipmentInstance* Source)
 	GetWorld()->LineTraceSingleByChannel(EyeHit, Eye, AimEnd, ECC_Visibility, Params);
 	const auto* Movement = Cast<UCharacterMovementComponent>(Pawn->GetMovementComponent());
 	const FVector Up = Movement ? -Movement->GetGravityDirection() : Pawn->GetActorUpVector();
-	const FVector Start = Pawn->GetActorLocation() + Up*45.f + Pawn->GetActorForwardVector() * 30.f;
+	const FVector Start = GetShotOrigin();
 	const FVector End = EyeHit.bBlockingHit ? EyeHit.ImpactPoint : AimEnd;
 	if (FVector::DotProduct(End - Start, ViewDirection) <= UE_SMALL_NUMBER) return false;
 	FHitResult Obstruction;

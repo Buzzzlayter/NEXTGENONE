@@ -48,6 +48,11 @@ class GCFSM_API UGCFSMState : public UGCFSMBasicState
 	GENERATED_BODY()
 
 public:
+	/// Class-owned output events for editor nodes. Called on the CDO; must not access a World or live context.
+	virtual TArray<FName> GetDeclaredTransitionEvents() const { return {}; }
+	/// Queue a result only for the FSM currently executing this state, without reaching sibling machines.
+	void TriggerTransitionEvent(FName eventName);
+
 	/// Get the context object
 	UObject* GetContextObject() const { return contextObject.Get(); }
 

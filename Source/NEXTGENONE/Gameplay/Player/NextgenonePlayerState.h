@@ -8,6 +8,7 @@
 #include "NextgenonePlayerState.generated.h"
 
 class ANextgenoneCharacter;
+class UNGTeamComponent;
 
 UCLASS()
 class NEXTGENONE_API ANextgenonePlayerState : public APlayerState, public IAbilitySystemInterface
@@ -22,6 +23,7 @@ public:
 	void ResumePendingLife(ANextgenoneCharacter* PreviousPawn);
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 private:
+	UPROPERTY(VisibleAnywhere, Category="Team") TObjectPtr<UNGTeamComponent> Team;
 	UPROPERTY(VisibleAnywhere, Category="GAS") TObjectPtr<UNGAbilitySystemComponent> AbilitySystem;
 	UPROPERTY(VisibleAnywhere, Category="GAS") TObjectPtr<UNGHealthSet> HealthSet;
 	TWeakObjectPtr<ANextgenoneCharacter> InitializedPawn;

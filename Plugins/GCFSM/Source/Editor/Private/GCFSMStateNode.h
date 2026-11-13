@@ -142,6 +142,11 @@ protected:
 	// End of IGCFSMDetailCustomization interface
 
 private:
+	// Serialized ownership, so a class change can retire its old outputs without removing manual events.
+	UPROPERTY()
+	TArray<FName> classTransitionEvents;
+	void SyncClassTransitionEvents(UClass* implementationClass, const TArray<UEdGraphPin*>& oldPins);
+
 	UPROPERTY()
 	FString NodeName;
 
