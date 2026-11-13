@@ -182,6 +182,7 @@ void ANextgenoneCharacter::RagdollStart()
 	if (GetMovementState() != EALSMovementState::Ragdoll) Super::RagdollStart();
 	if (IsDead())
 	{
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		GetMesh()->bOnlyAllowAutonomousTickPose = false;
 		// Cosmetic ragdolls differ on each machine and cannot be authoritative movement obstacles.
 		GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
@@ -263,6 +264,8 @@ void ANextgenoneCharacter::StateChanged(FGameplayTag Previous, FGameplayTag Curr
 	RefreshEquipment();
 	if (bNowDead)
 	{
+		// Death collision is gameplay state, independent of the cosmetic ragdoll cue.
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		GameplayInput->ShutdownInput();
 		GetCharacterMovement()->DisableMovement();
 	}

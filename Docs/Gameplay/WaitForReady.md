@@ -1,5 +1,9 @@
 # WaitForReady в UI FSM
 
+Для респауна через GameMode и возврата UI через этот gate см. [Respawn.md](Respawn.md).
+Observe Player Lifecycle на общем UI root отправляет Dead/PawnChanged; только
+WaitForReady отправляет Ready после готовности текущего нового Pawn.
+
 Компонент `UNGWaitForReadyComponent` — локальное ожидание контекста игрока. Он не запускает Character FSM, не выдаёт способности и не меняет possession.
 
 ## Настройка Blueprint
