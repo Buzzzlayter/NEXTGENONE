@@ -115,6 +115,7 @@ public:
 
 private:
 	friend UNGInventoryManagerComponent;
+	UNGInventoryItemInstance* CreateInstance(TSubclassOf<UNGInventoryItemDefinition> ItemDef, const TMap<FGameplayTag, int32>* RestoredStats);
 
 private:
 	// Runtime slots, including empty ones. Authoring rules belong to Layout.

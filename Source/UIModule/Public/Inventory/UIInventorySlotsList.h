@@ -30,4 +30,5 @@ private:
 	UPROPERTY(Transient) TArray<FUIInventorySlotData> Slots;
 	TWeakObjectPtr<UObject> OperationHandler;
 	void Repaint();
+	void CancelOwnedDragDrop() const;
 };

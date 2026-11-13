@@ -100,9 +100,10 @@ bool UNGInventoryPanel::MoveInventoryItem_Implementation(const FUIInventorySlotD
 	auto* SourceInventory = Cast<UNGInventoryManagerComponent>(Source.Inventory.Get());
 	auto* TargetInventory = Cast<UNGInventoryManagerComponent>(Destination.Inventory.Get());
 	auto* Item = Cast<UNGInventoryItemInstance>(Source.Item.Get());
-	auto* ExpectedTarget = Cast<UNGInventoryItemInstance>(Destination.Item.Get());
 	if (!Transport || !IsValid(SourceInventory) || !IsValid(TargetInventory) || TargetInventory != Inventory.Get()
 		|| !IsValid(Item) || SourceInventory->GetItemAtSlot(Source.SlotIndex) != Item || Amount < 0 || Amount > SourceInventory->GetCount(Item)
-		|| TargetInventory->GetItemAtSlot(Destination.SlotIndex) != ExpectedTarget) return false;
+		|| Destination.SlotIndex < 0 || Destination.SlotIndex >= TargetInventory->GetSlotCount()) return false;
+	// The drop targets a slot, not its cached presentation. Snapshot its current contents for server validation.
+	auto* ExpectedTarget = TargetInventory->GetItemAtSlot(Destination.SlotIndex);
 	return Transport->RequestInventoryTransfer(SourceInventory, Item, Source.SlotIndex, TargetInventory, Destination.SlotIndex, ExpectedTarget, Amount);
 }

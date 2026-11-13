@@ -333,7 +333,7 @@ bool UNGPlayerInventoryManagerComponent::ExecuteTransferOnServer(UNGInventoryMan
     FString Error;
     if (Target == this && (!Equipment->PreflightPlacement(Item, TargetSlot, Error)
         || (GetSlotTag(TargetSlot).MatchesTag(TAG_NGSlotEquipment) && (Source->GetCount(Item) != 1 || Amount > 1)))) return false;
-    if (Source == this && Other && Target == this && !Equipment->PreflightPlacement(Other, SourceSlot, Error)) return false;
-    // Cross-container occupied-slot refusal remains the existing inventory policy.
+    if (Source == this && Other && (!Equipment->PreflightPlacement(Other, SourceSlot, Error)
+        || (GetSlotTag(SourceSlot).MatchesTag(TAG_NGSlotEquipment) && Target->GetCount(Other) != 1))) return false;
     return Source->TransferTo(Target, SourceSlot, TargetSlot, Amount);
 }
