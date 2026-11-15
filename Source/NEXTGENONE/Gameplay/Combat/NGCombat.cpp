@@ -137,6 +137,11 @@ void UNGCombatComponent::RequestFire()
 }
 void UNGCombatComponent::ServerRequestFire_Implementation(FVector_NetQuantize ViewOrigin, FVector_NetQuantizeNormal ViewDirection, int32 EquipmentRevision)
 {
+	TryFireWithViewOnServer(ViewOrigin, ViewDirection, EquipmentRevision);
+}
+
+bool UNGCombatComponent::TryFireWithViewOnServer(const FVector& ViewOrigin, const FVector& ViewDirection, int32 EquipmentRevision)
+{
 	auto* Pawn = Cast<APawn>(GetOwner());
 	auto* ASC = Cast<UNGAbilitySystemComponent>(GetCombatASC());
 	const auto* Aim = Pawn ? Pawn->FindComponentByClass<UNGAimComponent>() : nullptr;
@@ -144,10 +149,10 @@ void UNGCombatComponent::ServerRequestFire_Implementation(FVector_NetQuantize Vi
 		|| ASC->HasMatchingGameplayTag(TAG_NGDead) || ASC->GetNumericAttribute(UNGHealthSet::GetHealthAttribute()) <= 0.f
 		|| !GetEquipment().bEquipped
 		|| !ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming)
-		|| EquipmentRevision != GetEquipment().Revision || !Aim || !Aim->ValidateShotView(ViewOrigin, ViewDirection)) return;
+		|| EquipmentRevision != GetEquipment().Revision || !Aim || !Aim->ValidateShotView(ViewOrigin, ViewDirection)) return false;
 	TGuardValue<TOptional<FTransform>> ViewScope(RequestedShotView,
 		TOptional<FTransform>(FTransform(FVector(ViewDirection).Rotation(), ViewOrigin)));
-	ASC->TryActivateAbilityByInputTag(TAG_NGFireInput);
+	return ASC->TryActivateAbilityByInputTag(TAG_NGFireInput);
 }
 FVector UNGCombatComponent::GetShotOrigin() const
 {
@@ -166,6 +171,7 @@ bool UNGCombatComponent::FireOnServer(UNGEquipmentInstance* Source)
     auto* ShotItem = Source ? Source->GetItem() : nullptr;
 	if (!Source || !Source->IsCurrent() || Source != GetWeaponInstance() || !ASC || !BoundInventory.IsValid()
 		|| !NGPlayerContext::GetCurrentASC(Pawn, true) || ASC->HasMatchingGameplayTag(TAG_NGDead)
+		|| !ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming)
 		|| ASC->GetNumericAttribute(UNGHealthSet::GetHealthAttribute()) <= 0.f
 		|| !Def || GetMagazineAmmo() <= 0 || !BoundInventory->Contains(ShotItem)) return false;
 	FString WeaponError;

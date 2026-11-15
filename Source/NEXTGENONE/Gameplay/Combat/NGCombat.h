@@ -113,6 +113,8 @@ public:
 	void SetWeaponMesh(USkeletalMeshComponent* Mesh);
 	FSimpleMulticastDelegate OnPresentationChanged;
 	UFUNCTION(BlueprintCallable) void RequestFire();
+	/** Validates a view and activates GA_Fire synchronously; used by server-owned primary fire. */
+	bool TryFireWithViewOnServer(const FVector& ViewOrigin, const FVector& ViewDirection, int32 EquipmentRevision);
 	// Called by NGFireAbility after GAS checks state tags and commits the fire cooldown.
 	bool FireOnServer(UNGEquipmentInstance* Source);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastReload(UNGWeaponDefinition* ReloadWeapon, int32 Revision);
