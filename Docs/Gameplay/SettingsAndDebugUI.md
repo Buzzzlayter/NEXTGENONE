@@ -25,12 +25,6 @@ NEXTGENONEEditor Win64 Development was compiled with the editor closed. NGSetup 
 Limitations: no key remapping, individual audio buses or display-confirmation countdown; Apply confirms the chosen video mode immediately. Native WidgetTree fields are generated at runtime: an authored replacement must preserve the named controls or override the screen. In the editor, resolution changes may affect standalone/editor windows differently from packaged play. No runtime success claim is made before approved tests.
 ## Files and delivered build
 
-New source: Source/NEXTGENONE/Gameplay/UI/NGSettingsPanel.h/.cpp, NGDebugState.h/.cpp, NGSettingsAssets.cpp.
-Changed source: Source/NEXTGENONE/Gameplay/Player/NextgenonePlayerController.h/.cpp and NGSetupCommandlet.cpp.
-New assets: Content/Gameplay/UI/WBP_GameSettings.uasset and BP_NGDebugComponent.uasset.
-Changed assets: Content/Blueprints/BP_NextgenoneCharacter.uasset, BP_NextgenoneHUD.uasset; Content/Blueprints/States/FSMState_GameSettings.uasset and FSMState_GameRuntime.uasset.
-Docs: this file, Docs/Architecture/GameplayFoundation.md, Docs/Testing/MultiplayerCombat.md.
-
 Final NEXTGENONEEditor Win64 Development build: UBT exit 0 / PASS, no compiler diagnostics. Final NGSetup -SettingsOnly: exit 0, 0 errors, 14 warnings from ALS assets / deprecated APIs and the environment. No unconnected Event transition warning remains. Asset graph logging records Settings -> settings-state and Back -> runtime-state, with the original Runtime Event connection preserved. This is serialized graph/Blueprint compilation evidence, not runtime testing.
 
 Manual next step: open the project normally. WBP_GameSettings is under /Game/Gameplay/UI; its mounter is already present in FSMState_GameSettings. No manual widget wiring is required. Runtime/visual checks still require separate approval.

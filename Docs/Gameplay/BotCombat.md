@@ -1,6 +1,10 @@
 # Боты: восприятие и боевой цикл
 
-Актуальное изменение lifecycle: Behavior стал корневым HFSMState, запускаемым штатной FSM контроллера; прежние инструкции Start/Stop ниже требуют миграции на OnEnter/OnExit. См. [BotBehaviorHost.md](BotBehaviorHost.md). Ассеты ещё не мигрированы агентом.
+Behavior наследует `UHFSMState`; прежние инструкции Start/Stop ниже требуют сверки с текущими OnEnter/OnExit и настройкой графа. Миграция всех ассетов этим документом не подтверждается.
+
+GOAP приостановлен и изолирован в `NGAIGOAPComponent.h/.cpp`. Simple-поведению
+планировщик не нужен. EQS Results и Observe Target подключаются HFSM-компонентами;
+память остаётся компонентом контроллера.
 
 ## Параллельные машины в BP_AIBehavior_Enemy
 
