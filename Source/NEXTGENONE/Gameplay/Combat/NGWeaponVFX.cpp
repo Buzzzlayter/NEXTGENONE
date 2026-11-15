@@ -1,5 +1,5 @@
 #include "Gameplay/Combat/NGWeaponVFX.h"
-#include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Combat/NGWeaponDefinition.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
@@ -37,15 +37,14 @@ void NGWeaponVFX::Shot(USkeletalMeshComponent* Mesh,const UNGWeaponDefinition* W
 		FX->SetVariableBool(TEXT("User.Trigger"),true); FX->Activate(true); StopSpawningAfter(FX,.08f);
 	}
 }
-void NGWeaponVFX::Impact(UObject* Context,const UNGWeaponDefinition* Weapon,FVector Point,FVector Normal,bool bCharacter)
+void NGWeaponVFX::Impact(UObject* Context,UNiagaraSystem* System,FVector Point,FVector Normal,bool bCharacterEffect)
 {
-	if (!Context || !Context->GetWorld() || Context->GetWorld()->GetNetMode()==NM_DedicatedServer || !Weapon) return;
-	auto* System=bCharacter && Weapon->CharacterImpactFX ? Weapon->CharacterImpactFX.Get() : Weapon->ImpactFX.Get();
+	if (!Context || !Context->GetWorld() || Context->GetWorld()->GetNetMode()==NM_DedicatedServer || !System) return;
 	if (auto* FX=UNiagaraFunctionLibrary::SpawnSystemAtLocation(Context,System,Point,Normal.Rotation(),FVector::OneVector,true,false))
 	{
 		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayPosition(FX,TEXT("User.ImpactPositions"),{Point});
 		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(FX,TEXT("User.ImpactNormals"),{Normal});
-		if (System!=Weapon->CharacterImpactFX) { FX->SetVariablePosition(TEXT("User.MuzzlePosition"),Point-Normal*10.f); FX->SetVariableInt(TEXT("User.StartOffset"),0); }
+		if (!bCharacterEffect) { FX->SetVariablePosition(TEXT("User.MuzzlePosition"),Point-Normal*10.f); FX->SetVariableInt(TEXT("User.StartOffset"),0); }
 		FX->SetVariableInt(TEXT("User.NumberOfHits"),1);
 		FX->Activate(true); StopSpawningAfter(FX,.08f);
 	}

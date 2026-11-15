@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Combat/NGWeaponActor.h"
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
 #include "GameplayTags/NGGameplayTags.h"
@@ -154,7 +155,10 @@ void UNGPrimaryAttackAbility::ContinuePrimaryInput()
 			{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true); return; }
 		}
 		else { Origin = ServerView->Origin; Direction = ServerView->Direction; }
-		ActiveCombat->TryFireWithViewOnServer(Origin, Direction, PrimaryRevision);
+		auto* WeaponActor = ActiveCombat->GetWeaponActor();
+		if (!WeaponActor)
+		{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true); return; }
+		WeaponActor->TryFireWithViewOnServer(Origin, Direction, PrimaryRevision);
 		if (!IsActive()) return;
 		if (!HasCurrentWeapon() || !ActiveCombat->GetEquipment().Definition->bAutomatic)
 		{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false); return; }

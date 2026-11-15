@@ -7,10 +7,11 @@ class USphereComponent;
 class UStaticMeshComponent;
 class UAbilitySystemComponent;
 class APawn;
-class UNGCombatComponent;
 class UNGWeaponDefinition;
 class UNiagaraSystem;
 class UNiagaraComponent;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FNGProjectileImpact, FVector, Point, FVector, Normal, int32, ShotId);
 
 UCLASS()
 class NEXTGENONE_API UNGBallisticMovement : public UProjectileMovementComponent
@@ -34,8 +35,9 @@ public:
 	virtual void Tick(float Delta) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
 	virtual void PostNetReceiveVelocity(const FVector& Velocity) override;
-	void Initialize(APawn* Shooter,UNGCombatComponent* Combat,FVector Velocity,FVector Gravity,float Drag,float Damage,float Range,int32 Shot,float ImpactImpulse);
+	void Initialize(APawn* Shooter,FVector Velocity,FVector Gravity,float Drag,float Damage,float Range,int32 Shot,float ImpactImpulse);
 	void SetWeaponEffects(UNGWeaponDefinition* Definition);
+	UPROPERTY(BlueprintAssignable, Category="Projectile") FNGProjectileImpact OnProjectileImpact;
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly) TObjectPtr<USphereComponent> Collision;
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Visual;
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly) TObjectPtr<UNGBallisticMovement> Movement;
@@ -46,19 +48,20 @@ private:
 	UPROPERTY(ReplicatedUsing=OnRep_Impact) bool bImpacted=false;
 	UPROPERTY(ReplicatedUsing=OnRep_Tracer) TObjectPtr<UNiagaraSystem> TracerFX;
 	UPROPERTY(Transient) TObjectPtr<UNiagaraComponent> Tracer;
-	UPROPERTY() TObjectPtr<UNGWeaponDefinition> ShotWeapon;
+	UPROPERTY() TObjectPtr<UNiagaraSystem> ImpactFX;
+	UPROPERTY() TObjectPtr<UNiagaraSystem> CharacterImpactFX;
 	FVector LastVFXPosition;
 	bool bTracerRequested=false,bTracerTrigger=false;
 	UFUNCTION() void OnRep_Tracer();
 	void StopTracer();
 	TWeakObjectPtr<APawn> SourcePawn;
 	TWeakObjectPtr<UAbilitySystemComponent> SourceASC;
-	TWeakObjectPtr<UNGCombatComponent> SourceCombat;
 	uint32 SourceLife=0;
 	float Damage=0.f,MaxRange=10000.f,Travelled=0.f;
 	float BodyImpulse=1600.f;
 	FVector PreviousPosition;
-	int32 ShotId=0;
+	UPROPERTY(Replicated) int32 ShotId=0;
+	UFUNCTION(NetMulticast, Unreliable) void MulticastImpact(FVector_NetQuantize Point, FVector_NetQuantizeNormal Normal, UNiagaraSystem* System, bool bCharacterEffect);
 	UFUNCTION() void OnStopped(const FHitResult& Hit);
 	UFUNCTION() void OnRep_Ballistics();
 	UFUNCTION() void OnRep_Impact();

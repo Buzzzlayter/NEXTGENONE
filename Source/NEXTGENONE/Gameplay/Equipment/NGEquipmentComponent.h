@@ -5,7 +5,7 @@
 #include "NGEquipmentComponent.generated.h"
 
 class UNGEquipmentInstance;
-class USceneComponent;
+class ANGEquipmentVisualActor;
 class USkeletalMeshComponent;
 class UNGEquipmentDefinition;
 class UNGInventoryItemInstance;
@@ -42,6 +42,7 @@ public:
 	bool PreflightPlacement(UNGInventoryItemInstance* Item, int32 SlotIndex, FString& Error) const;
 	bool IsCurrent(const UNGEquipmentInstance* Instance) const;
 	UNGEquipmentInstance* FindInstance(FGameplayTag Slot) const;
+	ANGEquipmentVisualActor* GetVisualActor(FGameplayTag Slot) const;
 	int32 GetHandsRevision() const { return HandsRevision; }
 	void RefreshReplicatedState();
 	FSimpleMulticastDelegate OnEquipmentChanged;
@@ -50,7 +51,7 @@ private:
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) TArray<TObjectPtr<UNGEquipmentInstance>> Installations;
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) int32 HandsRevision = 0;
 	UPROPERTY() TMap<TObjectPtr<UNGEquipmentInstance>, FNGEquipmentResources> Resources;
-	UPROPERTY() TMap<TObjectPtr<UNGEquipmentInstance>, TObjectPtr<USceneComponent>> Visuals;
+	UPROPERTY(ReplicatedUsing=OnRep_Equipment) TArray<TObjectPtr<ANGEquipmentVisualActor>> Visuals;
 	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> Inventory;
 	TWeakObjectPtr<UAbilitySystemComponent> ObservedASC;
 	TWeakObjectPtr<USkeletalMeshComponent> AttachmentMesh;

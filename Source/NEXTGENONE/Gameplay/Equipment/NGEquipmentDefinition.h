@@ -3,16 +3,7 @@
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "NGEquipmentDefinition.generated.h"
 
-class UStaticMesh;
-class USkeletalMesh;
-
-UENUM()
-enum class ENGEquipmentVisualMode : uint8
-{
-    SocketAttachment,
-    /** Reserved contract for the separate modular clothing implementation. */
-    ModularSkeletalPart
-};
+class ANGEquipmentVisualActor;
 
 USTRUCT()
 struct NEXTGENONE_API FNGEquipmentAbilityGrant
@@ -44,10 +35,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Equipment|GAS") TArray<TObjectPtr<UNGEquipmentAbilitySet>> AbilitySets;
 	UPROPERTY(EditDefaultsOnly, Category="Equipment|GAS") TArray<FNGEquipmentAbilityGrant> Abilities;
 	UPROPERTY(EditDefaultsOnly, Category="Equipment|GAS") TArray<TSubclassOf<UGameplayEffect>> Effects;
-	UPROPERTY(EditDefaultsOnly, Category="Equipment|Visual") ENGEquipmentVisualMode VisualMode = ENGEquipmentVisualMode::SocketAttachment;
-	// Names retained when inherited by existing WeaponDefinition assets.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Equipment|Visual") TObjectPtr<UStaticMesh> Mesh;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Equipment|Visual") TObjectPtr<USkeletalMesh> SkeletalMesh;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Equipment|Visual") TSubclassOf<ANGEquipmentVisualActor> VisualActorClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Equipment|Visual") FName AttachSocket;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Equipment|Visual") FTransform VisualTransform = FTransform::Identity;
 	virtual bool ValidateDefinition(FString& Error) const;

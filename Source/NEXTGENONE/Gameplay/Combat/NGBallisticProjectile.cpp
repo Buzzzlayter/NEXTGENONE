@@ -1,5 +1,7 @@
 #include "Gameplay/Combat/NGBallisticProjectile.h"
-#include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Combat/NGWeaponDefinition.h"
+#include "NiagaraSystem.h"
+#include "Gameplay/Combat/NGDamage.h"
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Character.h"
@@ -25,10 +27,10 @@ ANGBallisticProjectile::ANGBallisticProjectile()
 	Movement->bForceSubStepping=true; Movement->MaxSimulationTimeStep=1.f/120.f; Movement->MaxSimulationIterations=16; Movement->ProjectileGravityScale=0.f;
 	Movement->OnProjectileStop.AddDynamic(this,&ThisClass::OnStopped);
 }
-void ANGBallisticProjectile::Initialize(APawn* Shooter,UNGCombatComponent* Combat,FVector Velocity,FVector InGravity,float InDrag,float InDamage,float Range,int32 Shot,float ImpactImpulse)
+void ANGBallisticProjectile::Initialize(APawn* Shooter,FVector Velocity,FVector InGravity,float InDrag,float InDamage,float Range,int32 Shot,float ImpactImpulse)
 {
 	if (!IsValid(Shooter)) return;
-	SourcePawn=Shooter; SourceASC=UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Shooter); SourceCombat=Combat;
+	SourcePawn=Shooter; SourceASC=UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Shooter);
 	if (auto* ASC=Cast<UNGPlayerAbilitySystemComponent>(SourceASC.Get())) SourceLife=ASC->GetAvatarGeneration();
 	InitialVelocity=Velocity; Gravity=InGravity; Drag=InDrag; Damage=InDamage; MaxRange=Range; ShotId=Shot;
 	BodyImpulse=FMath::IsFinite(ImpactImpulse) ? FMath::Clamp(ImpactImpulse,0.f,10000.f) : 0.f;
@@ -54,7 +56,7 @@ void ANGBallisticProjectile::Tick(float Delta)
 void ANGBallisticProjectile::OnRep_Ballistics() { if (!bImpacted) { Movement->Gravity=Gravity; Movement->Drag=Drag; Movement->Velocity=InitialVelocity; } }
 void ANGBallisticProjectile::PostNetReceiveVelocity(const FVector& Velocity) { Super::PostNetReceiveVelocity(Velocity); if (!bImpacted) Movement->Velocity=Velocity; }
 void ANGBallisticProjectile::OnRep_Impact() { if (bImpacted) { StopTracer(); Movement->StopMovementImmediately(); Movement->Deactivate(); Collision->SetCollisionEnabled(ECollisionEnabled::NoCollision); Visual->SetVisibility(false); } }
-void ANGBallisticProjectile::SetWeaponEffects(UNGWeaponDefinition* Definition) { ShotWeapon=Definition; TracerFX=Definition ? Definition->TracerFX.Get() : nullptr; }
+void ANGBallisticProjectile::SetWeaponEffects(UNGWeaponDefinition* Definition) { TracerFX=Definition ? Definition->TracerFX.Get() : nullptr; ImpactFX=Definition ? Definition->ImpactFX.Get() : nullptr; CharacterImpactFX=Definition ? Definition->CharacterImpactFX.Get() : nullptr; }
 void ANGBallisticProjectile::OnRep_Tracer()
 {
 	if (!HasActorBegunPlay() || bImpacted || bTracerRequested || !TracerFX || GetNetMode()==NM_DedicatedServer) return;
@@ -72,17 +74,26 @@ void ANGBallisticProjectile::OnStopped(const FHitResult& Hit)
 	if (Shooter && ASC && Shooter->GetPlayerState() == ASC->GetOwnerActor()
 		&& ASC->GetAvatarGeneration()==SourceLife) if (auto* Target=Cast<APawn>(Hit.GetActor()))
 	{
-		if (UNGCombatComponent::ApplyDamageToPawn(Target,SourceASC.Get(),Damage,&Hit))
+		if (NGDamage::ApplyToPawn(Target,SourceASC.Get(),Damage,&Hit))
 		{
 			FVector Direction=(Hit.TraceEnd-Hit.TraceStart).GetSafeNormal(); if (Direction.IsNearlyZero()) Direction=GetActorForwardVector();
 			if (auto* Reaction = Target->FindComponentByClass<UNGHitReactionComponent>()) Reaction->ApplyImpact(Hit,Direction,BodyImpulse);
 		}
 	}
-	if (SourceCombat.IsValid()) SourceCombat->MulticastProjectileImpact(Hit.ImpactPoint,Hit.ImpactNormal,ShotId,ShotWeapon,Cast<ACharacter>(Hit.GetActor())!=nullptr);
+	const bool bCharacterEffect = Cast<ACharacter>(Hit.GetActor()) && CharacterImpactFX;
+	MulticastImpact(Hit.ImpactPoint, Hit.ImpactNormal, bCharacterEffect ? CharacterImpactFX.Get() : ImpactFX.Get(), bCharacterEffect);
 	ForceNetUpdate(); SetLifeSpan(.3f);
 }
 void ANGBallisticProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME_CONDITION(ANGBallisticProjectile,InitialVelocity,COND_InitialOnly); DOREPLIFETIME_CONDITION(ANGBallisticProjectile,Gravity,COND_InitialOnly); DOREPLIFETIME_CONDITION(ANGBallisticProjectile,Drag,COND_InitialOnly); DOREPLIFETIME(ANGBallisticProjectile,bImpacted);
-	DOREPLIFETIME_CONDITION(ANGBallisticProjectile,TracerFX,COND_InitialOnly);
+	DOREPLIFETIME_CONDITION(ANGBallisticProjectile,TracerFX,COND_InitialOnly); DOREPLIFETIME_CONDITION(ANGBallisticProjectile,ShotId,COND_InitialOnly);
+}
+
+void ANGBallisticProjectile::MulticastImpact_Implementation(FVector_NetQuantize Point, FVector_NetQuantizeNormal Normal,
+	UNiagaraSystem* System, bool bCharacterEffect)
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+	NGWeaponVFX::Impact(this, System, Point, Normal, bCharacterEffect);
+	OnProjectileImpact.Broadcast(Point, Normal, ShotId);
 }

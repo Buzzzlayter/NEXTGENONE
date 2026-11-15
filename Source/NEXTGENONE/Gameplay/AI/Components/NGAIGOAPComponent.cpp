@@ -1,4 +1,5 @@
 #include "Gameplay/AI/Components/NGAIGOAPComponent.h"
+#include "Gameplay/Combat/NGWeaponActor.h"
 
 #include "Gameplay/AI/NGAIController.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
@@ -305,7 +306,8 @@ bool UNGAIGOAPComponent::RefreshFacts()
 	Snapshot.Facts.Set(ENGAIFact::AtPosition, bHasPosition && FMath::IsFinite(PositionTolerance) && PositionTolerance > 0.f
 		&& FVector::Dist(Pawn->GetActorLocation(), Position.Location) <= PositionTolerance);
 	bool bClear = false;
-	if (Target && Target->bVisible && Combat)
+	const auto* WeaponActor = Combat ? Combat->GetWeaponActor() : nullptr;
+	if (Target && Target->bVisible && WeaponActor)
 	{
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(NGAIPlanFire), false, Pawn.Get());
 		TArray<AActor*> Attached;
@@ -317,7 +319,7 @@ bool UNGAIGOAPComponent::RefreshFacts()
 			return !GetWorld()->LineTraceSingleByChannel(Hit, Origin, Target->LastSeenLocation, ECC_Visibility, Params)
 				|| Hit.GetActor() == TargetActor.Get();
 		};
-		bClear = ClearFrom(Pawn->GetPawnViewLocation()) && ClearFrom(Combat->GetShotOrigin());
+		bClear = ClearFrom(Pawn->GetPawnViewLocation()) && ClearFrom(WeaponActor->GetShotOrigin());
 	}
 	Snapshot.Facts.Set(ENGAIFact::LineOfFire, bClear);
 	Snapshot.Inputs.Add(TEXT("TargetVisible"), Target && Target->bVisible ? 1.f : 0.f);

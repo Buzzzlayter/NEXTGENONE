@@ -20,6 +20,8 @@ class NEXTGENONE_API UNGReloadAbility : public UNGGameplayAbilityFromWeapon
 public:
 	UNGReloadAbility();
 	virtual void ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event) override;
+	virtual void EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+		FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bWasCancelled) override;
 private:
 	UFUNCTION() void FinishReload();
 };

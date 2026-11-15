@@ -1,4 +1,5 @@
-#include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Combat/NGWeaponDefinition.h"
+#include "Gameplay/Combat/NGWeaponActor.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Combat/NGBallisticProjectile.h"
 #include "Gameplay/Abilities/NGAimAbility.h"
@@ -21,6 +22,8 @@ UNGWeaponDefinition::UNGWeaponDefinition()
 bool UNGWeaponDefinition::ValidateDefinition(FString& Error) const
 {
     if (!Super::ValidateDefinition(Error) || SlotTag != TAG_NGSlotEquipmentWeapon) return false;
+	if (!VisualActorClass || !VisualActorClass->IsChildOf(ANGWeaponActor::StaticClass()))
+	{ Error = TEXT("Weapon requires a WeaponActor class."); return false; }
     auto InRange = [](float Value, float Min, float Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; };
     if (!InRange(MuzzleSpeed, 100.f, 200000.f) || !InRange(GravityScale, 0.f, 10.f)
         || !InRange(LinearDrag, 0.f, 2.f) || !InRange(SpreadDegrees, 0.f, 20.f)

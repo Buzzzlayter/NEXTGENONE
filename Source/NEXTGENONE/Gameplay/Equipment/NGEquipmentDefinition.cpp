@@ -1,4 +1,5 @@
 #include "Gameplay/Equipment/NGEquipmentDefinition.h"
+#include "Gameplay/Equipment/NGEquipmentVisualActor.h"
 #include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
 #include "GameplayTags/NGGameplayTags.h"
 #if WITH_EDITOR
@@ -15,8 +16,8 @@ bool UNGEquipmentDefinition::ValidateDefinition(FString& Error) const
 {
 	if (!SlotTag.MatchesTag(TAG_NGSlotEquipment) || SlotTag == TAG_NGSlotEquipment || VisualTransform.ContainsNaN())
 	{ Error = TEXT("Equipment needs a typed inventory equipment slot and a finite visual transform."); return false; }
-	if (VisualMode != ENGEquipmentVisualMode::SocketAttachment)
-	{ Error = TEXT("Modular skeletal clothing requires its separate presentation package; socket attachment is supported here."); return false; }
+	if (VisualActorClass && VisualActorClass->HasAnyClassFlags(CLASS_Abstract))
+	{ Error = TEXT("Equipment visual requires a concrete actor class."); return false; }
 	for (const UNGEquipmentAbilitySet* Set : AbilitySets) if (!Set) { Error = TEXT("Null equipment ability set."); return false; }
 	TArray<FNGEquipmentAbilityGrant> Grants; TArray<TSubclassOf<UGameplayEffect>> ResolvedEffects;
 	ResolveResources(Grants, ResolvedEffects);

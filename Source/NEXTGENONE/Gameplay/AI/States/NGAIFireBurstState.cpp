@@ -1,4 +1,5 @@
 #include "Gameplay/AI/States/NGAIFireBurstState.h"
+#include "Gameplay/Combat/NGWeaponActor.h"
 
 #include "Gameplay/AI/NGAIController.h"
 #include "Gameplay/AI/Memory/NGAIMemoryComponent.h"
@@ -56,7 +57,8 @@ void UNGAIFireBurstState::UpdateFire()
 	if (Now < EarliestShotTime) return;
 	if (Combat->GetMagazineAmmo() <= 0)
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Magazine empty")); return; }
-	const auto* Definition = Cast<UNGWeaponDefinition>(Weapon->GetDefinition());
+	const auto* WeaponActor = Combat->GetWeaponActor();
+	const auto* Definition = WeaponActor ? WeaponActor->GetDefinition() : nullptr;
 	if (!Definition || !FMath::IsFinite(Definition->FireInterval))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Invalid weapon cadence")); return; }
 	const FVector Eye = ExpectedPawn->GetPawnViewLocation();
@@ -71,7 +73,7 @@ void UNGAIFireBurstState::UpdateFire()
 		return !GetWorld()->LineTraceSingleByChannel(Hit, Start, Target->LastSeenLocation, ECC_Visibility, Params)
 			|| Hit.GetActor() == BurstTarget.Get();
 	};
-	const FVector Muzzle = Combat->GetShotOrigin();
+	const FVector Muzzle = WeaponActor->GetShotOrigin();
 	if (!ClearToTarget(Eye) || !ClearToTarget(Muzzle))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Line of fire blocked")); return; }
 	// Use the equipment-granted Fire ability. No direct FireOnServer, damage or ammo writes.
