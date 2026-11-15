@@ -32,7 +32,7 @@ class NEXTGENONE_API ANGInteractableActor : public AActor, public INGInteractabl
 {
 	GENERATED_BODY()
 public:
-	bool ExecuteInteraction(APawn* Pawn, TFunctionRef<bool()> Prepare);
+	bool ExecuteInteraction(APawn* Pawn, TFunctionRef<bool()> Prepare, TFunctionRef<bool()> Execute);
 	bool IsExecutingInteraction(const APawn* Pawn) const;
 private:
 	bool bInteractionInProgress = false;

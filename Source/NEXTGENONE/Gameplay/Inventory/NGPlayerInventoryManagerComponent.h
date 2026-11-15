@@ -22,6 +22,8 @@ public:
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|Starter") TArray<FNGInventoryStarterEntry> InitialContents;
 	void GrantStarterInventory();
+	/** Receives a pickup only inside its validated, server-side interaction scope. */
+	bool TakePickupOnServer(APawn* Pawn, ANGItemPickup* Pickup);
 	UNGInventoryManagerComponent* GetViewedInventory() const;
 	void OpenInventorySource(UNGInventoryManagerComponent* Source, FGameplayTag InteractionType);
 	void CloseInventoryView();

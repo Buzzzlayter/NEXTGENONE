@@ -22,6 +22,21 @@ UNGPlayerInventoryManagerComponent::UNGPlayerInventoryManagerComponent(const FOb
 {
 }
 
+bool UNGPlayerInventoryManagerComponent::TakePickupOnServer(APawn* Pawn, ANGItemPickup* Pickup)
+{
+	if (!IsValid(Pickup) || !Pickup->IsAvailable() || !Pickup->IsExecutingInteraction(Pawn)
+		|| GetInventoryPawn() != Pawn || !InitializeInventory()) return false;
+	const FNGItemState State = Pickup->GetStateForTransfer();
+	const int32 SlotIndex = FindFirstAvailableSlot(State.ItemClass, State.Count, TAG_NGSlotStorage);
+	if (SlotIndex == INDEX_NONE) return false;
+	auto* Item = Pickup->HasSavedItemState() ? AddItemState(State, false, SlotIndex)
+		: AddItemDefinitionDeferred(State.ItemClass, State.Count, SlotIndex);
+	if (!Item) return false;
+	Pickup->ConsumeForTransfer();
+	NotifyInventoryChanged();
+	return true;
+}
+
 bool UNGPlayerInventoryManagerComponent::TryBeginStarterGrant()
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || bStarterGrantStarted || !InitializeInventory()) return false;
