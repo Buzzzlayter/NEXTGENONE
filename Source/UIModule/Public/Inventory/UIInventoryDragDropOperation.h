@@ -11,8 +11,11 @@ UCLASS()
 class UIMODULE_API UUIInventoryDragDropOperation : public UDragDropOperation
 {
 	GENERATED_BODY()
+public:
+	void Initialize(const FUIInventorySlotData& Source, ULocalPlayer* Player);
+	const FUIInventorySlotData& GetSourceData() const { return SourceData; }
+	bool IsFromPlayer(const ULocalPlayer* Player) const;
 private:
-	friend class UUIInventorySlotWidget;
 	UPROPERTY(Transient) FUIInventorySlotData SourceData;
 	TWeakObjectPtr<ULocalPlayer> SourcePlayer;
 };

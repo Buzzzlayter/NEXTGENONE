@@ -1,54 +1,48 @@
 #include "Inventory/UIInventorySlotsList.h"
 #include "Inventory/UIInventorySlotWidget.h"
-#include "Blueprint/DragDropOperation.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/WrapBox.h"
-#include "Framework/Application/SlateApplication.h"
-#include "GameFramework/PlayerController.h"
 
 void UUIInventorySlotsList::SetData(const TArray<FUIInventorySlotData>& InSlots, UObject* InOperationHandler)
 {
-	if (InSlots.IsEmpty()) CancelOwnedDragDrop();
-	Slots = InSlots;
-	OperationHandler = InOperationHandler;
-	Repaint();
+	if (!WrapBox) return;
+	const int32 NewCount = InSlots.Num();
+	const int32 OldCount = InventorySlots.Num();
+
+	if (NewCount < OldCount)
+	{
+		for (int32 Index = NewCount; Index < OldCount; ++Index) InventorySlots[Index]->RemoveFromParent();
+		InventorySlots.SetNum(NewCount, EAllowShrinking::No);
+	}
+	for (int32 Index = 0; Index < NewCount; ++Index)
+	{
+		if (Index >= InventorySlots.Num())
+		{
+			auto* SlotWidget = CreateWidget<UUIInventorySlotWidget>(GetOwningPlayer(), SlotClass);
+			if (!SlotWidget) return;
+			InventorySlots.Add(SlotWidget);
+			WrapBox->AddChildToWrapBox(SlotWidget);
+		}
+		InventorySlots[Index]->SetData(InSlots[Index], InOperationHandler);
+	}
+	OnListUpdated();
 }
-void UUIInventorySlotsList::NativeConstruct() { Super::NativeConstruct(); Repaint(); }
 void UUIInventorySlotsList::NativeDestruct()
 {
-	CancelOwnedDragDrop();
 	if (WrapBox) WrapBox->ClearChildren();
 	InventorySlots.Reset();
 	Super::NativeDestruct();
 }
 
-void UUIInventorySlotsList::CancelOwnedDragDrop() const
-{
-	if (!FSlateApplication::IsInitialized()) return;
-	const auto* Drag = UWidgetBlueprintLibrary::GetDragDroppingContent();
-	if (Drag && InventorySlots.Contains(Drag->GetTypedOuter<UUIInventorySlotWidget>()))
-		UWidgetBlueprintLibrary::CancelDragDrop();
-}
-
-void UUIInventorySlotsList::Repaint()
-{
-	if (!WrapBox || !SlotClass || SlotClass->HasAnyClassFlags(CLASS_Abstract) || !GetOwningPlayer()) return;
-	while (InventorySlots.Num() > Slots.Num())
-	{
-		InventorySlots.Last()->RemoveFromParent();
-		InventorySlots.Pop();
-	}
-	while (InventorySlots.Num() < Slots.Num())
-	{
-		auto* SlotWidget = CreateWidget<UUIInventorySlotWidget>(GetOwningPlayer(), SlotClass);
-		if (!SlotWidget) return;
-		InventorySlots.Add(SlotWidget);
-		WrapBox->AddChildToWrapBox(SlotWidget);
-	}
-	for (int32 Index = 0; Index < Slots.Num(); ++Index) InventorySlots[Index]->SetData(Slots[Index], OperationHandler.Get());
-	OnListUpdated();
-}
 UUIInventorySlotWidget* UUIInventorySlotsList::GetSlotWidget(int32 Index) const { return InventorySlots.IsValidIndex(Index) ? InventorySlots[Index].Get() : nullptr; }
-void UUIInventorySlotsList::SetFirstSlotFocused() { if (auto* SlotWidget = GetSlotWidget(0)) SlotWidget->FocusSlot(); }
-void UUIInventorySlotsList::SetWrapSize(float Size) { if (WrapBox) WrapBox->SetWrapSize(Size); }
-void UUIInventorySlotsList::SetInnerSlotPadding(FVector2D SlotPadding) { if (WrapBox) WrapBox->SetInnerSlotPadding(SlotPadding); }
+
+UUIInventorySlotWidget* UUIInventorySlotsList::FindSlotAt(const FVector2D& ScreenPosition) const
+{
+	if (!GetCachedGeometry().IsUnderLocation(ScreenPosition)) return nullptr;
+	for (const auto& Entry : InventorySlots)
+	{
+		auto* SlotWidget = Entry.Get();
+		if (SlotWidget && SlotWidget->IsVisible() && SlotWidget->GetIsEnabled()
+			&& SlotWidget->GetCachedGeometry().IsUnderLocation(ScreenPosition)) return SlotWidget;
+	}
+	return nullptr;
+}
