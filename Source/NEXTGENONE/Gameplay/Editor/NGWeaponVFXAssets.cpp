@@ -49,7 +49,7 @@ int32 NGConfigureWeaponVFX()
 		if (!System->IsValid() || !Save(System)) { UE_LOG(LogTemp,Error,TEXT("NG_WEAPON_VFX failed Niagara compilation/save: %s"),*System->GetName()); return 127; }
 		UE_LOG(LogTemp,Display,TEXT("NG_WEAPON_VFX_COMPILED %s ready=%d"),*System->GetName(),System->IsReadyToRun());
 	}
-	for (const TCHAR* Name:{TEXT("Pistol"),TEXT("Rifle"),TEXT("Shotgun"),TEXT("TestWeapon")})
+	for (const TCHAR* Name:{TEXT("Pistol"),TEXT("Rifle"),TEXT("Shotgun")})
 	{
 		const FString Kind=Name,P=TEXT("/Game/Gameplay/Weapons/DA_")+Kind+TEXT(".DA_")+Kind;
 		auto* Def=LoadObject<UNGWeaponDefinition>(nullptr,*P); if (!Def) return 128;

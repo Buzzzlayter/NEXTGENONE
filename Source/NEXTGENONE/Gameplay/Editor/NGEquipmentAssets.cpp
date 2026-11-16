@@ -65,7 +65,7 @@ int32 NGMigrateEquipmentAssets()
 	auto* PlayerBP = Cast<UBlueprint>(Load(TEXT("/Game/Blueprints/BP_NextgenonePlayerState")));
 	auto* PawnBP = Cast<UBlueprint>(Load(TEXT("/Game/Blueprints/BP_NextgenoneCharacter")));
 	if (!Layout || !Input || !Alive || !PlayerBP || !PawnBP || !PlayerBP->GeneratedClass || !PawnBP->GeneratedClass || !Prepare(Layout) || !Prepare(Input) || !Prepare(Alive) || !Prepare(PlayerBP) || !Prepare(PawnBP)) return 210;
-	for (const TCHAR* Name : {TEXT("DA_Pistol"), TEXT("DA_Rifle"), TEXT("DA_Shotgun"), TEXT("DA_TestWeapon")})
+	for (const TCHAR* Name : {TEXT("DA_Pistol"), TEXT("DA_Rifle"), TEXT("DA_Shotgun")})
 	{
 		const FString Package = TEXT("/Game/Gameplay/Weapons/") + FString(Name);
 		auto* Weapon = Cast<UNGWeaponDefinition>(Load(*Package));
@@ -169,8 +169,7 @@ int32 NGMigrateWeaponSlotAssets()
 	for (const auto& Pair : {
 		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_Pistol"), TEXT("ID_Pistol")),
 		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_Rifle"), TEXT("ID_Rifle")),
-		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_Shotgun"), TEXT("ID_Shotgun")),
-		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_TestWeapon"), TEXT("ID_TestItem"))})
+		TPair<const TCHAR*, const TCHAR*>(TEXT("DA_Shotgun"), TEXT("ID_Shotgun"))})
 	{
 		auto* Weapon = Cast<UNGWeaponDefinition>(Load(FString(TEXT("/Game/Gameplay/Weapons/")) + Pair.Key));
 		auto* ItemBP = Cast<UBlueprint>(Load(FString(TEXT("/Game/Gameplay/Inventory/")) + Pair.Value));
