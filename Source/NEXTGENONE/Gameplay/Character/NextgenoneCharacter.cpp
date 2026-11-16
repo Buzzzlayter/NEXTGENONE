@@ -151,11 +151,9 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 	const auto DesiredOverlay = bArmed ? Def->Overlay : EALSOverlayState::Default;
 	if (GetOverlayState() != DesiredOverlay)
 	{
-		// ALS keeps its animation overlay; equipment actors replace its demo held objects.
 		SetOverlayState(DesiredOverlay);
 	}
 	Super::AimAction_Implementation(bArmed && Combat->IsAiming());
-	ClearHeldObject();
 	if (auto* Visual = Equipment->GetVisualActor(TAG_NGSlotEquipmentWeapon))
 		Visual->SetActorHiddenInGame(!bArmed || GetMovementState() == EALSMovementState::Mantling || GetMovementState() == EALSMovementState::Ragdoll);
 }
