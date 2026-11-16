@@ -2,21 +2,28 @@
 
 #include "Character/ALSCharacterMovementComponent.h"
 #include "GameFramework/CharacterMovementReplication.h"
-#include "Gameplay/Equipment/NGJetpackDefinition.h"
+#include "Gameplay/Character/NGJetpackMovementSettings.h"
 #include "NGCharacterMovementComponent.generated.h"
 
 class UAbilitySystemComponent;
-class UNGEquipmentInstance;
+struct FNGJetpackMoveState
+{
+	FNGJetpackMovementSettings Settings;
+	int32 Generation = 0;
+	float ThrustAlpha = 0.f;
+	bool bRequested = false;
+};
+
 struct FNGJetpackNetworkMoveData : public FCharacterNetworkMoveData
 {
-    int32 InstallationGeneration = 0;
-    virtual void ClientFillNetworkMoveData(const FSavedMove_Character& ClientMove, ENetworkMoveType MoveType) override;
-    virtual bool Serialize(UCharacterMovementComponent& Movement, FArchive& Ar, UPackageMap* Map, ENetworkMoveType MoveType) override;
+	int32 InstallationGeneration = 0;
+	virtual void ClientFillNetworkMoveData(const FSavedMove_Character& ClientMove, ENetworkMoveType MoveType) override;
+	virtual bool Serialize(UCharacterMovementComponent& Movement, FArchive& Ar, UPackageMap* Map, ENetworkMoveType MoveType) override;
 };
 struct FNGJetpackMoveDataContainer : public FCharacterNetworkMoveDataContainer
 {
-    FNGJetpackMoveDataContainer() { NewMoveData = &Moves[0]; PendingMoveData = &Moves[1]; OldMoveData = &Moves[2]; }
-    FNGJetpackNetworkMoveData Moves[3];
+	FNGJetpackMoveDataContainer() { NewMoveData = &Moves[0]; PendingMoveData = &Moves[1]; OldMoveData = &Moves[2]; }
+	FNGJetpackNetworkMoveData Moves[3];
 };
 
 /** ALS locomotion plus predicted jetpack intent; GAS authorizes thrust on the current Avatar. */
@@ -27,13 +34,15 @@ class NEXTGENONE_API UNGCharacterMovementComponent : public UALSCharacterMovemen
 public:
 	UNGCharacterMovementComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+	void SetJetpackContext(const FNGJetpackMovementSettings& Settings, int32 Generation);
+	FNGJetpackMoveState CaptureJetpackMove() const;
+	void RestoreJetpackMove(const FNGJetpackMoveState& State);
 	bool CanStartJetpack() const;
 	void SetJetpackRequested(bool bRequested)
 	{
 		bJetpackRequested = bRequested;
 		if (!bRequested) JetpackThrustAlpha = JetpackMoveThrustAlpha = 0.f;
 	}
-	bool IsJetpackRequested() const { return bJetpackRequested; }
 	virtual void MoveAutonomous(float ClientTimeStamp, float DeltaTime, uint8 CompressedFlags, const FVector& NewAccel) override;
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 	virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
@@ -45,14 +54,13 @@ public:
 	virtual float GetMaxBrakingDeceleration() const override;
 	virtual void CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration) override;
 private:
-	friend class FNGJetpackSavedMove;
-    FNGJetpackMoveDataContainer MoveDataContainer;
-    FNGJetpackMovementSettings MoveSettings;
-    TWeakObjectPtr<UNGEquipmentInstance> ReplaySource;
-    int32 MoveGeneration = 0;
-    bool bReplaySettings = false;
-    bool bReadingNetworkMove = false;
-    UNGEquipmentInstance* GetJetpackSource() const;
+	FNGJetpackMoveDataContainer MoveDataContainer;
+	FNGJetpackMovementSettings MoveSettings;
+	FNGJetpackMovementSettings ContextSettings;
+	int32 ContextGeneration = 0;
+	int32 MoveGeneration = 0;
+	bool bReplaySettings = false;
+	bool bReadingNetworkMove = false;
 	bool bJetpackRequested = false;
 	float JetpackThrustAlpha = 0.f;
 	float JetpackMoveThrustAlpha = 0.f;

@@ -3,7 +3,6 @@
 #include "AbilitySystemComponent.h"
 #include "Components/SceneComponent.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
-#include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "Net/UnrealNetwork.h"
 
 ANGEquipmentVisualActor::ANGEquipmentVisualActor()
@@ -42,7 +41,7 @@ void ANGEquipmentVisualActor::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 
 void ANGEquipmentVisualActor::OnRep_Source()
 {
-	if (auto* Equipment = Source ? Source->GetEquipment() : nullptr) Equipment->RefreshReplicatedState();
+	OnSourceReplicated.Broadcast();
 }
 
 UAbilitySystemComponent* ANGEquipmentVisualActor::GetAbilitySystemComponent() const

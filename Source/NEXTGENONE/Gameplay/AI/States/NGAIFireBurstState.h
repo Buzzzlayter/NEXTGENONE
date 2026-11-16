@@ -26,9 +26,11 @@ private:
 	TWeakObjectPtr<UNGCombatComponent> Combat;
 	TWeakObjectPtr<UNGEquipmentInstance> Weapon;
 	FTimerHandle FireTimer;
-	double EarliestShotTime = 0.;
+	double AimReadyTime = 0.;
+	FDelegateHandle CooldownHandle;
 	bool bOwnsFireFocus = false;
 	int32 ShotsFired = 0;
 	void UpdateFire();
+	void FireCooldownChanged(FGameplayTag Tag, int32 Count);
 	void AimEnded(bool bWasCancelled);
 };

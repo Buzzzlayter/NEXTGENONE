@@ -24,6 +24,7 @@ public:
 		FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bWasCancelled) override;
 private:
 	UFUNCTION() void FinishReload();
+	bool CompleteReloadOnServer();
 };
 
 UCLASS(Blueprintable)

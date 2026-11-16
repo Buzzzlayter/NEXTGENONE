@@ -6,7 +6,6 @@
 
 class UNGWeaponDefinition;
 class UNGInventoryItemInstance;
-class UNGInventoryManagerComponent;
 class USkeletalMeshComponent;
 class APawn;
 
@@ -22,13 +21,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Weapon") UNGWeaponDefinition* GetDefinition() const;
 	UNGInventoryItemInstance* GetItem() const;
 	UFUNCTION(BlueprintPure, Category="Weapon") int32 GetMagazineAmmo() const;
-	UFUNCTION(BlueprintPure, Category="Weapon") int32 GetReserveAmmo() const;
 	virtual FVector GetShotOrigin() const;
-	bool TryFireWithViewOnServer(const FVector& ViewOrigin, const FVector& ViewDirection, int32 EquipmentRevision);
 	/** Called only by the equipment-granted ability after its GAS commit. */
-	bool FireOnServer();
-	bool CompleteReloadOnServer();
-	UFUNCTION(BlueprintCallable, Category="Weapon") void RequestFire();
+	bool FireOnServer(FVector ViewOrigin, FVector ViewDirection);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastReload(UNGWeaponDefinition* Definition);
 	UPROPERTY(BlueprintAssignable, Category="Weapon") FNGShotCosmetic OnShotCosmetic;
 protected:
@@ -41,12 +36,8 @@ protected:
 	UFUNCTION(BlueprintNativeEvent, Category="Weapon|Presentation") void PlayReloadEffects(UNGWeaponDefinition* Definition);
 	virtual void PlayReloadEffects_Implementation(UNGWeaponDefinition* Definition);
 private:
-	UNGInventoryManagerComponent* GetInventory() const;
 	APawn* GetPawn() const;
-	bool IsCurrentWeapon() const;
-	UFUNCTION(Server, Reliable) void ServerRequestFire(FVector_NetQuantize ViewOrigin, FVector_NetQuantizeNormal ViewDirection, int32 EquipmentRevision);
+	bool HasWeaponContext() const;
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize Start, FVector_NetQuantize End, bool bHit, int32 ShotId, UNGWeaponDefinition* Definition);
-	TOptional<FTransform> RequestedShotView;
 	int32 ShotSerial = 0;
-	bool bCompletingReload = false;
 };

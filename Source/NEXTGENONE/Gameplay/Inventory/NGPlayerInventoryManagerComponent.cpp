@@ -333,22 +333,22 @@ ANGItemPickup* UNGPlayerInventoryManagerComponent::DropItemOnServer(APawn* Pawn,
 
 bool UNGPlayerInventoryManagerComponent::MoveEquipmentItemOnServer(UNGInventoryItemInstance* Item, int32 TargetSlot)
 {
-    return ExecuteTransferOnServer(this, GetSlotIndex(Item), this, TargetSlot, 0);
+	return ExecuteTransferOnServer(this, GetSlotIndex(Item), this, TargetSlot, 0);
 }
 bool UNGPlayerInventoryManagerComponent::ExecuteTransferOnServer(UNGInventoryManagerComponent* Source, int32 SourceSlot,
-    UNGInventoryManagerComponent* Target, int32 TargetSlot, int32 Amount)
+	UNGInventoryManagerComponent* Target, int32 TargetSlot, int32 Amount)
 {
-    auto* Pawn = GetInventoryPawn();
-    const auto* Interaction = Pawn ? Pawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
-    auto* Equipment = Pawn ? Pawn->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
-    if (!GetOwner()->HasAuthority() || !Interaction || !Interaction->IsCurrentInteractor() || !Equipment
-        || !CanAccessInventory(Source) || !CanAccessInventory(Target)) return false;
-    auto* Item = Source->GetItemAtSlot(SourceSlot); auto* Other = Target->GetItemAtSlot(TargetSlot);
-    if (!Item) return false;
-    FString Error;
-    if (Target == this && (!Equipment->PreflightPlacement(Item, TargetSlot, Error)
-        || (GetSlotTag(TargetSlot).MatchesTag(TAG_NGSlotEquipment) && (Source->GetCount(Item) != 1 || Amount > 1)))) return false;
-    if (Source == this && Other && (!Equipment->PreflightPlacement(Other, SourceSlot, Error)
-        || (GetSlotTag(SourceSlot).MatchesTag(TAG_NGSlotEquipment) && Target->GetCount(Other) != 1))) return false;
-    return Source->TransferTo(Target, SourceSlot, TargetSlot, Amount);
+	auto* Pawn = GetInventoryPawn();
+	const auto* Interaction = Pawn ? Pawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
+	auto* Equipment = Pawn ? Pawn->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
+	if (!GetOwner()->HasAuthority() || !Interaction || !Interaction->IsCurrentInteractor()
+		|| !CanAccessInventory(Source) || !CanAccessInventory(Target)) return false;
+	auto* Item = Source->GetItemAtSlot(SourceSlot); auto* Other = Target->GetItemAtSlot(TargetSlot);
+	if (!Item) return false;
+	FString Error;
+	if (Target == this && GetSlotTag(TargetSlot).MatchesTag(TAG_NGSlotEquipment)
+		&& (!Equipment || Source->GetCount(Item) != 1 || Amount > 1 || !Equipment->PreflightPlacement(Item, TargetSlot, Error))) return false;
+	if (Source == this && Other && GetSlotTag(SourceSlot).MatchesTag(TAG_NGSlotEquipment)
+		&& (!Equipment || Target->GetCount(Other) != 1 || !Equipment->PreflightPlacement(Other, SourceSlot, Error))) return false;
+	return Source->TransferTo(Target, SourceSlot, TargetSlot, Amount);
 }

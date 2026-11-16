@@ -124,6 +124,7 @@ void UNGHitReactionComponent::ReceiveImpact(FName Bone,FVector BonePoint,FVector
 	// Never simulate root/pelvis: the movement capsule must remain authoritative under ALS.
 	if (Root==TEXT("pelvis") || Root==TEXT("root")) Root=TorsoFallbackBone;
 	if (Root.IsNone() || Root==TEXT("pelvis") || Root==TEXT("root") || !Mesh->GetBodyInstance(Root)) return;
+	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	if (!bSavedBlend) { bOriginalBlend=Mesh->bBlendPhysics; bSavedBlend=true; }
 	Mesh->bBlendPhysics=false;
 	const float Duration=FMath::IsFinite(RecoveryTime) ? FMath::Clamp(RecoveryTime,.05f,2.f) : .35f;

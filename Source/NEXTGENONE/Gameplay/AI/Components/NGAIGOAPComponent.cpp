@@ -10,6 +10,7 @@
 #include "Gameplay/AI/Components/NGAIQueryResultsComponent.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "Inventory/NGInventoryManagerComponent.h"
 #include "Inventory/NGInventoryItemInstance.h"
 #include "Inventory/NGInventoryItemDefinition.h"
@@ -284,7 +285,8 @@ bool UNGAIGOAPComponent::RefreshFacts()
 	Snapshot.Facts.Set(ENGAIFact::AttackPerformed, false);
 	auto* Combat = Pawn->FindComponentByClass<UNGCombatComponent>();
 	const auto* Weapon = Combat ? Combat->GetWeaponInstance() : nullptr;
-	const bool bEquipped = Weapon && Weapon->IsCurrent();
+	const auto* Equipment = Pawn->FindComponentByClass<UNGEquipmentComponent>();
+	const bool bEquipped = Equipment && Equipment->IsCurrent(Weapon);
 	Snapshot.Facts.Set(ENGAIFact::WeaponEquipped, bEquipped);
 	bool bWeaponAvailable = bEquipped;
 	const auto* PlayerState = Pawn->GetPlayerState();

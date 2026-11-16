@@ -1,11 +1,10 @@
-﻿// Copyright:       Copyright (C) 2022 Doğa Can Yanıkoğlu
+// Copyright:       Copyright (C) 2022 Doğa Can Yanıkoğlu
 // Source Code:     https://github.com/dyanikoglu/ALS-Community
 
 
 #include "Components/ALSMantleComponent.h"
 
 
-#include "Character/ALSCharacter.h"
 #include "Character/Animation/ALSCharacterAnimInstance.h"
 #include "Components/ALSDebugComponent.h"
 #include "Curves/CurveVector.h"
@@ -81,11 +80,6 @@ void UALSMantleComponent::MantleStart(float MantleHeight, const FALSComponentAnd
 	if (OwnerCharacter == nullptr || !IsValid(MantleLedgeWS.Component) || !IsValid(MantleTimeline))
 	{
 		return;
-	}
-
-	if (MantleType != EALSMantleType::LowMantle && OwnerCharacter->IsA(AALSCharacter::StaticClass()))
-	{
-		Cast<AALSCharacter>(OwnerCharacter)->ClearHeldObject();
 	}
 
 	// Disable ticking during mantle
@@ -381,10 +375,6 @@ void UALSMantleComponent::MantleEnd()
 	{
 		OwnerCharacter->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 
-		if (OwnerCharacter->IsA(AALSCharacter::StaticClass()))
-		{
-			Cast<AALSCharacter>(OwnerCharacter)->UpdateHeldObject();
-		}
 	}
 
 	// Enable ticking back after mantle ends

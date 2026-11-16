@@ -5,6 +5,7 @@
 #include "Gameplay/AI/Memory/NGAIMemoryComponent.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "GameFramework/Pawn.h"
@@ -24,7 +25,8 @@ void UNGAIFireBurstState::StartAction()
 	const auto* Target = ActionController->GetMemory()->GetTarget();
 	Combat = ExpectedPawn->FindComponentByClass<UNGCombatComponent>();
 	Weapon = Combat.IsValid() ? Combat->GetWeaponInstance() : nullptr;
-	if (!Target || !Target->bVisible || !Weapon.IsValid() || !Weapon->IsCurrent()
+	const auto* Equipment = ExpectedPawn->FindComponentByClass<UNGEquipmentComponent>();
+	if (!Target || !Target->bVisible || !Weapon.IsValid() || !Equipment || !Equipment->IsCurrent(Weapon.Get())
 		|| Combat->GetMagazineAmmo() <= 0
 		|| !FMath::IsFinite(BurstDuration) || BurstDuration < .1f || BurstDuration >= ActionTimeout
 		|| !FMath::IsFinite(AimSettleTime) || AimSettleTime < 0.f || AimSettleTime >= BurstDuration
@@ -33,13 +35,15 @@ void UNGAIFireBurstState::StartAction()
 	BurstTarget = Target->Actor;
 	ActionController->SetFocus(BurstTarget.Get(), FireFocusPriority);
 	bOwnsFireFocus = true;
-	EarliestShotTime = GetWorld()->GetTimeSeconds() + AimSettleTime;
+	AimReadyTime = GetWorld()->GetTimeSeconds() + AimSettleTime;
 	const uint64 StartedRun = RunSerial;
 	if (!AimInput.Start(this, ActionASC.Get(), TAG_NGInputAim, BurstDuration,
 		[this, StartedRun]() { return IsCurrentRun(StartedRun); },
 		[this]() { return HasCurrentAvatar(); }, [this](bool bCancelled) { AimEnded(bCancelled); }))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Aim activation rejected")); return; }
 	if (!bRunning) return;
+	CooldownHandle = ActionASC->RegisterGameplayTagEvent(TAG_NGFireCooldown, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &ThisClass::FireCooldownChanged);
 	GetWorld()->GetTimerManager().SetTimer(FireTimer, FTimerDelegate::CreateWeakLambda(this, [this, StartedRun]()
 	{
 		if (IsCurrentRun(StartedRun)) UpdateFire();
@@ -48,19 +52,18 @@ void UNGAIFireBurstState::StartAction()
 
 void UNGAIFireBurstState::UpdateFire()
 {
+	const auto* Equipment = ExpectedPawn->FindComponentByClass<UNGEquipmentComponent>();
 	const auto* Target = ActionController->GetMemory()->GetTarget();
-	if (!Target || Target->Actor != BurstTarget || !Target->bVisible || !Weapon.IsValid() || !Weapon->IsCurrent()
+	if (!Target || Target->Actor != BurstTarget || !Target->bVisible || !Weapon.IsValid() || !Equipment || !Equipment->IsCurrent(Weapon.Get())
 		|| !Combat.IsValid() || Combat->GetWeaponInstance() != Weapon.Get()
 		|| !ActionASC->HasMatchingGameplayTag(TAG_NGWeaponAiming))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Burst target, weapon or aiming lost")); return; }
-	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now < EarliestShotTime) return;
+	if (GetWorld()->GetTimeSeconds() < AimReadyTime || ActionASC->HasMatchingGameplayTag(TAG_NGFireCooldown)) return;
 	if (Combat->GetMagazineAmmo() <= 0)
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Magazine empty")); return; }
 	const auto* WeaponActor = Combat->GetWeaponActor();
-	const auto* Definition = WeaponActor ? WeaponActor->GetDefinition() : nullptr;
-	if (!Definition || !FMath::IsFinite(Definition->FireInterval))
-	{ FinishAction(ENGAIActionResult::Failed, TEXT("Invalid weapon cadence")); return; }
+	if (!WeaponActor)
+	{ FinishAction(ENGAIActionResult::Failed, TEXT("Weapon actor unavailable")); return; }
 	const FVector Eye = ExpectedPawn->GetPawnViewLocation();
 	const FVector Direction = (Target->LastSeenLocation - Eye).GetSafeNormal();
 	if (FVector::DotProduct(Direction, ActionController->GetControlRotation().Vector())
@@ -97,12 +100,16 @@ void UNGAIFireBurstState::UpdateFire()
 	// Release even when a synchronous shot kills/unpossesses this Pawn; never release on a new Avatar.
 	if (HasCurrentAvatar() && ShotASC.IsValid()) ShotASC->AbilityInputTagReleased(TAG_NGFireInput);
 	if (!IsCurrentRun(StartedRun)) return;
-	if (!Combat.IsValid() || !Weapon.IsValid() || !Weapon->IsCurrent())
+	if (!Combat.IsValid() || !Weapon.IsValid() || !Equipment || !Equipment->IsCurrent(Weapon.Get()))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Weapon removed during shot")); return; }
 	if (Combat->GetMagazineAmmo() >= AmmoBefore)
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("GAS or combat rejected shot")); return; }
 	++ShotsFired;
-	EarliestShotTime = Now + FMath::Max(.05f, Definition->FireInterval);
+}
+
+void UNGAIFireBurstState::FireCooldownChanged(FGameplayTag Tag, int32 Count)
+{
+	if (Count == 0 && bRunning && HasCurrentAvatar()) UpdateFire();
 }
 
 void UNGAIFireBurstState::AimEnded(bool bWasCancelled)
@@ -115,6 +122,9 @@ void UNGAIFireBurstState::AimEnded(bool bWasCancelled)
 
 void UNGAIFireBurstState::ReleaseActionResources()
 {
+	if (auto* ASC = ActionASC.Get())
+		ASC->RegisterGameplayTagEvent(TAG_NGFireCooldown, EGameplayTagEventType::NewOrRemoved).Remove(CooldownHandle);
+	CooldownHandle.Reset();
 	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(FireTimer);
 	if (bOwnsFireFocus && ActionController.IsValid()) ActionController->ClearFocus(FireFocusPriority);
 	bOwnsFireFocus = false;

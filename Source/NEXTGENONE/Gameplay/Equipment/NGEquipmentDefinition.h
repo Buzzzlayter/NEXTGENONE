@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AbilitySystem/NGAbilitySystem.h"
+#include "Inventory/NGInventoryItemDefinitionValidator.h"
 #include "NGEquipmentDefinition.generated.h"
 
 class ANGEquipmentVisualActor;
@@ -26,7 +27,7 @@ public:
 
 /** Project equipment contract. Placement remains in the PlayerState inventory. */
 UCLASS(BlueprintType, Blueprintable)
-class NEXTGENONE_API UNGEquipmentDefinition : public UDataAsset
+class NEXTGENONE_API UNGEquipmentDefinition : public UDataAsset, public INGInventoryItemDefinitionValidator
 {
 	GENERATED_BODY()
 public:
@@ -39,6 +40,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Equipment|Visual") FName AttachSocket;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Equipment|Visual") FTransform VisualTransform = FTransform::Identity;
 	virtual bool ValidateDefinition(FString& Error) const;
+	virtual bool ValidateItemDefinition(const UNGInventoryItemDefinition& Item, FString& Error) const override;
 	virtual void ResolveResources(TArray<FNGEquipmentAbilityGrant>& OutAbilities, TArray<TSubclassOf<UGameplayEffect>>& OutEffects) const;
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;

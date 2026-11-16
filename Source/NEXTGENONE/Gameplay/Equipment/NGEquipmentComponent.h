@@ -9,7 +9,7 @@ class ANGEquipmentVisualActor;
 class USkeletalMeshComponent;
 class UNGEquipmentDefinition;
 class UNGInventoryItemInstance;
-class UNGPlayerInventoryManagerComponent;
+class UNGInventoryManagerComponent;
 struct FNGEquipmentAbilityGrant;
 
 USTRUCT()
@@ -34,11 +34,10 @@ public:
 	virtual bool ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* Flags) override;
 	virtual void ReadyForReplication() override;
 	/** The owning Avatar supplies its context; binding alone does not enable gameplay resources. */
-	void BindContext(UAbilitySystemComponent* ASC, UNGPlayerInventoryManagerComponent* InInventory, USkeletalMeshComponent* InAttachmentMesh);
+	void BindContext(UAbilitySystemComponent* ASC, UNGInventoryManagerComponent* InInventory, USkeletalMeshComponent* InAttachmentMesh);
 	/** Called by the Avatar coordinator after its gameplay resources are ready. */
 	void ActivateEquipment();
 	void Shutdown();
-	void RequestEquip(bool bEquip);
 	bool PreflightPlacement(UNGInventoryItemInstance* Item, int32 SlotIndex, FString& Error) const;
 	bool IsCurrent(const UNGEquipmentInstance* Instance) const;
 	UNGEquipmentInstance* FindInstance(FGameplayTag Slot) const;
@@ -46,16 +45,21 @@ public:
 	int32 GetHandsRevision() const { return HandsRevision; }
 	void RefreshReplicatedState();
 	FSimpleMulticastDelegate OnEquipmentChanged;
+	FSimpleMulticastDelegate OnContextChanged;
 	static UNGEquipmentDefinition* GetDefinition(const UNGInventoryItemInstance* Item);
 private:
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) TArray<TObjectPtr<UNGEquipmentInstance>> Installations;
+	UPROPERTY(ReplicatedUsing=OnRep_Equipment) TArray<FGameplayAbilitySpecHandle> GrantedAbilities;
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) int32 HandsRevision = 0;
 	UPROPERTY() TMap<TObjectPtr<UNGEquipmentInstance>, FNGEquipmentResources> Resources;
 	UPROPERTY(ReplicatedUsing=OnRep_Equipment) TArray<TObjectPtr<ANGEquipmentVisualActor>> Visuals;
-	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> Inventory;
+	TWeakObjectPtr<UNGInventoryManagerComponent> Inventory;
 	TWeakObjectPtr<UAbilitySystemComponent> ObservedASC;
 	TWeakObjectPtr<USkeletalMeshComponent> AttachmentMesh;
 	TSet<TWeakObjectPtr<UNGInventoryItemInstance>> FailedItems;
+	TSet<FGameplayAbilitySpecHandle> StartupAttempted;
+	TSet<TWeakObjectPtr<UNGEquipmentInstance>> ObservedSources;
+	TSet<TWeakObjectPtr<ANGEquipmentVisualActor>> ObservedVisuals;
 	FDelegateHandle EffectAddedHandle;
 	FDelegateHandle AbilityEndedHandle;
 	FTimerHandle ReadinessTimer;
@@ -67,6 +71,7 @@ private:
 	UFUNCTION() void OnRep_Equipment();
 	UFUNCTION() void InventoryChanged();
 	bool CanApply() const;
+	bool IsInstallationValid(const UNGEquipmentInstance* Instance) const;
 	bool Preflight(UNGInventoryItemInstance* Item, UNGEquipmentDefinition* Definition, FString& Error) const;
 	bool Install(UNGInventoryItemInstance* Item, UNGEquipmentDefinition* Definition);
 	bool FinishInstall(UNGEquipmentInstance* Instance);

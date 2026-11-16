@@ -16,13 +16,14 @@ bool UNGGameplayAbilityFromWeapon::ResolveWeaponContext(FGameplayAbilitySpecHand
 {
 	OutContext = {};
 	const auto* ASC = Info ? Info->AbilitySystemComponent.Get() : nullptr;
-	if (!ASC || ASC->GetAvatarActor() != Info->AvatarActor.Get()) return false;
+	const auto* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
+	if (!ASC || !Avatar || ASC->GetAvatarActor() != Avatar) return false;
 	const auto* Spec = ASC->FindAbilitySpecFromHandle(Handle);
 	if (!Spec || !Spec->Ability || Spec->PendingRemove) return false;
 	auto* Source = Cast<UNGEquipmentInstance>(Spec->SourceObject.Get());
-	if (!Source || !Source->IsCurrent() || Source->GetAvatar() != Info->AvatarActor.Get()) return false;
-	const auto* Equipment = Source->GetEquipment();
-	auto* Weapon = Equipment ? Cast<ANGWeaponActor>(Equipment->GetVisualActor(Source->GetSlot())) : nullptr;
+	const auto* Equipment = Avatar->FindComponentByClass<UNGEquipmentComponent>();
+	if (!Equipment || !Equipment->IsCurrent(Source)) return false;
+	auto* Weapon = Cast<ANGWeaponActor>(Equipment->GetVisualActor(Source->GetSlot()));
 	auto* Definition = Cast<UNGWeaponDefinition>(Source->GetDefinition());
 	if (!Weapon || !Definition || Weapon->GetEquipmentSource() != Source) return false;
 	OutContext = {Source, Weapon, Definition};

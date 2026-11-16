@@ -20,6 +20,7 @@ class NEXTGENONE_API UNGWeaponDefinition : public UNGEquipmentDefinition
 public:
 	UNGWeaponDefinition();
 	virtual bool ValidateDefinition(FString& Error) const override;
+	virtual bool ValidateItemDefinition(const UNGInventoryItemDefinition& Item, FString& Error) const override;
 	virtual void ResolveResources(TArray<FNGEquipmentAbilityGrant>& OutAbilities, TArray<TSubclassOf<UGameplayEffect>>& OutEffects) const override;
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
@@ -41,10 +42,8 @@ public:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics|Niagara") TObjectPtr<UStaticMesh> ShellMesh;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics|Niagara") FName MuzzleFXSocket=TEXT("Muzzle");
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics|Niagara") FName ShellEjectFXSocket=TEXT("ShellEject");
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TSoftClassPtr<UNGInventoryItemDefinition> InventoryItemClass;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) EALSOverlayState Overlay = EALSOverlayState::Default;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) bool bAutomatic = false;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="0")) int32 InitialReserveAmmo = 90;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="0.1")) float ReloadDuration = 1.4f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TObjectPtr<UAnimSequence> WeaponFireAnimation;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TObjectPtr<UAnimSequence> WeaponReloadAnimation;
