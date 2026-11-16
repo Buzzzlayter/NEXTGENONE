@@ -1,8 +1,8 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
 #include "Inventory/NGInventoryItemInstance.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
+#include "GameFramework/Actor.h"
 
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
@@ -17,21 +17,25 @@ UNGGameplayAbilityFromEquipment::UNGGameplayAbilityFromEquipment(const FObjectIn
 }
 
 bool UNGGameplayAbilityFromEquipment::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
-    const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const
 {
-    const auto* Source = Info ? Cast<UNGEquipmentInstance>(GetSourceObject(Handle, Info)) : nullptr;
-    return Source && Source->IsCurrent() && Source->GetAvatar() == Info->AvatarActor.Get()
-        && Super::CanActivateAbility(Handle, Info, SourceTags, TargetTags, RelevantTags);
+	const auto* Source = Info ? Cast<UNGEquipmentInstance>(GetSourceObject(Handle, Info)) : nullptr;
+	const auto* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
+	const auto* Equipment = Avatar ? Avatar->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
+	return Equipment && Equipment->IsCurrent(Source)
+		&& Super::CanActivateAbility(Handle, Info, SourceTags, TargetTags, RelevantTags);
 }
 UNGEquipmentInstance* UNGGameplayAbilityFromEquipment::GetEquipmentInstance() const
 {
-    const auto* Spec = UGameplayAbility::GetCurrentAbilitySpec();
-    auto* Source = Spec ? Cast<UNGEquipmentInstance>(Spec->SourceObject.Get()) : nullptr;
-    return Source && Source->IsCurrent() ? Source : nullptr;
+	const auto* Spec = UGameplayAbility::GetCurrentAbilitySpec();
+	auto* Source = Spec ? Cast<UNGEquipmentInstance>(Spec->SourceObject.Get()) : nullptr;
+	const auto* Avatar = GetAvatarActorFromActorInfo();
+	const auto* Equipment = Avatar ? Avatar->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
+	return Equipment && Equipment->IsCurrent(Source) ? Source : nullptr;
 }
 UNGInventoryItemInstance* UNGGameplayAbilityFromEquipment::GetAssociatedItem() const
 {
-    const auto* Source = GetEquipmentInstance(); return Source ? Source->GetItem() : nullptr;
+	const auto* Source = GetEquipmentInstance(); return Source ? Source->GetItem() : nullptr;
 }
 
 #if WITH_EDITOR

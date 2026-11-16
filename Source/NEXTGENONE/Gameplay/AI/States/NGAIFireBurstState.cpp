@@ -5,6 +5,7 @@
 #include "Gameplay/AI/Memory/NGAIMemoryComponent.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "GameFramework/Pawn.h"
@@ -24,7 +25,8 @@ void UNGAIFireBurstState::StartAction()
 	const auto* Target = ActionController->GetMemory()->GetTarget();
 	Combat = ExpectedPawn->FindComponentByClass<UNGCombatComponent>();
 	Weapon = Combat.IsValid() ? Combat->GetWeaponInstance() : nullptr;
-	if (!Target || !Target->bVisible || !Weapon.IsValid() || !Weapon->IsCurrent()
+	const auto* Equipment = ExpectedPawn->FindComponentByClass<UNGEquipmentComponent>();
+	if (!Target || !Target->bVisible || !Weapon.IsValid() || !Equipment || !Equipment->IsCurrent(Weapon.Get())
 		|| Combat->GetMagazineAmmo() <= 0
 		|| !FMath::IsFinite(BurstDuration) || BurstDuration < .1f || BurstDuration >= ActionTimeout
 		|| !FMath::IsFinite(AimSettleTime) || AimSettleTime < 0.f || AimSettleTime >= BurstDuration
@@ -48,8 +50,9 @@ void UNGAIFireBurstState::StartAction()
 
 void UNGAIFireBurstState::UpdateFire()
 {
+	const auto* Equipment = ExpectedPawn->FindComponentByClass<UNGEquipmentComponent>();
 	const auto* Target = ActionController->GetMemory()->GetTarget();
-	if (!Target || Target->Actor != BurstTarget || !Target->bVisible || !Weapon.IsValid() || !Weapon->IsCurrent()
+	if (!Target || Target->Actor != BurstTarget || !Target->bVisible || !Weapon.IsValid() || !Equipment || !Equipment->IsCurrent(Weapon.Get())
 		|| !Combat.IsValid() || Combat->GetWeaponInstance() != Weapon.Get()
 		|| !ActionASC->HasMatchingGameplayTag(TAG_NGWeaponAiming))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Burst target, weapon or aiming lost")); return; }
@@ -97,7 +100,7 @@ void UNGAIFireBurstState::UpdateFire()
 	// Release even when a synchronous shot kills/unpossesses this Pawn; never release on a new Avatar.
 	if (HasCurrentAvatar() && ShotASC.IsValid()) ShotASC->AbilityInputTagReleased(TAG_NGFireInput);
 	if (!IsCurrentRun(StartedRun)) return;
-	if (!Combat.IsValid() || !Weapon.IsValid() || !Weapon->IsCurrent())
+	if (!Combat.IsValid() || !Weapon.IsValid() || !Equipment || !Equipment->IsCurrent(Weapon.Get()))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Weapon removed during shot")); return; }
 	if (Combat->GetMagazineAmmo() >= AmmoBefore)
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("GAS or combat rejected shot")); return; }

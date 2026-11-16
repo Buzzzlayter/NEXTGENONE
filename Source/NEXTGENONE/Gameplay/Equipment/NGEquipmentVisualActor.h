@@ -20,6 +20,7 @@ public:
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	UFUNCTION(BlueprintPure, Category="Equipment") virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UFUNCTION(BlueprintPure, Category="Equipment") UNGEquipmentInstance* GetEquipmentSource() const;
+	FSimpleMulticastDelegate OnSourceReplicated;
 protected:
 	virtual void AbilitySystemReady();
 	virtual void GameplayTagChanged(FGameplayTag Tag, int32 Count);

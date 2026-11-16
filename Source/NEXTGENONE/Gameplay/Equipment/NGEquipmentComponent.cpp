@@ -2,7 +2,7 @@
 #include "Gameplay/Equipment/NGEquipmentDefinition.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
 #include "Gameplay/Equipment/NGEquipmentVisualActor.h"
-#include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
+#include "Inventory/NGInventoryManagerComponent.h"
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayTags/NGGameplayTags.h"
@@ -29,11 +29,18 @@ void UNGEquipmentComponent::EndPlay(EEndPlayReason::Type Reason)
 	BindContext(nullptr, nullptr, nullptr);
 	if (GetOwner()->HasAuthority()) for (ANGEquipmentVisualActor* Actor : Visuals) if (IsValid(Actor)) Actor->Destroy();
 	Visuals.Reset();
+	for (const auto& Source : ObservedSources)
+		if (Source.IsValid()) Source->OnSourceReplicated.RemoveAll(this);
+	ObservedSources.Reset();
+	for (const auto& Visual : ObservedVisuals)
+		if (Visual.IsValid()) Visual->OnSourceReplicated.RemoveAll(this);
+	ObservedVisuals.Reset();
 	Super::EndPlay(Reason);
 }
 void UNGEquipmentComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(ThisClass, GrantedAbilities, COND_OwnerOnly);
 	DOREPLIFETIME(ThisClass, Installations); DOREPLIFETIME(ThisClass, HandsRevision); DOREPLIFETIME(ThisClass, Visuals);
 }
 bool UNGEquipmentComponent::ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* Flags)
@@ -48,7 +55,7 @@ void UNGEquipmentComponent::ReadyForReplication()
 	if (IsUsingRegisteredSubObjectList()) for (UNGEquipmentInstance* Instance : Installations) if (Instance) AddReplicatedSubObject(Instance);
 }
 void UNGEquipmentComponent::BindContext(UAbilitySystemComponent* ASC,
-	UNGPlayerInventoryManagerComponent* InInventory, USkeletalMeshComponent* InAttachmentMesh)
+	UNGInventoryManagerComponent* InInventory, USkeletalMeshComponent* InAttachmentMesh)
 {
 	if (bEnding) { ASC = nullptr; InInventory = nullptr; InAttachmentMesh = nullptr; }
 	const bool bContextChanged = ObservedASC.Get() != ASC || Inventory.Get() != InInventory;
@@ -61,6 +68,7 @@ void UNGEquipmentComponent::BindContext(UAbilitySystemComponent* ASC,
 			Previous->OnActiveGameplayEffectAddedDelegateToSelf.Remove(EffectAddedHandle);
 			Previous->OnAbilityEnded.Remove(AbilityEndedHandle);
 		}
+		if (ObservedASC.Get() != ASC) StartupAttempted.Reset();
 		ObservedASC = ASC;
 		Inventory = InInventory;
 		EffectAddedHandle.Reset(); AbilityEndedHandle.Reset();
@@ -100,12 +108,17 @@ bool UNGEquipmentComponent::CanApply() const
 }
 UNGEquipmentInstance* UNGEquipmentComponent::FindInstallation(FGameplayTag Slot) const
 {
-    for (UNGEquipmentInstance* Instance : Installations) if (Instance && Instance->Slot == Slot) return Instance;
-    return nullptr;
+	for (UNGEquipmentInstance* Instance : Installations) if (Instance && Instance->GetSlot() == Slot) return Instance;
+	if (GetOwner()->HasAuthority())
+		for (const auto& Pair : Resources)
+			if (Pair.Key && Pair.Key->GetSlot() == Slot) return Pair.Key;
+	return nullptr;
 }
 UNGEquipmentInstance* UNGEquipmentComponent::FindInstance(FGameplayTag Slot) const
 {
-    auto* Instance = FindInstallation(Slot); return Instance && Instance->bInstalled ? Instance : nullptr;
+	for (UNGEquipmentInstance* Instance : Installations)
+		if (Instance && Instance->GetSlot() == Slot) return Instance;
+	return nullptr;
 }
 ANGEquipmentVisualActor* UNGEquipmentComponent::GetVisualActor(FGameplayTag Slot) const
 {
@@ -118,14 +131,18 @@ ANGEquipmentVisualActor* UNGEquipmentComponent::GetVisualActor(FGameplayTag Slot
 
 bool UNGEquipmentComponent::IsCurrent(const UNGEquipmentInstance* Instance) const
 {
-	if (!Instance || !Instance->Definition || Instance->GetAvatar() != GetOwner() || !Installations.Contains(Instance) || !CanApply()) return false;
+	return Instance && FindInstance(Instance->GetSlot()) == Instance && IsInstallationValid(Instance);
+}
+bool UNGEquipmentComponent::IsInstallationValid(const UNGEquipmentInstance* Instance) const
+{
+	if (!Instance || !Instance->GetDefinition() || Instance->GetAvatar() != GetOwner() || !CanApply() || FindInstallation(Instance->GetSlot()) != Instance) return false;
 	if (GetOwner()->HasAuthority())
 	{
-		if (Inventory->GetCount(Instance->Item) != 1) return false;
-		const auto Slot = Inventory->GetSlotTag(Inventory->GetSlotIndex(Instance->Item));
-		return Slot == Instance->Slot;
+		if (Inventory->GetCount(Instance->GetItem()) != 1) return false;
+		const auto Slot = Inventory->GetSlotTag(Inventory->GetSlotIndex(Instance->GetItem()));
+		return Slot == Instance->GetSlot();
 	}
-	return Instance->Item && Instance->Item->GetItemDef();
+	return Instance->GetItem() && Instance->GetItem()->GetItemDef();
 }
 bool UNGEquipmentComponent::Preflight(UNGInventoryItemInstance* Item, UNGEquipmentDefinition* Definition, FString& Error) const
 {
@@ -137,7 +154,7 @@ bool UNGEquipmentComponent::Preflight(UNGInventoryItemInstance* Item, UNGEquipme
 	auto* ASC = ObservedASC.Get();
 	const auto* Target = AttachmentMesh.Get();
 	if (Definition->VisualActorClass && (!Target || Definition->AttachSocket.IsNone() || !Target->DoesSocketExist(Definition->AttachSocket)))
-    { Error = TEXT("Equipment visual requires an existing socket or bone on the Avatar mesh."); return false; }
+	{ Error = TEXT("Equipment visual requires an existing socket or bone on the Avatar mesh."); return false; }
 	const auto* Replaced = FindInstallation(Definition->SlotTag);
 	// GAS defers ClearAbility during item activation; retired specs no longer reserve input tags.
 	for (const auto& Grant : Grants) if (Grant.Grant.InputTag.IsValid())
@@ -157,104 +174,97 @@ bool UNGEquipmentComponent::PreflightPlacement(UNGInventoryItemInstance* Item, i
 	{ Error = TEXT("Item does not fit this equipment slot."); return false; }
 	return Preflight(Item, Definition, Error);
 }
-void UNGEquipmentComponent::RequestEquip(bool bEquip)
-{
-	const auto* Pawn = Cast<APawn>(GetOwner());
-	if (!Pawn || !CanApply() || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
-	auto* Item = Inventory->GetItemAtSlot(Inventory->FindSlotByTag(TAG_NGSlotEquipmentWeapon, 0));
-	if (Item)
-	{
-		if (!bEquip) Inventory->RequestActivationItem(Item);
-		return;
-	}
-	if (!bEquip) return;
-	// Compatibility for the explicit equip command: use the first stored weapon.
-	for (int32 I = 0; I < Inventory->GetSlotCount(); ++I)
-	{
-		auto* Candidate = Inventory->GetItemAtSlot(I);
-		const auto* Definition = GetDefinition(Candidate);
-		if (Definition && Definition->SlotTag == TAG_NGSlotEquipmentWeapon)
-		{ Inventory->RequestActivationItem(Candidate); return; }
-	}
-}
 bool UNGEquipmentComponent::Install(UNGInventoryItemInstance* Item, UNGEquipmentDefinition* Definition)
 {
 	if (!CanApply() || Inventory->GetCount(Item) != 1 || GetDefinition(Item) != Definition) return false;
 	auto* ASC = ObservedASC.Get();
 	auto* Instance = NewObject<UNGEquipmentInstance>(GetOwner());
-	Instance->Item = Item; Instance->Definition = Definition; Instance->Slot = Definition->SlotTag; Instance->Generation = ++NextGeneration;
-	Installations.Add(Instance);
+	Instance->Initialize(Item, Definition, ++NextGeneration);
+	Resources.Add(Instance).GrantedASC = ASC;
 	FNGGrantedHandles Handles;
 	auto Abort = [&]() { Handles.Remove(ASC); Remove(Instance); FailedItems.Add(Item); return false; };
 	TArray<FNGEquipmentAbilityGrant> Grants; TArray<TSubclassOf<UGameplayEffect>> Effects;
 	Definition->ResolveResources(Grants, Effects);
+	if (!IsInstallationValid(Instance)) return Abort();
 	for (const auto& Entry : Grants)
 	{
 		const auto Handle = Entry.Grant.Give(ASC, Instance); Handles.Abilities.Add(Handle);
-		if (!Handle.IsValid() || !IsCurrent(Instance)) return Abort();
+		if (!Handle.IsValid() || !IsInstallationValid(Instance)) return Abort();
 	}
 	for (const auto& Class : Effects)
 	{
 		auto Context = ASC->MakeEffectContext(); Context.AddSourceObject(Instance);
 		const auto Handle = ASC->ApplyGameplayEffectToSelf(Class.GetDefaultObject(), 1.f, Context); Handles.Effects.Add(Handle);
-		if (!Handle.IsValid() || !IsCurrent(Instance)) return Abort();
+		if (!Handle.IsValid() || !IsInstallationValid(Instance)) return Abort();
 	}
 	FNGEquipmentResources Owned; Owned.GrantedASC = ASC; Owned.Handles = MoveTemp(Handles); Resources.Add(Instance, MoveTemp(Owned));
-	Instance->AbilityHandles = Resources.FindChecked(Instance).Handles.Abilities;
-    // GiveAbility called by an item ability may be deferred by GAS's ability-list lock.
-    // Do not start or publish equipment until every returned spec really exists.
-    for (auto Handle : Instance->AbilityHandles)
-        if (!ASC->FindAbilitySpecFromHandle(Handle)) { QueueDeferredUpdate(); return true; }
-    return FinishInstall(Instance);
+	// GiveAbility called by an item ability may be deferred by GAS's ability-list lock.
+	// Do not start or publish equipment until every returned spec really exists.
+	for (auto Handle : Resources.FindChecked(Instance).Handles.Abilities)
+		if (!ASC->FindAbilitySpecFromHandle(Handle)) { QueueDeferredUpdate(); return true; }
+	return FinishInstall(Instance);
 }
 bool UNGEquipmentComponent::FinishInstall(UNGEquipmentInstance* Instance)
 {
-    auto Abort = [&]() { UE_LOG(LogTemp, Error, TEXT("Equipment installation failed after resource acquisition: %s"), *GetNameSafe(Instance)); FailedItems.Add(Instance->Item); Remove(Instance); return false; };
-    const auto* Owned = Resources.Find(Instance);
-    if (!Owned || !IsCurrent(Instance)) return Abort();
-    auto* ASC = Owned->GrantedASC.Get();
-    FString Error;
-    if (!Preflight(Instance->Item, Instance->Definition, Error) || !IsCurrent(Instance)) return Abort();
-    for (auto Handle : Instance->AbilityHandles)
-    {
-        const auto* Spec = ASC ? ASC->FindAbilitySpecFromHandle(Handle) : nullptr;
-        if (!Spec || !Spec->Ability || Spec->PendingRemove || Spec->SourceObject.Get() != Instance) return Abort();
-    }
-    TArray<FNGEquipmentAbilityGrant> Grants; TArray<TSubclassOf<UGameplayEffect>> Effects;
-    Instance->Definition->ResolveResources(Grants, Effects);
-    if (Grants.Num() != Instance->AbilityHandles.Num()) return Abort();
-	Instance->bInstalled = true;
+	auto Abort = [&]() { UE_LOG(LogTemp, Error, TEXT("Equipment installation failed after resource acquisition: %s"), *GetNameSafe(Instance)); FailedItems.Add(Instance->GetItem()); Remove(Instance); return false; };
+	const auto* Owned = Resources.Find(Instance);
+	if (!Owned || !IsInstallationValid(Instance)) return Abort();
+	auto* ASC = Owned->GrantedASC.Get();
+	FString Error;
+	if (!Preflight(Instance->GetItem(), Instance->GetDefinition(), Error) || !IsInstallationValid(Instance)) return Abort();
+	for (auto Handle : Resources.FindChecked(Instance).Handles.Abilities)
+	{
+		const auto* Spec = ASC ? ASC->FindAbilitySpecFromHandle(Handle) : nullptr;
+		if (!Spec || !Spec->Ability || Spec->PendingRemove || Spec->SourceObject.Get() != Instance) return Abort();
+	}
+	TArray<FNGEquipmentAbilityGrant> Grants; TArray<TSubclassOf<UGameplayEffect>> Effects;
+	Instance->GetDefinition()->ResolveResources(Grants, Effects);
+	if (!IsInstallationValid(Instance) || Grants.Num() != Resources.FindChecked(Instance).Handles.Abilities.Num()) return Abort();
+	Installations.Add(Instance);
+	GrantedAbilities.Append(Resources.FindChecked(Instance).Handles.Abilities);
 	RefreshVisuals();
-	if (Instance->Definition->VisualActorClass && !GetVisualActor(Instance->Slot)) return Abort();
+	if (Instance->GetDefinition()->VisualActorClass && !GetVisualActor(Instance->GetSlot())) return Abort();
+	OnContextChanged.Broadcast();
+	if (!IsInstallationValid(Instance)) return Abort();
 	for (int32 I = 0; I < Grants.Num(); ++I)
 	{
 		const auto& Entry = Grants[I]; if (!Entry.Grant.bActivateOnEnter) continue;
 		const auto Policy = Entry.Grant.Ability.GetDefaultObject()->GetNetExecutionPolicy();
 		if (Policy != EGameplayAbilityNetExecutionPolicy::ServerOnly && Policy != EGameplayAbilityNetExecutionPolicy::ServerInitiated) continue;
 		const auto* OwnedResources = Resources.Find(Instance);
-		if (!OwnedResources || !IsCurrent(Instance)) return Abort();
+		if (!OwnedResources || !IsInstallationValid(Instance)) return Abort();
 		const auto Handle = OwnedResources->Handles.Abilities[I];
 		if (Entry.bRequiredStartup) Resources.FindChecked(Instance).PendingRequiredStartup.Add(Handle);
 		const bool Started = ASC->TryActivateAbility(Handle);
-		if (!IsCurrent(Instance) || (Entry.bRequiredStartup && !Started)) return Abort();
+		if (!IsInstallationValid(Instance) || (Entry.bRequiredStartup && !Started)) return Abort();
 	}
-	if (!Preflight(Instance->Item, Instance->Definition, Error) || !IsCurrent(Instance)) return Abort();
+	if (!Preflight(Instance->GetItem(), Instance->GetDefinition(), Error) || !IsInstallationValid(Instance)) return Abort();
 	if (IsUsingRegisteredSubObjectList() && IsReadyForReplication()) AddReplicatedSubObject(Instance);
-	if (Instance->Slot == TAG_NGSlotEquipmentWeapon) ++HandsRevision;
-	Instance->Item->SetEquipped(true);
-	if (!IsCurrent(Instance)) return Abort();
+	if (Instance->GetSlot() == TAG_NGSlotEquipmentWeapon) ++HandsRevision;
+	Instance->GetItem()->SetEquipped(true);
+	if (!IsInstallationValid(Instance)) return Abort();
 	return true;
 }
 void UNGEquipmentComponent::Remove(UNGEquipmentInstance* Instance)
 {
-	if (!Instance || !Installations.Contains(Instance)) return;
+	if (!Instance || !Resources.Contains(Instance)) return;
 	// Invalidate before any cancellation/GE/item callback, including same-item re-equip.
-	Instance->bInstalled = false; Installations.Remove(Instance);
-	if (Instance->Slot == TAG_NGSlotEquipmentWeapon) ++HandsRevision;
+	Installations.Remove(Instance);
+	if (Instance->GetSlot() == TAG_NGSlotEquipmentWeapon) ++HandsRevision;
 	FNGEquipmentResources Owned;
 	Resources.RemoveAndCopyValue(Instance, Owned);
+	OnContextChanged.Broadcast();
+	const auto RetiringVisuals = Visuals;
+	for (ANGEquipmentVisualActor* Visual : RetiringVisuals)
+		if (IsValid(Visual) && Visual->GetEquipmentSource() == Instance)
+			Visual->Initialize(Instance, nullptr);
+	for (auto Handle : Owned.Handles.Abilities)
+	{
+		GrantedAbilities.Remove(Handle);
+		StartupAttempted.Remove(Handle);
+	}
 	Owned.Handles.Remove(Owned.GrantedASC);
-	if (Instance->Item) Instance->Item->SetEquipped(false);
+	if (Instance->GetItem()) Instance->GetItem()->SetEquipped(false);
 	if (IsUsingRegisteredSubObjectList()) RemoveReplicatedSubObject(Instance);
 }
 void UNGEquipmentComponent::Shutdown()
@@ -265,48 +275,89 @@ void UNGEquipmentComponent::Shutdown()
 	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(ReadinessTimer);
 	if (GetOwner()->HasAuthority())
 	{
-		const auto Previous = Installations;
-		for (UNGEquipmentInstance* Instance : Previous) Remove(Instance);
+		{
+			TGuardValue<bool> Changing(bChanging, true);
+			TArray<TObjectPtr<UNGEquipmentInstance>> Previous;
+			Resources.GetKeys(Previous);
+			for (UNGEquipmentInstance* Instance : Previous) Remove(Instance);
+		}
 		Publish();
 	}
-    else RefreshReplicatedState();
+	else RefreshReplicatedState();
 }
 void UNGEquipmentComponent::Reconcile()
 {
 	if (!GetOwner()->HasAuthority() || bChanging || !CanApply()) return;
-	TGuardValue<bool> Changing(bChanging, true);
-	const auto Previous = Installations;
-	for (UNGEquipmentInstance* Instance : Previous) if (Instance && !IsCurrent(Instance)) Remove(Instance);
-	for (auto It = FailedItems.CreateIterator(); It; ++It)
-		if (!It->IsValid() || !Inventory->Contains(It->Get()) || !Inventory->GetSlotTag(Inventory->GetSlotIndex(It->Get())).MatchesTag(TAG_NGSlotEquipment)) It.RemoveCurrent();
-	for (int32 I = 0; I < Inventory->GetSlotCount(); ++I)
 	{
-		const auto Slot = Inventory->GetSlotTag(I); auto* Item = Inventory->GetItemAtSlot(I);
-		if (!Slot.MatchesTag(TAG_NGSlotEquipment) || !Item || FindInstallation(Slot) || FailedItems.Contains(Item)) continue;
-		FString Error;
-		if (!PreflightPlacement(Item, I, Error) || !Install(Item, GetDefinition(Item)))
-		{ FailedItems.Add(Item); UE_LOG(LogTemp, Error, TEXT("Equipment application failed: %s slot=%s %s; placement retained, no automatic retry."), *GetNameSafe(Item), *Slot.ToString(), *Error); }
+		TGuardValue<bool> Changing(bChanging, true);
+		TArray<TObjectPtr<UNGEquipmentInstance>> Previous;
+		Resources.GetKeys(Previous);
+		for (UNGEquipmentInstance* Instance : Previous) if (Instance && !IsInstallationValid(Instance)) Remove(Instance);
+		for (auto It = FailedItems.CreateIterator(); It; ++It)
+			if (!It->IsValid() || !Inventory->Contains(It->Get()) || !Inventory->GetSlotTag(Inventory->GetSlotIndex(It->Get())).MatchesTag(TAG_NGSlotEquipment)) It.RemoveCurrent();
+		for (int32 I = 0; I < Inventory->GetSlotCount(); ++I)
+		{
+			const auto Slot = Inventory->GetSlotTag(I); auto* Item = Inventory->GetItemAtSlot(I);
+			if (!Slot.MatchesTag(TAG_NGSlotEquipment) || !Item || FindInstallation(Slot) || FailedItems.Contains(Item)) continue;
+			FString Error;
+			if (!PreflightPlacement(Item, I, Error) || !Install(Item, GetDefinition(Item)))
+			{ FailedItems.Add(Item); UE_LOG(LogTemp, Error, TEXT("Equipment application failed: %s slot=%s %s; placement retained, no automatic retry."), *GetNameSafe(Item), *Slot.ToString(), *Error); }
+		}
 	}
 	Publish();
 }
 void UNGEquipmentComponent::InventoryChanged() { if (bChanging) bReconcilePending = true; else Reconcile(); QueueDeferredUpdate(); }
 void UNGEquipmentComponent::Publish()
 {
-	if (bEnding) return;
-	RefreshReplicatedState(); GetOwner()->ForceNetUpdate();
+	if (bEnding || bChanging) return;
+	RefreshReplicatedState();
+	OnEquipmentChanged.Broadcast();
+	GetOwner()->ForceNetUpdate();
 }
-void UNGEquipmentComponent::OnRep_Equipment() { RefreshReplicatedState(); }
+void UNGEquipmentComponent::OnRep_Equipment()
+{
+	for (auto It = StartupAttempted.CreateIterator(); It; ++It)
+		if (!GrantedAbilities.Contains(*It)) It.RemoveCurrent();
+	RefreshReplicatedState();
+}
 void UNGEquipmentComponent::RefreshReplicatedState()
 {
 	if (bEnding) return;
+	for (auto It = ObservedVisuals.CreateIterator(); It; ++It)
+	{
+		if (It->IsValid() && Visuals.Contains(It->Get())) continue;
+		if (It->IsValid()) It->Get()->OnSourceReplicated.RemoveAll(this);
+		It.RemoveCurrent();
+	}
+	for (ANGEquipmentVisualActor* Visual : Visuals)
+		if (IsValid(Visual) && !ObservedVisuals.Contains(Visual))
+		{
+			Visual->OnSourceReplicated.AddUObject(this, &ThisClass::RefreshReplicatedState);
+			ObservedVisuals.Add(Visual);
+		}
+	for (auto It = ObservedSources.CreateIterator(); It; ++It)
+	{
+		if (It->IsValid() && Installations.Contains(It->Get())) continue;
+		if (It->IsValid()) It->Get()->OnSourceReplicated.RemoveAll(this);
+		It.RemoveCurrent();
+	}
+	for (UNGEquipmentInstance* Instance : Installations)
+		if (Instance && !ObservedSources.Contains(Instance))
+		{
+			Instance->OnSourceReplicated.AddUObject(this, &ThisClass::RefreshReplicatedState);
+			ObservedSources.Add(Instance);
+		}
 	if (!GetOwner()->HasAuthority() && ObservedASC.IsValid())
-    {
-        TArray<FGameplayAbilitySpecHandle> Stale;
-        for (const auto& Spec : ObservedASC->GetActivatableAbilities())
-            if (const auto* Source = Cast<UNGEquipmentInstance>(Spec.SourceObject.Get()); Source && Source->GetEquipment() == this && !Source->IsCurrent()) Stale.Add(Spec.Handle);
-        for (auto Handle : Stale) ObservedASC->CancelAbilityHandle(Handle);
-    }
-    RefreshVisuals(); OnEquipmentChanged.Broadcast(); QueueDeferredUpdate();
+	{
+		TArray<FGameplayAbilitySpecHandle> Stale;
+		for (const auto& Spec : ObservedASC->GetActivatableAbilities())
+			if (const auto* Source = Cast<UNGEquipmentInstance>(Spec.SourceObject.Get()); Source && Source->GetAvatar() == GetOwner() && !IsCurrent(Source)) Stale.Add(Spec.Handle);
+		for (auto Handle : Stale) ObservedASC->CancelAbilityHandle(Handle);
+	}
+	RefreshVisuals();
+	OnContextChanged.Broadcast();
+	if (!GetOwner()->HasAuthority()) OnEquipmentChanged.Broadcast();
+	QueueDeferredUpdate();
 }
 void UNGEquipmentComponent::RefreshVisuals()
 {
@@ -317,7 +368,7 @@ void UNGEquipmentComponent::RefreshVisuals()
 		for (ANGEquipmentVisualActor* Actor : Visuals) if (IsValid(Actor))
 		{
 			auto* Source = Actor->GetEquipmentSource();
-			const bool bInstalled = Source && Installations.Contains(Source) && Source->bInstalled;
+			const bool bInstalled = Source && Installations.Contains(Source);
 			Actor->SetActorHiddenInGame(!Target || !bInstalled);
 			Actor->Initialize(Source, Target && bInstalled ? ObservedASC.Get() : nullptr);
 		}
@@ -327,7 +378,7 @@ void UNGEquipmentComponent::RefreshVisuals()
 	{
 		auto* Actor = Visuals[Index].Get();
 		const auto* Source = IsValid(Actor) ? Actor->GetEquipmentSource() : nullptr;
-		if (!Target || !Source || !Installations.Contains(Source) || !Source->bInstalled)
+		if (!Target || !Source || !Installations.Contains(Source))
 		{
 			Visuals.RemoveAt(Index);
 			if (IsValid(Actor)) Actor->Destroy();
@@ -338,7 +389,7 @@ void UNGEquipmentComponent::RefreshVisuals()
 	for (UNGEquipmentInstance* Instance : CurrentInstallations)
 	{
 		const auto* Def = Instance ? Instance->GetDefinition() : nullptr;
-		if (!Instance || !Instance->bInstalled || !Def || !Def->VisualActorClass) continue;
+		if (!Instance || !Installations.Contains(Instance) || !Def || !Def->VisualActorClass) continue;
 		if (auto* Existing = GetVisualActor(Instance->GetSlot()))
 		{
 			Existing->Initialize(Instance, ObservedASC.Get());
@@ -351,11 +402,13 @@ void UNGEquipmentComponent::RefreshVisuals()
 		Actor->SetReplicates(true);
 		Actor->SetReplicateMovement(false);
 		Visuals.Add(Actor);
+		Actor->OnSourceReplicated.AddUObject(this, &ThisClass::RefreshReplicatedState);
+		ObservedVisuals.Add(Actor);
 		Actor->Initialize(Instance, ObservedASC.Get());
 		Actor->FinishSpawning(Transform);
 		if (!IsValid(Actor)) continue;
 		// Blueprint construction/BeginPlay may unequip the source or release this Avatar.
-		if (!Installations.Contains(Instance) || !Instance->bInstalled || AttachmentMesh.Get() != Target)
+		if (!Installations.Contains(Instance) || AttachmentMesh.Get() != Target)
 		{ Visuals.Remove(Actor); Actor->Destroy(); continue; }
 		Actor->SetActorEnableCollision(false);
 		Actor->AttachToComponent(Target, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Def->AttachSocket);
@@ -366,22 +419,22 @@ void UNGEquipmentComponent::RefreshVisuals()
 
 void UNGEquipmentComponent::AbilityEnded(const FAbilityEndedData& Data)
 {
-    if (!GetOwner()->HasAuthority()) return;
-    UNGEquipmentInstance* Failed = nullptr;
-    for (auto& Pair : Resources)
-        if (Pair.Value.PendingRequiredStartup.Remove(Data.AbilitySpecHandle) > 0)
-        { if (Data.bWasCancelled) Failed = Pair.Key; break; }
-    if (Failed)
-    {
-        FailedItems.Add(Failed->GetItem());
-        UE_LOG(LogTemp, Error, TEXT("Required equipment startup cancelled: %s"), *GetNameSafe(Failed));
-        Remove(Failed); Publish();
-    }
+	if (!GetOwner()->HasAuthority()) return;
+	UNGEquipmentInstance* Failed = nullptr;
+	for (auto& Pair : Resources)
+		if (Pair.Value.PendingRequiredStartup.Remove(Data.AbilitySpecHandle) > 0)
+		{ if (Data.bWasCancelled) Failed = Pair.Key; break; }
+	if (Failed)
+	{
+		FailedItems.Add(Failed->GetItem());
+		UE_LOG(LogTemp, Error, TEXT("Required equipment startup cancelled: %s"), *GetNameSafe(Failed));
+		Remove(Failed); Publish();
+	}
 }
 void UNGEquipmentComponent::EffectAdded(UAbilitySystemComponent* ASC, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle)
 {
 	const auto* Instance = Cast<UNGEquipmentInstance>(Spec.GetContext().GetSourceObject());
-	if (Instance && Instance->GetEquipment() == this) QueueDeferredUpdate();
+	if (Instance && Instance->GetAvatar() == GetOwner()) QueueDeferredUpdate();
 }
 void UNGEquipmentComponent::QueueDeferredUpdate()
 {
@@ -391,30 +444,39 @@ void UNGEquipmentComponent::QueueDeferredUpdate()
 void UNGEquipmentComponent::ProcessDeferredUpdate()
 {
 	ReadinessTimer.Invalidate();
-    if (bReconcilePending) { bReconcilePending = false; Reconcile(); }
-    if (GetOwner()->HasAuthority())
-    {
-        bool Changed = false;
-        const auto Pending = Installations;
-        for (UNGEquipmentInstance* Instance : Pending)
-            if (Instance && !Instance->bInstalled)
-            { FinishInstall(Instance); Changed = true; }
-        if (Changed) Publish();
-    }
+	if (bReconcilePending) { bReconcilePending = false; Reconcile(); }
+	if (GetOwner()->HasAuthority())
+	{
+		bool Changed = false;
+		{
+			TGuardValue<bool> Changing(bChanging, true);
+			TArray<TObjectPtr<UNGEquipmentInstance>> Pending;
+			Resources.GetKeys(Pending);
+			for (UNGEquipmentInstance* Instance : Pending)
+				if (Instance && !Installations.Contains(Instance))
+				{ FinishInstall(Instance); Changed = true; }
+		}
+		if (Changed) Publish();
+	}
 	const auto* Pawn = Cast<APawn>(GetOwner()); auto* ASC = ObservedASC.Get();
 	if (!CanApply() || !Pawn->IsLocallyControlled()) return;
 	const auto Current = Installations;
 	for (UNGEquipmentInstance* Instance : Current)
 	{
-		if (!Instance || !Instance->IsCurrent()) continue;
+		if (!Instance || !IsCurrent(Instance)) continue;
 		TArray<FNGEquipmentAbilityGrant> Grants; TArray<TSubclassOf<UGameplayEffect>> Effects;
 		Instance->GetDefinition()->ResolveResources(Grants, Effects);
-		const auto Handles = Instance->AbilityHandles;
-        if (Handles.Num() != Grants.Num()) continue;
-        bool bSpecsReady = true;
-        for (auto Handle : Handles)
-        { const auto* Spec = ASC->FindAbilitySpecFromHandle(Handle); if (!Spec || !Spec->Ability || Spec->PendingRemove || Spec->SourceObject.Get() != Instance) { bSpecsReady = false; break; } }
-        if (!bSpecsReady) continue;
+		TArray<FGameplayAbilitySpecHandle> Handles;
+		for (auto Handle : GrantedAbilities)
+		{
+			const auto* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+			if (Spec && Spec->SourceObject.Get() == Instance) Handles.Add(Handle);
+		}
+		if (Handles.Num() != Grants.Num()) continue;
+		bool bSpecsReady = true;
+		for (auto Handle : Handles)
+		{ const auto* Spec = ASC->FindAbilitySpecFromHandle(Handle); if (!Spec || !Spec->Ability || Spec->PendingRemove || Spec->SourceObject.Get() != Instance) { bSpecsReady = false; break; } }
+		if (!bSpecsReady) continue;
 		// GAS effects and specs may arrive in either order. GE arrival requeues readiness.
 		int32 EffectCount = 0;
 		for (const auto Handle : ASC->GetActiveEffects(FGameplayEffectQuery()))
@@ -425,9 +487,9 @@ void UNGEquipmentComponent::ProcessDeferredUpdate()
 			const auto& Grant = Grants[I].Grant; if (!Grant.bActivateOnEnter) continue;
 			const auto Policy = Grant.Ability.GetDefaultObject()->GetNetExecutionPolicy();
 			if (Policy != EGameplayAbilityNetExecutionPolicy::LocalOnly && Policy != EGameplayAbilityNetExecutionPolicy::LocalPredicted) continue;
-            const auto Handle = Handles[I];
-            if (!Instance->StartupAttempted.Contains(Handle) && Instance->IsCurrent())
-            { Instance->StartupAttempted.Add(Handle); ASC->TryActivateAbility(Handle); }
+			const auto Handle = Handles[I];
+			if (IsCurrent(Instance) && !StartupAttempted.Contains(Handle))
+			{ StartupAttempted.Add(Handle); ASC->TryActivateAbility(Handle); }
 		}
 	}
 }

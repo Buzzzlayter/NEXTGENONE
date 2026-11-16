@@ -5,74 +5,60 @@
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/Character.h"
-#include "Gameplay/Equipment/NGEquipmentComponent.h"
-#include "Gameplay/Equipment/NGEquipmentInstance.h"
 
 class FNGJetpackSavedMove final : public UALSCharacterMovementComponent::FSavedMove_My
 {
-	friend struct FNGJetpackNetworkMoveData;
 	using Super = UALSCharacterMovementComponent::FSavedMove_My;
 public:
 	virtual void Clear() override
 	{
 		Super::Clear();
-		bSavedJetpackRequested = false;
-		SavedThrustAlpha = 0.f; SavedSource.Reset(); SavedGeneration = 0;
+		SavedState = {};
 	}
 	virtual uint8 GetCompressedFlags() const override
 	{
 		uint8 Flags = Super::GetCompressedFlags();
-		if (bSavedJetpackRequested) Flags |= FLAG_Custom_1;
+		if (SavedState.bRequested) Flags |= FLAG_Custom_1;
 		return Flags;
 	}
 	virtual void SetMoveFor(ACharacter* Character, float InDeltaTime, const FVector& NewAccel, FNetworkPredictionData_Client_Character& ClientData) override
 	{
 		Super::SetMoveFor(Character, InDeltaTime, NewAccel, ClientData);
 		const auto* Movement = Cast<UNGCharacterMovementComponent>(Character->GetCharacterMovement());
-		bSavedJetpackRequested = Movement && Movement->IsJetpackRequested();
-		SavedThrustAlpha = Movement ? Movement->JetpackThrustAlpha : 0.f;
-        auto* Source = Movement ? Movement->GetJetpackSource() : nullptr;
-        SavedSource = Source; SavedGeneration = Source ? Source->GetGeneration() : 0;
-        if (const auto* Definition = Source ? Cast<UNGJetpackDefinition>(Source->GetDefinition()) : nullptr) SavedSettings = Definition->Movement;
+		SavedState = Movement ? Movement->CaptureJetpackMove() : FNGJetpackMoveState{};
 	}
 	virtual void PrepMoveFor(ACharacter* Character) override
 	{
 		Super::PrepMoveFor(Character);
 		if (auto* Movement = Cast<UNGCharacterMovementComponent>(Character->GetCharacterMovement()))
 		{
-			Movement->SetJetpackRequested(bSavedJetpackRequested);
-			Movement->JetpackThrustAlpha = SavedThrustAlpha;
-            Movement->MoveSettings = SavedSettings; Movement->MoveGeneration = SavedGeneration;
-            Movement->ReplaySource = SavedSource; Movement->bReplaySettings = true;
+			Movement->RestoreJetpackMove(SavedState);
 		}
 	}
 	virtual bool CanCombineWith(const FSavedMovePtr& NewMove, ACharacter* Character, float MaxDelta) const override
 	{
 		const auto* Other = static_cast<const FNGJetpackSavedMove*>(NewMove.Get());
 		// Do not merge the ramp: otherwise the server integrates a different thrust interval.
-		return Other && SavedSource == Other->SavedSource && SavedGeneration == Other->SavedGeneration && bSavedJetpackRequested == Other->bSavedJetpackRequested
-			&& SavedThrustAlpha == Other->SavedThrustAlpha
-			&& ((!bSavedJetpackRequested && SavedThrustAlpha == 0.f) || SavedThrustAlpha == 1.f)
+		return Other && SavedState.Generation == Other->SavedState.Generation && SavedState.bRequested == Other->SavedState.bRequested
+			&& SavedState.ThrustAlpha == Other->SavedState.ThrustAlpha
+			&& ((!SavedState.bRequested && SavedState.ThrustAlpha == 0.f) || SavedState.ThrustAlpha == 1.f)
 			&& Super::CanCombineWith(NewMove, Character, MaxDelta);
 	}
+	int32 GetInstallationGeneration() const { return SavedState.Generation; }
 private:
-	bool bSavedJetpackRequested = false;
-	float SavedThrustAlpha = 0.f;
-    TWeakObjectPtr<UNGEquipmentInstance> SavedSource;
-    FNGJetpackMovementSettings SavedSettings;
-    int32 SavedGeneration = 0;
+	FNGJetpackMoveState SavedState;
 };
 
 void FNGJetpackNetworkMoveData::ClientFillNetworkMoveData(const FSavedMove_Character& ClientMove, ENetworkMoveType MoveType)
 {
-    FCharacterNetworkMoveData::ClientFillNetworkMoveData(ClientMove, MoveType);
-    InstallationGeneration = static_cast<const FNGJetpackSavedMove&>(ClientMove).SavedGeneration;
+	FCharacterNetworkMoveData::ClientFillNetworkMoveData(ClientMove, MoveType);
+	InstallationGeneration = static_cast<const FNGJetpackSavedMove&>(ClientMove).GetInstallationGeneration();
 }
 bool FNGJetpackNetworkMoveData::Serialize(UCharacterMovementComponent& Movement, FArchive& Ar, UPackageMap* Map, ENetworkMoveType MoveType)
 {
-    const bool Result = FCharacterNetworkMoveData::Serialize(Movement, Ar, Map, MoveType);
-    Ar << InstallationGeneration;
-    return Result && !Ar.IsError();
+	const bool Result = FCharacterNetworkMoveData::Serialize(Movement, Ar, Map, MoveType);
+	Ar << InstallationGeneration;
+	return Result && !Ar.IsError();
 }
 
 class FNGClientPredictionData final : public UALSCharacterMovementComponent::FNetworkPredictionData_Client_My
@@ -86,29 +72,44 @@ public:
 UNGCharacterMovementComponent::UNGCharacterMovementComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-    SetNetworkMoveDataContainer(MoveDataContainer);
+	SetNetworkMoveDataContainer(MoveDataContainer);
 }
 
-UNGEquipmentInstance* UNGCharacterMovementComponent::GetJetpackSource() const
+void UNGCharacterMovementComponent::SetJetpackContext(const FNGJetpackMovementSettings& Settings, int32 Generation)
 {
-    const auto* Equipment = CharacterOwner ? CharacterOwner->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
-    auto* Source = Equipment ? Equipment->FindInstance(TAG_NGSlotEquipmentBack) : nullptr;
-    return Source && Cast<UNGJetpackDefinition>(Source->GetDefinition())
-        && (CharacterOwner->GetLocalRole() == ROLE_SimulatedProxy || Source->IsCurrent()) ? Source : nullptr;
+	if (ContextGeneration != Generation) SetJetpackRequested(false);
+	ContextSettings = Settings;
+	ContextGeneration = Generation;
 }
+
+FNGJetpackMoveState UNGCharacterMovementComponent::CaptureJetpackMove() const
+{
+	return {ContextSettings, ContextGeneration, JetpackThrustAlpha, bJetpackRequested};
+}
+
+void UNGCharacterMovementComponent::RestoreJetpackMove(const FNGJetpackMoveState& State)
+{
+	const bool bCurrent = ContextGeneration > 0 && State.Generation == ContextGeneration;
+	SetJetpackRequested(bCurrent && State.bRequested);
+	JetpackThrustAlpha = bCurrent ? State.ThrustAlpha : 0.f;
+	MoveSettings = State.Settings;
+	MoveGeneration = bCurrent ? State.Generation : 0;
+	bReplaySettings = true;
+}
+
 void UNGCharacterMovementComponent::MoveAutonomous(float ClientTimeStamp, float DeltaTime, uint8 CompressedFlags, const FVector& NewAccel)
 {
-    const auto* Data = static_cast<const FNGJetpackNetworkMoveData*>(GetCurrentNetworkMoveData());
-    TGuardValue<bool> Reading(bReadingNetworkMove, CharacterOwner && CharacterOwner->HasAuthority());
-    if (bReadingNetworkMove) MoveGeneration = Data ? Data->InstallationGeneration : 0;
-    Super::MoveAutonomous(ClientTimeStamp, DeltaTime, CompressedFlags, NewAccel);
+	const auto* Data = static_cast<const FNGJetpackNetworkMoveData*>(GetCurrentNetworkMoveData());
+	TGuardValue<bool> Reading(bReadingNetworkMove, CharacterOwner && CharacterOwner->HasAuthority());
+	if (bReadingNetworkMove) MoveGeneration = Data ? Data->InstallationGeneration : 0;
+	Super::MoveAutonomous(ClientTimeStamp, DeltaTime, CompressedFlags, NewAccel);
 }
 
 UAbilitySystemComponent* UNGCharacterMovementComponent::GetJetpackASC() const
 {
 	if (!CharacterOwner || CharacterOwner->bIsCrouched
 		|| (!IsMovingOnGround() && !IsFalling())
-        || !GetJetpackSource()) return nullptr;
+		|| ContextGeneration <= 0) return nullptr;
 	// Proxies have no Controller; their replicated GAS tag is used only for movement extrapolation.
 	auto* ASC = CharacterOwner->GetLocalRole() == ROLE_SimulatedProxy
 		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(CharacterOwner)
@@ -125,8 +126,7 @@ bool UNGCharacterMovementComponent::IsJetpackThrustActive() const
 	const bool bProxy = CharacterOwner && CharacterOwner->GetLocalRole() == ROLE_SimulatedProxy;
 	const auto* ASC = (bJetpackRequested || bProxy) ? GetJetpackASC() : nullptr;
 	// A compressed input flag alone never authorizes propulsion on the server.
-	const auto* Source = GetJetpackSource();
-    return ASC && Source && (bProxy || Source->GetGeneration() == MoveGeneration) && ASC->HasMatchingGameplayTag(TAG_NGJetpackActive);
+	return ASC && (bProxy || ContextGeneration == MoveGeneration) && ASC->HasMatchingGameplayTag(TAG_NGJetpackActive);
 }
 
 void UNGCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
@@ -150,14 +150,13 @@ FNetworkPredictionData_Client* UNGCharacterMovementComponent::GetPredictionData_
 
 void UNGCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float DeltaSeconds)
 {
-    const auto* Source = GetJetpackSource();
-    if (!bReplaySettings)
-    {
-        if (const auto* Definition = Source ? Cast<UNGJetpackDefinition>(Source->GetDefinition()) : nullptr) MoveSettings = Definition->Movement;
-        if (!bReadingNetworkMove) MoveGeneration = Source ? Source->GetGeneration() : 0;
-    }
-    else if (ReplaySource.Get() != Source) { MoveGeneration = 0; bJetpackRequested = false; }
-    bReplaySettings = false;
+	if (!bReplaySettings)
+	{
+		MoveSettings = ContextSettings;
+		if (!bReadingNetworkMove) MoveGeneration = ContextGeneration;
+	}
+	else if (MoveGeneration != ContextGeneration) { MoveGeneration = 0; SetJetpackRequested(false); }
+	bReplaySettings = false;
 	Super::UpdateCharacterStateBeforeMovement(DeltaSeconds);
 	JetpackMoveThrustAlpha = 0.f;
 	if (!IsJetpackThrustActive()) { JetpackThrustAlpha = 0.f; return; }

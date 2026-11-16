@@ -1,11 +1,27 @@
 #include "Gameplay/Abilities/NGWeaponAbilities.h"
 #include "Gameplay/Combat/NGWeaponActor.h"
 #include "Gameplay/Combat/NGWeaponDefinition.h"
+#include "Gameplay/Combat/NGWeaponTargetData.h"
+#include "Gameplay/Combat/NGAimComponent.h"
+#include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Inventory/NGInventoryManagerComponent.h"
+#include "Inventory/NGInventoryItemInstance.h"
+#include "Inventory/NGInventoryItemDefinition.h"
+#include "GameFramework/Pawn.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimMontage.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
+
+namespace
+{
+	UNGInventoryManagerComponent* FindAbilityInventory(const FGameplayAbilityActorInfo* Info)
+	{
+		const auto* Owner = Info ? Info->OwnerActor.Get() : nullptr;
+		return Owner ? Owner->FindComponentByClass<UNGInventoryManagerComponent>() : nullptr;
+	}
+}
 
 UNGFireCooldownEffect::UNGFireCooldownEffect()
 {
@@ -48,10 +64,12 @@ void UNGReloadAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const 
 {
 	FNGWeaponAbilityContext Context;
 	FString DefinitionError;
-	if (!Info || !Info->IsNetAuthority() || !ResolveWeaponContext(Handle, Info, Context)
+	const auto* Inventory = FindAbilityInventory(Info);
+	if (!Info || !Info->IsNetAuthority() || !Inventory || !ResolveWeaponContext(Handle, Info, Context)
 		|| !Context.Definition->ValidateDefinition(DefinitionError)
 		|| Context.Weapon->GetMagazineAmmo() >= Context.Definition->MagazineCapacity
-		|| Context.Weapon->GetReserveAmmo() <= 0 || !CommitAbility(Handle, Info, Activation))
+		|| Inventory->GetTotalItemCountByDefinition(Context.Definition->AmmoItemClass.LoadSynchronous()) <= 0
+		|| !ResolveWeaponContext(Handle, Info, Context) || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	if (!IsActive()) return;
 	// Commit and cosmetic callbacks can remove this spec or change the Avatar.
@@ -74,11 +92,26 @@ void UNGReloadAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const 
 
 void UNGReloadAbility::FinishReload()
 {
-	FNGWeaponAbilityContext Context;
-	const bool bReloaded = CurrentActorInfo && CurrentActorInfo->IsNetAuthority()
-		&& ResolveWeaponContext(CurrentSpecHandle, CurrentActorInfo, Context)
-		&& Context.Weapon->CompleteReloadOnServer();
+	const bool bReloaded = CompleteReloadOnServer();
 	if (IsActive()) EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bReloaded);
+}
+
+bool UNGReloadAbility::CompleteReloadOnServer()
+{
+	FNGWeaponAbilityContext Context;
+	auto* Inventory = FindAbilityInventory(CurrentActorInfo);
+	if (!IsActive() || !CurrentActorInfo || !CurrentActorInfo->IsNetAuthority() || !Inventory
+		|| !ResolveWeaponContext(CurrentSpecHandle, CurrentActorInfo, Context)) return false;
+	UClass* AmmoClass = Context.Definition->AmmoItemClass.LoadSynchronous();
+	if (!AmmoClass || !ResolveWeaponContext(CurrentSpecHandle, CurrentActorInfo, Context)) return false;
+	auto* Item = Context.Source->GetItem();
+	const int32 Amount = FMath::Min(FMath::Max(0, Context.Definition->MagazineCapacity - Context.Weapon->GetMagazineAmmo()),
+		Inventory->GetTotalItemCountByDefinition(AmmoClass));
+	if (Amount <= 0) return false;
+	return Inventory->ConsumeItemsByDefinition(AmmoClass, Amount, [Item, Amount]
+	{
+		Item->AddStatTagStack(TAG_NGMagazineAmmo, Amount);
+	});
 }
 
 void UNGFireAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info, const FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
@@ -86,12 +119,28 @@ void UNGFireAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	FNGWeaponAbilityContext Context;
 	FString DefinitionError;
 	if (!Info || !Info->IsNetAuthority() || !ResolveWeaponContext(Handle, Info, Context)
-		|| !Context.Definition->ValidateDefinition(DefinitionError) || Context.Weapon->GetMagazineAmmo() <= 0
+		|| !Context.Definition->ValidateDefinition(DefinitionError) || Context.Weapon->GetMagazineAmmo() <= 0)
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	const auto* Pawn = Cast<APawn>(Info->AvatarActor.Get());
+	const auto* Aim = Pawn ? Pawn->FindComponentByClass<UNGAimComponent>() : nullptr;
+	FVector Origin, Direction;
+	if (Event)
+	{
+		const auto* Raw = Event->TargetData.Num() == 1 ? Event->TargetData.Get(0) : nullptr;
+		if (!Raw || Raw->GetScriptStruct() != FNGPrimaryFireView::StaticStruct())
+		{ EndAbility(Handle, Info, Activation, true, true); return; }
+		const auto* View = static_cast<const FNGPrimaryFireView*>(Raw);
+		Origin = View->Origin;
+		Direction = View->Direction;
+	}
+	else if (!Pawn || (Pawn->IsPlayerControlled() && !Pawn->IsLocallyControlled()) || !Aim || !Aim->GetViewRay(Origin, Direction))
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	if (!Aim || !Aim->ValidateShotView(Origin, Direction) || !ResolveWeaponContext(Handle, Info, Context)
 		|| !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	if (!IsActive()) return;
 	// Commit callbacks may remove the spec or change equipment/Avatar.
-	const bool bFired = ResolveWeaponContext(Handle, Info, Context) && Context.Weapon->FireOnServer();
+	const bool bFired = ResolveWeaponContext(Handle, Info, Context) && Context.Weapon->FireOnServer(Origin, Direction);
 	if (bFired && IsActive() && ResolveWeaponContext(Handle, Info, Context) && Context.Definition->CharacterFireMontage)
 		Info->AbilitySystemComponent->PlayMontage(this, Activation, Context.Definition->CharacterFireMontage, 1.f);
 	if (IsActive()) EndAbility(Handle, Info, Activation, true, !bFired);

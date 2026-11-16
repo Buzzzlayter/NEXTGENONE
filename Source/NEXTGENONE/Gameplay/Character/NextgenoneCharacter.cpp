@@ -9,6 +9,8 @@
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "Gameplay/Equipment/NGEquipmentVisualActor.h"
 #include "Gameplay/Character/NGCharacterMovementComponent.h"
+#include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Gameplay/Equipment/NGJetpackDefinition.h"
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
@@ -110,6 +112,7 @@ void ANextgenoneCharacter::UnbindGameplay()
 	BoundASC.Reset();
 	Combat->BindAbilitySystem(nullptr);
 	Interaction->BindAbilitySystem(nullptr);
+	if (auto* Movement = Cast<UNGCharacterMovementComponent>(GetCharacterMovement())) Movement->SetJetpackContext({}, 0);
 }
 void ANextgenoneCharacter::EquipmentResourcesReady(AActor* Avatar)
 {
@@ -127,6 +130,18 @@ void ANextgenoneCharacter::RefreshEquipment()
 	// Proxy appearance does not wait for owner-only inventory/spec replication.
 	Equipment->BindContext(ASC, PS ? PS->Inventory.Get() : nullptr, bPresentationAllowed ? GetMesh() : nullptr);
 	if (bGameplayReady) Equipment->ActivateEquipment();
+}
+void ANextgenoneCharacter::UpdateJetpackContext()
+{
+	auto* Movement = Cast<UNGCharacterMovementComponent>(GetCharacterMovement());
+	if (!Movement) return;
+	const auto* Source = Equipment->FindInstance(TAG_NGSlotEquipmentBack);
+	const auto* Definition = Source ? Cast<UNGJetpackDefinition>(Source->GetDefinition()) : nullptr;
+	if (Definition && Definition->Movement.IsValid() && !IsDead() && !CharacterStateMachine->HasResourceFailure()
+		&& GetAbilitySystemComponent() && Source->GetAvatar() == this
+		&& (GetLocalRole() == ROLE_SimulatedProxy || Equipment->IsCurrent(Source)))
+		Movement->SetJetpackContext(Definition->Movement, Source->GetGeneration());
+	else Movement->SetJetpackContext({}, 0);
 }
 void ANextgenoneCharacter::ApplyCombatPresentation()
 {
@@ -286,6 +301,12 @@ void ANextgenoneCharacter::UnPossessed()
 }
 void ANextgenoneCharacter::OnRep_PlayerState() { Super::OnRep_PlayerState(); TryInitializeGameplay(); }
 void ANextgenoneCharacter::OnRep_Controller() { Super::OnRep_Controller(); if (!IsLocallyControlled()) GameplayInput->ShutdownInput(); TryInitializeGameplay(); CharacterStateMachine->RefreshResources(); }
+void ANextgenoneCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	Equipment->OnContextChanged.AddUObject(this, &ThisClass::UpdateJetpackContext);
+	UpdateJetpackContext();
+}
 void ANextgenoneCharacter::BeginPlay()
 {
 	Combat->OnPresentationChanged.AddUObject(this, &ThisClass::ApplyCombatPresentation);
@@ -303,6 +324,7 @@ void ANextgenoneCharacter::BeginPlay()
 }
 void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
+	Equipment->OnContextChanged.RemoveAll(this);
 	Combat->OnPresentationChanged.RemoveAll(this);
 	CharacterStateMachine->OnResourcesReady.RemoveAll(this);
 	CharacterStateMachine->OnResourceFailure.RemoveAll(this);

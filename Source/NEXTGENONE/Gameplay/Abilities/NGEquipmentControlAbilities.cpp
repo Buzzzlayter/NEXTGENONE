@@ -10,23 +10,15 @@
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Combat/NGWeaponActor.h"
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
+#include "Gameplay/Equipment/NGEquipmentDefinition.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
 #include "GameplayTags/NGGameplayTags.h"
 
 namespace
 {
 	constexpr float FireViewUpdateInterval = .05f;
 	constexpr double FireViewMaxAge = .25;
-}
-
-bool FNGPrimaryFireView::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
-{
-	bool bOriginSuccess = false, bDirectionSuccess = false;
-	Origin.NetSerialize(Ar, Map, bOriginSuccess);
-	Direction.NetSerialize(Ar, Map, bDirectionSuccess);
-	Ar << EquipmentRevision;
-	bOutSuccess = bOriginSuccess && bDirectionSuccess && !Ar.IsError();
-	return true;
 }
 
 UNGPrimaryAttackAbility::UNGPrimaryAttackAbility()
@@ -80,7 +72,7 @@ bool UNGPrimaryAttackAbility::HasCurrentWeapon() const
 	const auto* Combat = ActiveCombat.Get();
 	const auto* Weapon = Combat ? Combat->GetWeaponInstance() : nullptr;
 	return CurrentActorInfo && Combat && CurrentActorInfo->AvatarActor.Get() == Combat->GetOwner()
-		&& Weapon && Weapon->IsCurrent() && ActiveEquipment.IsValid()
+		&& ActiveEquipment.IsValid() && ActiveEquipment->IsCurrent(Weapon)
 		&& PrimaryRevision == ActiveEquipment->GetHandsRevision();
 }
 
@@ -158,7 +150,26 @@ void UNGPrimaryAttackAbility::ContinuePrimaryInput()
 		auto* WeaponActor = ActiveCombat->GetWeaponActor();
 		if (!WeaponActor)
 		{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true); return; }
-		WeaponActor->TryFireWithViewOnServer(Origin, Direction, PrimaryRevision);
+		FGameplayAbilitySpecHandle FireHandle;
+		int32 Matches = 0;
+		{
+			FScopedAbilityListLock Lock(*ASC);
+			for (const auto& Spec : ASC->GetActivatableAbilities())
+				if (!Spec.PendingRemove && Spec.GetDynamicSpecSourceTags().HasTagExact(TAG_NGFireInput))
+				{
+					++Matches;
+					if (Spec.SourceObject.Get() == WeaponActor->GetEquipmentSource()) FireHandle = Spec.Handle;
+				}
+		}
+		if (Matches != 1 || !FireHandle.IsValid())
+		{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true); return; }
+		auto* View = new FNGPrimaryFireView();
+		View->Origin = Origin;
+		View->Direction = Direction;
+		View->EquipmentRevision = PrimaryRevision;
+		FGameplayEventData Shot;
+		Shot.TargetData.Add(View);
+		ASC->TriggerAbilityFromGameplayEvent(FireHandle, ASC->AbilityActorInfo.Get(), TAG_NGFireInput, &Shot, *ASC);
 		if (!IsActive()) return;
 		if (!HasCurrentWeapon() || !ActiveCombat->GetEquipment().Definition->bAutomatic)
 		{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false); return; }
@@ -212,9 +223,33 @@ UNGEquipmentControlAbility::UNGEquipmentControlAbility()
 void UNGEquipmentControlAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 	FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
 {
-	AActor* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
-	auto* Equipment = Avatar ? Avatar->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
-	const bool bValid = Info && Info->IsLocallyControlled() && Equipment && CommitAbility(Handle, Info, Activation);
-	if (bValid) Equipment->RequestEquip(bEquip);
-	EndAbility(Handle, Info, Activation, false, !bValid);
+	const auto* Avatar = Info ? Info->AvatarActor.Get() : nullptr;
+	const auto* ASC = Info ? Info->AbilitySystemComponent.Get() : nullptr;
+	const auto* Owner = ASC ? ASC->GetOwnerActor() : nullptr;
+	auto* Inventory = Owner ? Owner->FindComponentByClass<UNGPlayerInventoryManagerComponent>() : nullptr;
+	bool bDispatched = false;
+	if (Info && Info->IsLocallyControlled() && Inventory && CommitAbility(Handle, Info, Activation))
+	{
+		if (!IsActive()) return;
+		if (ASC->GetAvatarActor() != Avatar)
+		{ EndAbility(Handle, Info, Activation, false, true); return; }
+		auto* Item = Inventory->GetItemAtSlot(Inventory->FindSlotByTag(TAG_NGSlotEquipmentWeapon, 0));
+		if (Item)
+		{
+			bDispatched = bEquip || Inventory->RequestActivationItem(Item);
+		}
+		else if (!bEquip) bDispatched = true;
+		else
+			for (int32 Index = 0; Index < Inventory->GetSlotCount(); ++Index)
+			{
+				auto* Candidate = Inventory->GetItemAtSlot(Index);
+				const auto* Definition = UNGEquipmentComponent::GetDefinition(Candidate);
+				if (Definition && Definition->SlotTag == TAG_NGSlotEquipmentWeapon)
+				{
+					bDispatched = Inventory->RequestActivationItem(Candidate);
+					break;
+				}
+			}
+	}
+	EndAbility(Handle, Info, Activation, false, !bDispatched);
 }

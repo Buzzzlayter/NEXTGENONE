@@ -67,7 +67,10 @@ int32 UNGCombatComponent::GetMagazineAmmo() const { return GetEquippedItem() ? G
 int32 UNGCombatComponent::GetReserveAmmo() const
 {
 	const auto* Weapon = GetWeaponActor();
-	return Weapon ? Weapon->GetReserveAmmo() : 0;
+	const auto* Definition = Weapon ? Weapon->GetDefinition() : nullptr;
+	const auto* Inventory = BoundInventory.Get();
+	const auto AmmoClass = Definition ? Definition->AmmoItemClass.LoadSynchronous() : nullptr;
+	return Inventory && AmmoClass ? Inventory->GetTotalItemCountByDefinition(AmmoClass) : 0;
 }
 void UNGCombatComponent::BeginPlay()
 {

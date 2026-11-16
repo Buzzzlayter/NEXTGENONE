@@ -39,8 +39,8 @@ bool UNGJetpackAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, co
 	const auto* Pawn = Cast<ACharacter>(Info->AvatarActor.Get());
 	const auto* Movement = Pawn ? Cast<UNGCharacterMovementComponent>(Pawn->GetCharacterMovement()) : nullptr;
 	const auto* Source = Cast<UNGEquipmentInstance>(GetSourceObject(Handle, Info));
-    const auto* Definition = Source ? Cast<UNGJetpackDefinition>(Source->GetDefinition()) : nullptr;
-    return Source && Source->IsCurrent() && Definition && Movement && Movement->CanStartJetpack() && Info->AbilitySystemComponent.IsValid()
+	const auto* Definition = Source ? Cast<UNGJetpackDefinition>(Source->GetDefinition()) : nullptr;
+	return Source && Definition && Movement && Movement->CanStartJetpack() && Info->AbilitySystemComponent.IsValid()
 		&& Info->AbilitySystemComponent->GetAvatarActor() == Pawn
 		&& !Info->AbilitySystemComponent->HasMatchingGameplayTag(TAG_NGJetpackActive);
 }
@@ -49,13 +49,13 @@ void UNGJetpackAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const
 	FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event)
 {
 	const auto* Source = Info ? Cast<UNGEquipmentInstance>(GetSourceObject(Handle, Info)) : nullptr;
-    const auto* Definition = Source ? Cast<UNGJetpackDefinition>(Source->GetDefinition()) : nullptr;
-    auto* Pawn = Info ? Cast<ACharacter>(Info->AvatarActor.Get()) : nullptr;
+	const auto* Definition = Source ? Cast<UNGJetpackDefinition>(Source->GetDefinition()) : nullptr;
+	auto* Pawn = Info ? Cast<ACharacter>(Info->AvatarActor.Get()) : nullptr;
 	auto* Movement = Pawn ? Cast<UNGCharacterMovementComponent>(Pawn->GetCharacterMovement()) : nullptr;
-	if (!Source || !Source->IsCurrent() || !Definition || !Movement || !Movement->CanStartJetpack() || !CommitAbility(Handle, Info, Activation))
+	if (!Source || GetEquipmentInstance() != Source || !Definition || !Movement || !Movement->CanStartJetpack() || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	if (!IsActive()) return;
-	if (!Source->IsCurrent())
+	if (GetEquipmentInstance() != Source)
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	JetpackMovement = Movement;
 	JetpackASC = Info->AbilitySystemComponent;
@@ -69,7 +69,7 @@ void UNGJetpackAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const
 	}
 	StateEffect = AppliedEffect;
 	if (!StateEffect.IsValid()) { EndAbility(Handle, Info, Activation, true, true); return; }
-	if (!Source->IsCurrent() || !Movement->CanStartJetpack() || !JetpackASC.IsValid() || JetpackASC->GetAvatarActor() != Pawn
+	if (GetEquipmentInstance() != Source || !Movement->CanStartJetpack() || !JetpackASC.IsValid() || JetpackASC->GetAvatarActor() != Pawn
 		|| JetpackASC->HasAnyMatchingGameplayTags(ActivationBlockedTags))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	Movement->SetJetpackRequested(true);

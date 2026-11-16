@@ -6,7 +6,6 @@
 #include "GameplayTagContainer.h"
 #include "NextgenoneCharacter.generated.h"
 
-class ANextgenonePlayerState;
 class UNGCombatComponent;
 class UNGEquipmentComponent;
 class UNGInteractionComponent;
@@ -39,6 +38,7 @@ public:
 	virtual void UnPossessed() override;
 	virtual void OnRep_PlayerState() override;
 	virtual void OnRep_Controller() override;
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -71,4 +71,5 @@ private:
 	void StateResourcesFailed();
 	void EquipmentResourcesReady(AActor* Avatar);
 	void RefreshEquipment();
+	void UpdateJetpackContext();
 };

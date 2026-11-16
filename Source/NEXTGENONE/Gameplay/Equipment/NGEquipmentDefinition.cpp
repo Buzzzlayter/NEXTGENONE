@@ -1,4 +1,5 @@
 #include "Gameplay/Equipment/NGEquipmentDefinition.h"
+#include "Inventory/NGInventoryItemDefinition.h"
 #include "Gameplay/Equipment/NGEquipmentVisualActor.h"
 #include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
 #include "GameplayTags/NGGameplayTags.h"
@@ -10,6 +11,14 @@ void UNGEquipmentDefinition::ResolveResources(TArray<FNGEquipmentAbilityGrant>& 
 {
 	for (const UNGEquipmentAbilitySet* Set : AbilitySets) if (Set) { OutAbilities.Append(Set->Abilities); OutEffects.Append(Set->Effects); }
 	OutAbilities.Append(Abilities); OutEffects.Append(Effects);
+}
+
+bool UNGEquipmentDefinition::ValidateItemDefinition(const UNGInventoryItemDefinition& Item, FString& Error) const
+{
+	if (Item.MaxStackSize != 1)
+	{ Error = TEXT("Equipment items require MaxStackSize = 1."); return false; }
+	Error.Reset();
+	return true;
 }
 
 bool UNGEquipmentDefinition::ValidateDefinition(FString& Error) const
