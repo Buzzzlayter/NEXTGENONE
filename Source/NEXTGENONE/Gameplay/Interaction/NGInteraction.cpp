@@ -28,7 +28,7 @@ namespace
     }
 }
 
-bool ANGInteractableActor::ExecuteInteraction(APawn* Pawn, TFunctionRef<bool()> Prepare)
+bool ANGInteractableActor::ExecuteInteraction(APawn* Pawn, TFunctionRef<bool()> Prepare, TFunctionRef<bool()> Execute)
 {
 	if (!HasAuthority() || !IsValid(this) || !IsValid(Pawn) || !Pawn->HasAuthority()
 		|| Pawn->GetWorld() != GetWorld() || bInteractionInProgress) return false;
@@ -36,7 +36,7 @@ bool ANGInteractableActor::ExecuteInteraction(APawn* Pawn, TFunctionRef<bool()> 
 	if (!Prepare() || !IsValid(this) || !IsValid(Pawn)) return false;
 	ExecutingInteractor = Pawn;
 	ON_SCOPE_EXIT { ExecutingInteractor.Reset(); };
-	return INGInteractable::Execute_Interact(this, Pawn);
+	return Execute();
 }
 
 bool ANGInteractableActor::IsExecutingInteraction(const APawn* Pawn) const

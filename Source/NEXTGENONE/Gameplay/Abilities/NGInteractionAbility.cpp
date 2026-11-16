@@ -1,7 +1,10 @@
 #include "Gameplay/Abilities/NGInteractionAbility.h"
 
 #include "Gameplay/Interaction/NGInteraction.h"
+#include "Gameplay/Interaction/NGItemPickup.h"
+#include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerState.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 
@@ -46,6 +49,15 @@ void UNGInteractionAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle,co
 			if (!CommitAbility(Handle,Info,Activation)) return false;
 			return Interaction->IsCurrentInteractor() && Interaction->ValidateTarget(Target)
 				&& INGInteractable::Execute_CanInteract(Target,Pawn);
+		},[&]()
+		{
+			if (auto* Pickup = Cast<ANGItemPickup>(Target))
+			{
+				auto* Player = Pawn->GetPlayerState();
+				auto* Inventory = Player ? Player->FindComponentByClass<UNGPlayerInventoryManagerComponent>() : nullptr;
+				return Inventory && Inventory->TakePickupOnServer(Pawn, Pickup);
+			}
+			return INGInteractable::Execute_Interact(Target, Pawn);
 		});
 	}
 	if (Interaction) Interaction->ClientInteractionResult(bSuccess);

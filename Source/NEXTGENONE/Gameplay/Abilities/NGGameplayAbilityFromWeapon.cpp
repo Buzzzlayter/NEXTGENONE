@@ -1,6 +1,8 @@
 #include "Gameplay/Abilities/NGGameplayAbilityFromWeapon.h"
 #include "AbilitySystemComponent.h"
-#include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Combat/NGWeaponActor.h"
+#include "Gameplay/Combat/NGWeaponDefinition.h"
+#include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
 #include "GameFramework/Pawn.h"
 
@@ -19,10 +21,11 @@ bool UNGGameplayAbilityFromWeapon::ResolveWeaponContext(FGameplayAbilitySpecHand
 	if (!Spec || !Spec->Ability || Spec->PendingRemove) return false;
 	auto* Source = Cast<UNGEquipmentInstance>(Spec->SourceObject.Get());
 	if (!Source || !Source->IsCurrent() || Source->GetAvatar() != Info->AvatarActor.Get()) return false;
-	auto* Combat = Source->GetAvatar()->FindComponentByClass<UNGCombatComponent>();
+	const auto* Equipment = Source->GetEquipment();
+	auto* Weapon = Equipment ? Cast<ANGWeaponActor>(Equipment->GetVisualActor(Source->GetSlot())) : nullptr;
 	auto* Definition = Cast<UNGWeaponDefinition>(Source->GetDefinition());
-	if (!Combat || !Definition || Combat->GetWeaponInstance() != Source) return false;
-	OutContext = {Source, Combat, Definition};
+	if (!Weapon || !Definition || Weapon->GetEquipmentSource() != Source) return false;
+	OutContext = {Source, Weapon, Definition};
 	return true;
 }
 

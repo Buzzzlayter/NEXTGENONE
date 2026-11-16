@@ -1,123 +1,65 @@
 #include "Inventory/UIInventorySlotWidget.h"
 #include "Inventory/UIInventoryOperationInterface.h"
 #include "Components/Button.h"
-#include "Input/PlayerInputSubsystem.h"
-#include "Inventory/UIInventoryDragDropOperation.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
-#include "Engine/LocalPlayer.h"
 
-FReply UUIInventorySlotWidget::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+void UUIInventorySlotWidget::NativeOnDragDetected(const FGeometry& Geometry, const FPointerEvent& Event, UDragDropOperation*& Operation)
 {
-	const FReply BlueprintReply = Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
-    if (!BlueprintReply.IsEventHandled() && InMouseEvent.GetEffectingButton() == SecondaryActionButton && ContainsItem())
-        return RequestOperation(EUIInventoryOperation::SecondaryAction) ? FReply::Handled() : BlueprintReply;
-	if (BlueprintReply.IsEventHandled() || InMouseEvent.GetEffectingButton() != DragButton || !ContainsItem()
-		|| !OperationHandler.IsValid() || !GetOwningLocalPlayer()) return BlueprintReply;
-	ReleaseDragPress();
-	PointerDownData = Data;
-	bDragPending = true;
-	OnActionPressed();
-	// Preview handles nested Buttons; capture also preserves a normal click when no drag begins.
-	const auto SlateWidget = TakeWidget();
-	return FReply::Handled().CaptureMouse(SlateWidget).DetectDrag(SlateWidget, DragButton);
+	Super::NativeOnDragDetected(Geometry, Event, Operation);
+	if (!Operation) DragDetected.ExecuteIfBound(Geometry, Event, Operation);
 }
 
-void UUIInventorySlotWidget::ReleaseDragPress()
+void UUIInventorySlotWidget::SetItemDragHidden(bool bHidden)
 {
-	const bool bWasPressed = bDragPending;
-	bDragPending = false;
-	PointerDownData = {};
-	if (bWasPressed) OnActionReleased();
-}
-
-FReply UUIInventorySlotWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
-{
-	if (!bDragPending || InMouseEvent.GetEffectingButton() != DragButton)
-		return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
-	const auto ClickedData = PointerDownData;
-	const bool bClick = InGeometry.IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
-	ReleaseDragPress();
-	if (bClick && Data.Item == ClickedData.Item && Data.Inventory == ClickedData.Inventory && Data.SlotIndex == ClickedData.SlotIndex)
-		PrimaryAction();
-	return FReply::Handled().ReleaseMouseCapture();
-}
-
-void UUIInventorySlotWidget::NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
-{
-	ReleaseDragPress();
-	Super::NativeOnMouseCaptureLost(CaptureLostEvent);
-}
-
-void UUIInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
-{
-	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
-	if (OutOperation) { ReleaseDragPress(); return; }
-	const auto Snapshot = PointerDownData;
-	const bool bCanDrag = bDragPending && GetOwningLocalPlayer() && OperationHandler.IsValid()
-		&& ContainsItem() && Data.Item == Snapshot.Item
-		&& Data.Inventory == Snapshot.Inventory && Data.SlotIndex == Snapshot.SlotIndex;
-	ReleaseDragPress();
-	if (!bCanDrag) return;
-	auto* Drag = NewObject<UUIInventoryDragDropOperation>(this);
-	Drag->SourceData = Snapshot;
-	Drag->SourcePlayer = GetOwningLocalPlayer();
-	Drag->Pivot = EDragPivot::CenterCenter;
-	auto* Visual = NewObject<UImage>(Drag);
-	Visual->SetVisibility(ESlateVisibility::HitTestInvisible);
-	Visual->SetBrushFromSoftTexture(Snapshot.Icon);
-	Visual->SetDesiredSizeOverride(InGeometry.GetLocalSize());
-	Drag->DefaultDragVisual = Visual;
-	OutOperation = Drag;
-}
-
-bool UUIInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
-{
-	const auto* Drag = Cast<UUIInventoryDragDropOperation>(InOperation);
-	if (!Drag) return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
-	if (!Drag->SourcePlayer.IsValid() || Drag->SourcePlayer.Get() != GetOwningLocalPlayer()) return false;
-	if (Data.Inventory == Drag->SourceData.Inventory && Data.SlotIndex == Drag->SourceData.SlotIndex) return true;
-	return MoveItemHere(Drag->SourceData, 0); // Whole stack; server validates and replication refreshes both panels.
+	bItemDragHidden = bHidden;
+	UpdateItemVisibility();
 }
 
 void UUIInventorySlotWidget::SetData(const FUIInventorySlotData& InData, UObject* InOperationHandler)
 {
 	if (OperationHandler.Get() == InOperationHandler && Data.HasSamePresentation(InData)) return;
 	const bool bIconChanged = Data.Item != InData.Item || Data.Icon != InData.Icon || (Data.Count > 0) != (InData.Count > 0);
+	bItemDragHidden = false;
 	Data = InData;
 	OperationHandler = InOperationHandler;
 	if (bIconChanged) UpdateItemIcon();
 	OnSlotUpdated();
-	UpdateItemTextVisibility();
+	UpdateItemText();
+	UpdateItemVisibility();
 }
 
-void UUIInventorySlotWidget::UpdateItemTextVisibility()
+void UUIInventorySlotWidget::UpdateItemText()
 {
 	const bool bHasItem = ContainsItem();
+	if (txt_name) txt_name->SetText(bHasItem ? Data.Name : FText::GetEmpty());
+	if (txt_count) txt_count->SetText(bHasItem ? FText::AsNumber(Data.Count) : FText::GetEmpty());
+}
+
+void UUIInventorySlotWidget::UpdateItemVisibility()
+{
+	const bool bHasItem = ContainsItem();
+	const bool bShowItem = bHasItem && !bItemDragHidden;
+	if (img_item) img_item->SetVisibility(bShowItem && !Data.Icon.IsNull() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	for (UTextBlock* Label : {txt_name.Get(), txt_count.Get()})
 	{
 		if (!Label) continue;
-		Label->SetVisibility(bHasItem ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
-		if (!bHasItem) Label->SetText(FText::GetEmpty());
+		Label->SetVisibility(bShowItem ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	}
 }
 
 void UUIInventorySlotWidget::UpdateItemIcon()
 {
 	if (!img_item) return;
-	// Cancel the previous async load and clear the old brush before reusing this slot.
-	// SetBrushFromSoftTexture with a null path does not clear an existing brush.
-	img_item->SetBrushFromTexture(nullptr);
 	const bool bHasIcon = ContainsItem() && !Data.Icon.IsNull();
-	img_item->SetVisibility(bHasIcon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
-	if (bHasIcon) img_item->SetBrushFromSoftTexture(Data.Icon);
+	bHasIcon ? img_item->SetBrushFromSoftTexture(Data.Icon) : img_item->SetBrushFromTexture(nullptr);
 }
 
 bool UUIInventorySlotWidget::RequestOperation(EUIInventoryOperation Operation, int32 Amount)
 {
 	UObject* Handler = OperationHandler.Get();
-	if (!ContainsItem() || Amount < 0 || Amount > Data.Count
+	if (!ContainsItem() || bItemDragHidden || Amount < 0 || Amount > Data.Count
 		|| !Handler || !Handler->GetClass()->ImplementsInterface(UUIInventoryOperationInterface::StaticClass())) return false;
 	return IUIInventoryOperationInterface::Execute_RequestInventoryOperation(Handler, Data, Operation, Amount);
 }
@@ -134,19 +76,13 @@ bool UUIInventorySlotWidget::MoveItemHere(const FUIInventorySlotData& Source, in
 	return IUIInventoryOperationInterface::Execute_MoveInventoryItem(Handler, Source, Data, Amount);
 }
 void UUIInventorySlotWidget::FocusSlot() { if (btn_Root && GetOwningPlayer()) btn_Root->SetUserFocus(GetOwningPlayer()); }
-void UUIInventorySlotWidget::InitShortcut(UInputAction* Action) { InputAction = Action; OnShortcutUpdated(); }
 
 void UUIInventorySlotWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	UpdateItemIcon();
-	UpdateItemTextVisibility();
-	InputSubsystem = UPlayerInputSubsystem::GetInputSubsystem(this);
-	if (auto* Input = InputSubsystem.Get())
-	{
-		Input->OnInputTypeChanged.AddUniqueDynamic(this, &ThisClass::OnInputTypeChanged);
-		OnInputTypeChanged(Input->GetInputType());
-	}
+	UpdateItemText();
+	UpdateItemVisibility();
 	if (btn_Root)
 	{
 		btn_Root->OnClicked.AddUniqueDynamic(this, &ThisClass::PrimaryAction);
@@ -158,9 +94,7 @@ void UUIInventorySlotWidget::NativeConstruct()
 
 void UUIInventorySlotWidget::NativeDestruct()
 {
-	ReleaseDragPress();
-	if (auto* Input = InputSubsystem.Get()) Input->OnInputTypeChanged.RemoveDynamic(this, &ThisClass::OnInputTypeChanged);
-	InputSubsystem.Reset();
+	bItemDragHidden = false;
 	if (btn_Root)
 	{
 		btn_Root->OnClicked.RemoveDynamic(this, &ThisClass::PrimaryAction);

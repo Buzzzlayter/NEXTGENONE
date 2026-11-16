@@ -7,6 +7,7 @@
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
+#include "Gameplay/Equipment/NGEquipmentVisualActor.h"
 #include "Gameplay/Character/NGCharacterMovementComponent.h"
 #include "Gameplay/Interaction/NGInteraction.h"
 #include "Gameplay/Combat/NGAimComponent.h"
@@ -135,20 +136,13 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 	const auto DesiredOverlay = bArmed ? Def->Overlay : EALSOverlayState::Default;
 	if (GetOverlayState() != DesiredOverlay)
 	{
-		// The overlay callback restores our item after ALS updates its demo held object.
+		// ALS keeps its animation overlay; equipment actors replace its demo held objects.
 		SetOverlayState(DesiredOverlay);
-		if (bArmed) return;
 	}
 	Super::AimAction_Implementation(bArmed && Combat->IsAiming());
-	if (!bArmed || GetMovementState() == EALSMovementState::Mantling || GetMovementState() == EALSMovementState::Ragdoll)
-	{ ClearHeldObject(); return; }
-	AttachToHand(Def->Mesh, Def->SkeletalMesh, nullptr, false, Def->VisualTransform.GetLocation());
-	HeldObjectRoot->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Def->AttachSocket);
-	HeldObjectRoot->SetRelativeLocation(Def->VisualTransform.GetLocation());
-	HeldObjectRoot->SetRelativeRotation(Def->VisualTransform.Rotator());
-	HeldObjectRoot->SetRelativeScale3D(Def->VisualTransform.GetScale3D());
-	StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ClearHeldObject();
+	if (auto* Visual = Equipment->GetVisualActor(TAG_NGSlotEquipmentWeapon))
+		Visual->SetActorHiddenInGame(!bArmed || GetMovementState() == EALSMovementState::Mantling || GetMovementState() == EALSMovementState::Ragdoll);
 }
 void ANextgenoneCharacter::OnGaitChanged(EALSGait PreviousGait)
 {
@@ -187,6 +181,8 @@ void ANextgenoneCharacter::RagdollStart()
 		// Cosmetic ragdolls differ on each machine and cannot be authoritative movement obstacles.
 		GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		GetMesh()->CanCharacterStepUpOn = ECB_No;
+		GetCharacterMovement()->NetworkSmoothingMode = ENetworkSmoothingMode::Disabled;
+		GetCharacterMovement()->SetComponentTickEnabled(false);
 		// The permanent cosmetic corpse is independent of capsule/possession movement.
 		GetMesh()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 		if (HitReaction) HitReaction->ReleaseToRagdoll();
@@ -292,7 +288,6 @@ void ANextgenoneCharacter::OnRep_PlayerState() { Super::OnRep_PlayerState(); Try
 void ANextgenoneCharacter::OnRep_Controller() { Super::OnRep_Controller(); if (!IsLocallyControlled()) GameplayInput->ShutdownInput(); TryInitializeGameplay(); CharacterStateMachine->RefreshResources(); }
 void ANextgenoneCharacter::BeginPlay()
 {
-	Combat->SetWeaponMesh(SkeletalMesh);
 	Combat->OnPresentationChanged.AddUObject(this, &ThisClass::ApplyCombatPresentation);
 	Equipment->BindContext(nullptr, nullptr, GetMesh());
 	CharacterStateMachine->OnResourcesReady.AddUObject(this, &ThisClass::EquipmentResourcesReady);
@@ -309,7 +304,6 @@ void ANextgenoneCharacter::BeginPlay()
 void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
 	Combat->OnPresentationChanged.RemoveAll(this);
-	Combat->SetWeaponMesh(nullptr);
 	CharacterStateMachine->OnResourcesReady.RemoveAll(this);
 	CharacterStateMachine->OnResourceFailure.RemoveAll(this);
 	CharacterStateMachine->OnStateChanged.RemoveAll(this);

@@ -1,4 +1,5 @@
 #include "Gameplay/GameModes/NGTestGameMode.h"
+#include "Gameplay/Combat/NGDamage.h"
 #include "Gameplay/Debug/NGCombatSmokeComponent.h"
 #include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
 #include "GameplayTags/NGGameplayTags.h"
@@ -209,7 +210,7 @@ void ANGCombatTestGameMode::SmokeTick()
         if (Health <= 0.f || !FMath::IsNearlyEqual(Health, B->GetMaxHealth()) || OldPawn->GetAbilitySystemComponent())
         { Fail(TEXT("respawn binding")); return; }
         OldPawn->TryInitializeGameplay(); OldPawn->UnbindGameplay();
-        if (UNGCombatComponent::ApplyDamageToPawn(OldPawn, A->GetAbilitySystemComponent(), ShotDamage))
+        if (NGDamage::ApplyToPawn(OldPawn, A->GetAbilitySystemComponent(), ShotDamage))
         { Fail(TEXT("corpse accepted damage")); return; }
         auto Context = A->GetAbilitySystemComponent()->MakeEffectContext(); Context.AddSourceObject(OldPawn);
         auto StaleSpec = A->GetAbilitySystemComponent()->MakeOutgoingSpec(UNGDamageEffect::StaticClass(), 1.f, Context);

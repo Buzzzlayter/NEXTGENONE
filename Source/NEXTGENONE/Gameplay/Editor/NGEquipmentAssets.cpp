@@ -76,7 +76,7 @@ int32 NGMigrateEquipmentAssets()
 	const FString ItemPackage = TEXT("/Game/Gameplay/Inventory/ID_Jetpack");
 	auto* Jetpack = Cast<UNGJetpackDefinition>(CreateAsset(UNGJetpackDefinition::StaticClass(), TEXT("/Game/Gameplay/Equipment/ED_Jetpack")));
 	if (!Jetpack || !Prepare(Jetpack)) return 212;
-	// Mesh remains an authored choice. Existing definitions/settings are preserved on rerun.
+	// VisualActorClass remains an authored choice. Preserve existing settings on rerun.
 	auto* ItemBP = Cast<UBlueprint>(Load(*ItemPackage));
 	if (!ItemBP)
 	{

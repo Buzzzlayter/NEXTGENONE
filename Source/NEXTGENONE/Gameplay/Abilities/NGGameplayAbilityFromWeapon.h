@@ -3,7 +3,7 @@
 #include "Gameplay/Abilities/NGGameplayAbilityFromEquipment.h"
 #include "NGGameplayAbilityFromWeapon.generated.h"
 
-class UNGCombatComponent;
+class ANGWeaponActor;
 class UNGEquipmentInstance;
 class UNGWeaponDefinition;
 
@@ -11,11 +11,11 @@ class UNGWeaponDefinition;
 struct FNGWeaponAbilityContext
 {
 	UNGEquipmentInstance* Source = nullptr;
-	UNGCombatComponent* Combat = nullptr;
+	ANGWeaponActor* Weapon = nullptr;
 	UNGWeaponDefinition* Definition = nullptr;
 };
 
-/** Weapon-only context resolution; other equipment abilities do not depend on Combat. */
+/** Weapon-only context resolution; every activation remains tied to its installation. */
 UCLASS(Abstract)
 class NEXTGENONE_API UNGGameplayAbilityFromWeapon : public UNGGameplayAbilityFromEquipment
 {

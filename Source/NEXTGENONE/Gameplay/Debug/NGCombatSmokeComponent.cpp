@@ -1,4 +1,5 @@
 #include "Gameplay/Debug/NGCombatSmokeComponent.h"
+#include "Gameplay/Combat/NGWeaponActor.h"
 
 #include "Gameplay/Player/NextgenonePlayerController.h"
 #include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
@@ -57,12 +58,12 @@ void UNGCombatSmokeComponent::ClientSmoke_Implementation(FNGCombatSmokeRequest R
 			ServerSmokeResult(Command, true);
 		return;
 	}
-	if (Command == 3) { ControlledPawn->Combat->RequestFire(); return; }
+	if (Command == 3) { if (auto* Weapon = ControlledPawn->Combat->GetWeaponActor()) Weapon->RequestFire(); return; }
 	if (Command == 7)
 	{
 		if (!ASC || !ControlledPawn->Combat->GetEquipment().bEquipped || !ControlledPawn->Combat->GetEquippedItem()) return;
 		if (ControlledPawn->Combat->IsAiming()) { ASC->AbilityInputTagReleased(TAG_NGInputAim); return; }
-		ControlledPawn->Combat->RequestFire();
+		if (auto* Weapon = ControlledPawn->Combat->GetWeaponActor()) Weapon->RequestFire();
 		ServerSmokeResult(Command, true);
 		return;
 	}

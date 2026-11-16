@@ -1,13 +1,14 @@
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "Gameplay/Equipment/NGEquipmentDefinition.h"
 #include "Gameplay/Equipment/NGEquipmentInstance.h"
+#include "Gameplay/Equipment/NGEquipmentVisualActor.h"
 #include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "GameFramework/Pawn.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Inventory/NGInventoryItemDefinition.h"
-#include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "Engine/ActorChannel.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -26,14 +27,14 @@ void UNGEquipmentComponent::EndPlay(EEndPlayReason::Type Reason)
 {
 	bEnding = true; Shutdown();
 	BindContext(nullptr, nullptr, nullptr);
-	for (const auto& Pair : Visuals) if (Pair.Value) Pair.Value->DestroyComponent();
+	if (GetOwner()->HasAuthority()) for (ANGEquipmentVisualActor* Actor : Visuals) if (IsValid(Actor)) Actor->Destroy();
 	Visuals.Reset();
 	Super::EndPlay(Reason);
 }
 void UNGEquipmentComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ThisClass, Installations); DOREPLIFETIME(ThisClass, HandsRevision);
+	DOREPLIFETIME(ThisClass, Installations); DOREPLIFETIME(ThisClass, HandsRevision); DOREPLIFETIME(ThisClass, Visuals);
 }
 bool UNGEquipmentComponent::ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* Flags)
 {
@@ -74,8 +75,9 @@ void UNGEquipmentComponent::BindContext(UAbilitySystemComponent* ASC,
 	const bool bTargetChanged = AttachmentMesh.Get() != Target;
 	if (bTargetChanged)
 	{
-		for (const auto& Pair : Visuals) if (Pair.Value) Pair.Value->DestroyComponent();
-		Visuals.Reset(); AttachmentMesh = Target;
+		if (GetOwner()->HasAuthority()) for (ANGEquipmentVisualActor* Actor : Visuals) if (IsValid(Actor)) Actor->Destroy();
+		if (GetOwner()->HasAuthority()) Visuals.Reset();
+		AttachmentMesh = Target;
 	}
 	if (bContextChanged || bTargetChanged) RefreshReplicatedState();
 }
@@ -105,6 +107,15 @@ UNGEquipmentInstance* UNGEquipmentComponent::FindInstance(FGameplayTag Slot) con
 {
     auto* Instance = FindInstallation(Slot); return Instance && Instance->bInstalled ? Instance : nullptr;
 }
+ANGEquipmentVisualActor* UNGEquipmentComponent::GetVisualActor(FGameplayTag Slot) const
+{
+	const auto* Instance = FindInstance(Slot);
+	if (!Instance) return nullptr;
+	for (ANGEquipmentVisualActor* Actor : Visuals)
+		if (IsValid(Actor) && Actor->GetEquipmentSource() == Instance) return Actor;
+	return nullptr;
+}
+
 bool UNGEquipmentComponent::IsCurrent(const UNGEquipmentInstance* Instance) const
 {
 	if (!Instance || !Instance->Definition || Instance->GetAvatar() != GetOwner() || !Installations.Contains(Instance) || !CanApply()) return false;
@@ -125,7 +136,7 @@ bool UNGEquipmentComponent::Preflight(UNGInventoryItemInstance* Item, UNGEquipme
 	if (!CanApply()) return false;
 	auto* ASC = ObservedASC.Get();
 	const auto* Target = AttachmentMesh.Get();
-	if ((Definition->Mesh || Definition->SkeletalMesh) && (!Target || Definition->AttachSocket.IsNone() || !Target->DoesSocketExist(Definition->AttachSocket)))
+	if (Definition->VisualActorClass && (!Target || Definition->AttachSocket.IsNone() || !Target->DoesSocketExist(Definition->AttachSocket)))
     { Error = TEXT("Equipment visual requires an existing socket or bone on the Avatar mesh."); return false; }
 	const auto* Replaced = FindInstallation(Definition->SlotTag);
 	// GAS defers ClearAbility during item activation; retired specs no longer reserve input tags.
@@ -213,6 +224,8 @@ bool UNGEquipmentComponent::FinishInstall(UNGEquipmentInstance* Instance)
     Instance->Definition->ResolveResources(Grants, Effects);
     if (Grants.Num() != Instance->AbilityHandles.Num()) return Abort();
 	Instance->bInstalled = true;
+	RefreshVisuals();
+	if (Instance->Definition->VisualActorClass && !GetVisualActor(Instance->Slot)) return Abort();
 	for (int32 I = 0; I < Grants.Num(); ++I)
 	{
 		const auto& Entry = Grants[I]; if (!Entry.Grant.bActivateOnEnter) continue;
@@ -297,24 +310,60 @@ void UNGEquipmentComponent::RefreshReplicatedState()
 }
 void UNGEquipmentComponent::RefreshVisuals()
 {
-	// The existing ALS held-object path remains the single Hands presentation adapter.
 	auto* Target = AttachmentMesh.Get();
-	for (auto It = Visuals.CreateIterator(); It; ++It)
-    {
-        if (!Target || !Installations.Contains(It.Key()) || !It.Key()->bInstalled)
-        { if (It.Value()) It.Value()->DestroyComponent(); It.RemoveCurrent(); }
-    }
-    if (!Target || GetNetMode() == NM_DedicatedServer) return;
-	for (UNGEquipmentInstance* Instance : Installations)
+	if (!GetOwner()->HasAuthority())
+	{
+		// Actors arrive from the server. Source/ASC/attachment may resolve in either order.
+		for (ANGEquipmentVisualActor* Actor : Visuals) if (IsValid(Actor))
+		{
+			auto* Source = Actor->GetEquipmentSource();
+			const bool bInstalled = Source && Installations.Contains(Source) && Source->bInstalled;
+			Actor->SetActorHiddenInGame(!Target || !bInstalled);
+			Actor->Initialize(Source, Target && bInstalled ? ObservedASC.Get() : nullptr);
+		}
+		return;
+	}
+	for (int32 Index = Visuals.Num() - 1; Index >= 0; --Index)
+	{
+		auto* Actor = Visuals[Index].Get();
+		const auto* Source = IsValid(Actor) ? Actor->GetEquipmentSource() : nullptr;
+		if (!Target || !Source || !Installations.Contains(Source) || !Source->bInstalled)
+		{
+			Visuals.RemoveAt(Index);
+			if (IsValid(Actor)) Actor->Destroy();
+		}
+	}
+	if (!Target) return;
+	const auto CurrentInstallations = Installations;
+	for (UNGEquipmentInstance* Instance : CurrentInstallations)
 	{
 		const auto* Def = Instance ? Instance->GetDefinition() : nullptr;
-		if (!Instance || !Instance->bInstalled || !Def || Instance->Slot == TAG_NGSlotEquipmentWeapon || Visuals.Contains(Instance)) continue;
-		USceneComponent* Visual = nullptr;
-		if (Def->Mesh) { auto* Mesh = NewObject<UStaticMeshComponent>(GetOwner()); Mesh->SetStaticMesh(Def->Mesh); Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); Visual = Mesh; }
-		else if (Def->SkeletalMesh) { auto* Mesh = NewObject<USkeletalMeshComponent>(GetOwner()); Mesh->SetSkeletalMesh(Def->SkeletalMesh); Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); Visual = Mesh; }
-		if (Visual) { Visual->SetupAttachment(Target, Def->AttachSocket); Visual->SetRelativeTransform(Def->VisualTransform); Visual->RegisterComponent(); Visuals.Add(Instance, Visual); }
+		if (!Instance || !Instance->bInstalled || !Def || !Def->VisualActorClass) continue;
+		if (auto* Existing = GetVisualActor(Instance->GetSlot()))
+		{
+			Existing->Initialize(Instance, ObservedASC.Get());
+			continue;
+		}
+		const FTransform Transform = Def->VisualTransform * Target->GetSocketTransform(Def->AttachSocket);
+		auto* Actor = GetWorld()->SpawnActorDeferred<ANGEquipmentVisualActor>(Def->VisualActorClass, Transform,
+			GetOwner(), Cast<APawn>(GetOwner()), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!Actor) continue;
+		Actor->SetReplicates(true);
+		Actor->SetReplicateMovement(false);
+		Visuals.Add(Actor);
+		Actor->Initialize(Instance, ObservedASC.Get());
+		Actor->FinishSpawning(Transform);
+		if (!IsValid(Actor)) continue;
+		// Blueprint construction/BeginPlay may unequip the source or release this Avatar.
+		if (!Installations.Contains(Instance) || !Instance->bInstalled || AttachmentMesh.Get() != Target)
+		{ Visuals.Remove(Actor); Actor->Destroy(); continue; }
+		Actor->SetActorEnableCollision(false);
+		Actor->AttachToComponent(Target, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Def->AttachSocket);
+		Actor->SetActorRelativeTransform(Def->VisualTransform);
+		Actor->ForceNetUpdate();
 	}
 }
+
 void UNGEquipmentComponent::AbilityEnded(const FAbilityEndedData& Data)
 {
     if (!GetOwner()->HasAuthority()) return;

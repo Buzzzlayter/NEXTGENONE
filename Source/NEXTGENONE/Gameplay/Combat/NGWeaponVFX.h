@@ -7,7 +7,7 @@ class USkeletalMeshComponent;
 namespace NGWeaponVFX
 {
 	void Shot(USkeletalMeshComponent* Mesh,const UNGWeaponDefinition* Weapon,FVector Start,FVector Direction);
-	void Impact(UObject* Context,const UNGWeaponDefinition* Weapon,FVector Point,FVector Normal,bool bCharacter);
+	void Impact(UObject* Context,UNiagaraSystem* System,FVector Point,FVector Normal,bool bCharacterEffect);
 	UNiagaraComponent* CreateTracer(UObject* Context,UNiagaraSystem* System,FVector Position);
 	void UpdateTracer(UNiagaraComponent* Component,FVector From,FVector To,bool bTrigger);
 	void StopTracer(UNiagaraComponent* Component);

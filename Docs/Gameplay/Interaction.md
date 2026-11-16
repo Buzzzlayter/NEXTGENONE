@@ -25,8 +25,6 @@
 
 Изменённые C++: `Gameplay/NGAbilitySystem.h/.cpp`, `Gameplay/NGWeaponPickup.h/.cpp`, `Gameplay/NextgenoneCharacter.h/.cpp`, `Gameplay/NextgenonePlayerState.h/.cpp`, `Gameplay/NextgenonePlayerController.h/.cpp`, `Gameplay/NGSetupCommandlet.cpp`; внутри `Gameplay/Inventory`: `NGGameplayTagStack.h`, `NGInventoryItemDefinition.h`, `NGInventoryItemInstance.h/.cpp`, `NGInventoryManagerComponent.h/.cpp`, `NGInventoryPanel.h/.cpp`.
 
-Конфигурация: `Config/DefaultEngine.ini` (канал Interaction). Документация: этот файл, `Docs/Architecture/GameplayFoundation.md`, `Docs/Testing/MultiplayerCombat.md`.
-
 Новые ассеты: `Content/Gameplay/Interaction/BP_ItemPickup.uasset`, `BP_InteractiveObject.uasset`; `Content/Gameplay/Inventory/ID_TestItem.uasset`; `Content/Gameplay/Abilities/GA_Interact.uasset`; `Content/Gameplay/UI/WBP_InteractionPrompt.uasset`.
 
 Обновлённые ассеты: `Content/Gameplay/Abilities/DA_PlayerAbilities.uasset`, `Content/Blueprints/States/FSMState_GameRuntime.uasset`, `Content/Gameplay/Weapons/BP_WeaponPickup.uasset`. Другие изменения, существовавшие в рабочем дереве, не относятся к этому перечню.

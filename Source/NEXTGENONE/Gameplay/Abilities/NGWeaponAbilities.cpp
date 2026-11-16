@@ -1,5 +1,8 @@
 #include "Gameplay/Abilities/NGWeaponAbilities.h"
-#include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Combat/NGWeaponActor.h"
+#include "Gameplay/Combat/NGWeaponDefinition.h"
+#include "AbilitySystemComponent.h"
+#include "Animation/AnimMontage.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
@@ -47,15 +50,20 @@ void UNGReloadAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const 
 	FString DefinitionError;
 	if (!Info || !Info->IsNetAuthority() || !ResolveWeaponContext(Handle, Info, Context)
 		|| !Context.Definition->ValidateDefinition(DefinitionError)
-		|| Context.Combat->GetMagazineAmmo() >= Context.Definition->MagazineCapacity
-		|| Context.Combat->GetReserveAmmo() <= 0 || !CommitAbility(Handle, Info, Activation))
+		|| Context.Weapon->GetMagazineAmmo() >= Context.Definition->MagazineCapacity
+		|| Context.Weapon->GetReserveAmmo() <= 0 || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	if (!IsActive()) return;
 	// Commit and cosmetic callbacks can remove this spec or change the Avatar.
 	if (!ResolveWeaponContext(Handle, Info, Context))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	const float Duration = Context.Definition->ReloadDuration;
-	Context.Combat->MulticastReload(Context.Definition, Context.Combat->GetEquipment().Revision);
+	if (Context.Definition->CharacterReloadMontage)
+		Info->AbilitySystemComponent->PlayMontage(this, Activation, Context.Definition->CharacterReloadMontage, 1.f);
+	if (!IsActive()) return;
+	if (!ResolveWeaponContext(Handle, Info, Context))
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	Context.Weapon->MulticastReload(Context.Definition);
 	if (!IsActive()) return;
 	if (!ResolveWeaponContext(Handle, Info, Context))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
@@ -69,7 +77,7 @@ void UNGReloadAbility::FinishReload()
 	FNGWeaponAbilityContext Context;
 	const bool bReloaded = CurrentActorInfo && CurrentActorInfo->IsNetAuthority()
 		&& ResolveWeaponContext(CurrentSpecHandle, CurrentActorInfo, Context)
-		&& Context.Combat->CompleteReloadOnServer(Context.Source);
+		&& Context.Weapon->CompleteReloadOnServer();
 	if (IsActive()) EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bReloaded);
 }
 
@@ -78,12 +86,14 @@ void UNGFireAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	FNGWeaponAbilityContext Context;
 	FString DefinitionError;
 	if (!Info || !Info->IsNetAuthority() || !ResolveWeaponContext(Handle, Info, Context)
-		|| !Context.Definition->ValidateDefinition(DefinitionError) || Context.Combat->GetMagazineAmmo() <= 0
+		|| !Context.Definition->ValidateDefinition(DefinitionError) || Context.Weapon->GetMagazineAmmo() <= 0
 		|| !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	if (!IsActive()) return;
 	// Commit callbacks may remove the spec or change equipment/Avatar.
-	const bool bFired = ResolveWeaponContext(Handle, Info, Context) && Context.Combat->FireOnServer(Context.Source);
+	const bool bFired = ResolveWeaponContext(Handle, Info, Context) && Context.Weapon->FireOnServer();
+	if (bFired && IsActive() && ResolveWeaponContext(Handle, Info, Context) && Context.Definition->CharacterFireMontage)
+		Info->AbilitySystemComponent->PlayMontage(this, Activation, Context.Definition->CharacterFireMontage, 1.f);
 	if (IsActive()) EndAbility(Handle, Info, Activation, true, !bFired);
 }
 
@@ -95,4 +105,13 @@ void UNGFireAbility::ApplyCooldown(FGameplayAbilitySpecHandle Handle, const FGam
 	if (!Spec.IsValid()) return;
 	Spec.Data->SetDuration(Context.Definition->FireInterval, true);
 	ApplyGameplayEffectSpecToOwner(Handle, Info, Activation, Spec);
+}
+
+void UNGReloadAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+	FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bWasCancelled)
+{
+	if (!IsEndAbilityValid(Handle, Info)) return;
+	if (auto* ASC = Info ? Info->AbilitySystemComponent.Get() : nullptr;
+		bWasCancelled && ASC && ASC->GetAnimatingAbility() == this) ASC->CurrentMontageStop();
+	Super::EndAbility(Handle, Info, Activation, bReplicateEnd, bWasCancelled);
 }
