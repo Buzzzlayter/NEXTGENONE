@@ -10,6 +10,7 @@
 #include "Gameplay/Abilities/NGWeaponAbilities.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Gameplay/Combat/NGCombat.h"
+#include "Gameplay/Combat/NGBallisticWeaponDefinition.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -111,7 +112,7 @@ void ANGCombatTestGameMode::SmokeTick()
     }
     if (Phase == 2)
     {
-        const auto* Def = A->Combat->GetEquipment().Definition.Get();
+        const auto* Def = Cast<UNGBallisticWeaponDefinition>(A->Combat->GetEquipment().Definition.Get());
         if (!A->Combat->GetEquipment().bEquipped || !Def) return;
         FString Error;
         if (!Def->ValidateDefinition(Error) || Def->PelletsPerShot != 1 || Def->SpreadDegrees != 0.f)

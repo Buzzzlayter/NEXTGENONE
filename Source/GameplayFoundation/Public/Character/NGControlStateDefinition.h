@@ -33,7 +33,7 @@ public:
 	bool ValidateResources(FString& Error) const;
 	/** Validate this state's IMC actions against the owning Pawn's routes; parent states may provide other actions. */
 	bool ValidateInputMappings(const UNGGameplayInputConfig* InputConfig, FString& Error) const;
-	FGameplayTag RegisterPresentationCue() const;
+	FGameplayTag GetPresentationCueTag() const;
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
 #endif

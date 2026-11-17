@@ -52,7 +52,7 @@ void UNGDeathAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const F
     DeathASC = Info->AbilitySystemComponent;
     const auto* Machine = DeathPawn->FindComponentByClass<UNGCharacterStateMachineComponent>();
     const auto* Definition = Machine->GetAbilityStateDefinition(DeathASC.Get(), Handle);
-    PresentationTag = Definition ? Definition->RegisterPresentationCue() : FGameplayTag();
+    PresentationTag = Definition ? Definition->GetPresentationCueTag() : FGameplayTag();
     Info->AbilitySystemComponent->CancelAbilities(nullptr, nullptr, this);
     HandleDeath();
 }
