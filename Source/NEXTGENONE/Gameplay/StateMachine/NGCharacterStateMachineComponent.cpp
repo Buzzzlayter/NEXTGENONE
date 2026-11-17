@@ -187,7 +187,7 @@ void UNGCharacterStateMachineComponent::RestorePresentation() const
 	for (const auto& Resource : ActiveResources)
 		if (Resource.IsValid() && Resource->Definition)
 		{
-			const FGameplayTag Cue = Resource->Definition->RegisterPresentationCue();
+			const FGameplayTag Cue = Resource->Definition->GetPresentationCueTag();
 			if (Cue.IsValid()) UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), Cue, EGameplayCueEvent::Executed, FGameplayCueParameters());
 		}
 }

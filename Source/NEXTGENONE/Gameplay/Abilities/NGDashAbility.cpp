@@ -34,7 +34,6 @@ bool UNGDashAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const
 	const auto* Pawn = Cast<ANextgenoneCharacter>(Info->AvatarActor.Get());
 	return Pawn && !Pawn->IsDead() && Pawn->GetAbilitySystemComponent() == Info->AbilitySystemComponent.Get()
 		&& Pawn->GetMovementAction() == EALSMovementAction::None
-		&& Pawn->GetMovementState() == EALSMovementState::InAir
 		&& Pawn->GetStance() == EALSStance::Standing && Pawn->GetCharacterMovement()->IsFalling();
 }
 void UNGDashAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
@@ -53,12 +52,6 @@ void UNGDashAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FG
 		ERootMotionFinishVelocityMode::MaintainLastRootMotionVelocity, FVector::ZeroVector, 0.f, true);
 	Task->OnFinish.AddDynamic(this, &ThisClass::FinishDash);
 	Task->ReadyForActivation();
-	if (IsActive())
-	{
-		FGameplayCueParameters Cue; Cue.Location = Pawn->GetActorLocation(); Cue.Normal = Direction;
-		Cue.Instigator = Pawn;
-		Info->AbilitySystemComponent->ExecuteGameplayCue(TAG_NGDashCue, Cue);
-		OnDashStarted(Direction);
-	}
+	if (IsActive()) OnDashStarted(Direction);
 }
 void UNGDashAbility::FinishDash() { EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false); }

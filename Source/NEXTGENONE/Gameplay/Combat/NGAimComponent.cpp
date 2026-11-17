@@ -1,22 +1,24 @@
 #include "Gameplay/Combat/NGAimComponent.h"
-#include "Gameplay/Player/NGPlayerContext.h"
-#include "GameplayTags/NGGameplayTags.h"
 #include "GameFramework/PlayerController.h"
-#include "Input/PlayerInputSubsystem.h"
-#include "Gameplay/Interaction/NGInteraction.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "SceneView.h"
 #include "Character/ALSBaseCharacter.h"
 
-UNGAimComponent::UNGAimComponent() { PrimaryComponentTick.bCanEverTick=true; }
+UNGAimComponent::UNGAimComponent()
+{
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
+	PrimaryComponentTick.bAllowTickOnDedicatedServer = false;
+	PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
+}
 bool UNGAimComponent::GetViewRay(FVector& Origin,FVector& Direction) const
 {
 	Origin=FVector::ZeroVector; Direction=FVector::ForwardVector;
 	const auto* Pawn=Cast<APawn>(GetOwner());
 	const auto* Controller=Pawn ? Pawn->GetController() : nullptr;
-	if (!Controller || Controller->GetPawn()!=Pawn) return false;
+	if (!Controller || Controller->GetPawn() != Pawn) return false;
 	const auto* PC=Cast<APlayerController>(Controller);
 	FRotator Rotation;
 	Pawn->GetActorEyesViewPoint(Origin,Rotation); Rotation=Controller->GetControlRotation(); Direction=Rotation.Vector();
@@ -63,41 +65,8 @@ bool UNGAimComponent::ValidateShotView(const FVector& Origin, const FVector& Dir
 		: GetWorld()->LineTraceSingleByChannel(Hit, TraceOrigin, Origin, Channel, Params);
 	return !bBlocked;
 }
-FVector UNGAimComponent::GetTargetingOrigin(const FVector& ViewOrigin, const FVector& ViewDirection) const
-{
-	// Moving along the view ray preserves screen alignment and avoids tracing behind the shooter.
-	const float Distance = FVector::DotProduct(GetOwner()->GetActorLocation() - ViewOrigin, ViewDirection);
-	return ViewOrigin + ViewDirection * FMath::Max(0.f, Distance);
-}
-bool UNGAimComponent::ShouldShowReticle() const
-{
-	const auto* Pawn=Cast<APawn>(GetOwner()); const auto* PC=Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
-	const auto* ASC = NGPlayerContext::GetCurrentASC(Pawn, false);
-	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
-	return bShowReticle && PC && PC->IsLocalController() && ASC
-		&& !ASC->HasMatchingGameplayTag(TAG_NGDead) && !(Input && Input->IsGameplayInputBlocked());
-}
-FLinearColor UNGAimComponent::GetReticleColor() const
-{
-	const auto* Interaction = GetOwner()->FindComponentByClass<UNGInteractionComponent>();
-	if (Interaction && Interaction->GetFocusedActor()) return Interaction->CanUseFocusedActor() ? InteractionColor : UnavailableColor;
-	return IdleColor;
-}
 void UNGAimComponent::TickComponent(float Delta,ELevelTick Tick,FActorComponentTickFunction* ThisTick)
 {
 	Super::TickComponent(Delta,Tick,ThisTick);
-	FVector Origin,Direction;
-	if (!ShouldShowReticle() || !GetViewRay(Origin,Direction))
-	{
-		if (bHit || AimTarget.IsValid() || !AimPoint.IsZero()) { AimTarget.Reset(); AimPoint=FVector::ZeroVector; bHit=false; OnAimUpdated.Broadcast(nullptr,AimPoint,false); }
-		return;
-	}
-	Origin = GetTargetingOrigin(Origin, Direction);
-	const FVector End=Origin+Direction*(FMath::IsFinite(TraceDistance) ? FMath::Clamp(TraceDistance,100.f,100000.f) : 10000.f);
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(NGAim),false,GetOwner()); TArray<AActor*> Attached; GetOwner()->GetAttachedActors(Attached); Params.AddIgnoredActors(Attached);
-	FHitResult Hit; const bool bNewHit=GetWorld()->LineTraceSingleByChannel(Hit,Origin,End,ECC_Visibility,Params);
-	const FVector NewPoint=bNewHit ? Hit.ImpactPoint : End; AActor* NewTarget=bNewHit ? Hit.GetActor() : nullptr;
-	const bool bChanged=NewTarget!=AimTarget.Get() || bNewHit!=bHit || !NewPoint.Equals(AimPoint,.1f);
-	AimPoint=NewPoint; AimTarget=NewTarget; bHit=bNewHit;
-	if (bChanged) OnAimUpdated.Broadcast(NewTarget,AimPoint,bHit);
+	OnAimUpdated.Broadcast();
 }

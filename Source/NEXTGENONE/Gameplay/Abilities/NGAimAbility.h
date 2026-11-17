@@ -5,6 +5,8 @@
 #include "GameplayEffect.h"
 #include "NGAimAbility.generated.h"
 
+class UNGAimComponent;
+class ANGWeaponActor;
 
 /** Replicated GAS state, also applied predictively by the owning client. */
 UCLASS()
@@ -30,6 +32,9 @@ private:
 	FActiveGameplayEffectHandle AimingEffect;
 	FDelegateHandle BlockingTagHandle;
 	TWeakObjectPtr<UAbilitySystemComponent> AimingASC;
+	TWeakObjectPtr<UNGAimComponent> AimSource;
+	TWeakObjectPtr<ANGWeaponActor> AimingWeapon;
+	void AimUpdated();
 	UFUNCTION() void OnAimInputReleased(float TimeHeld);
 	void BlockingTagChanged(FGameplayTag Tag, int32 Count);
 };

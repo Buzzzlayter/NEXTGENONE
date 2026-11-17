@@ -25,11 +25,9 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_ALSActionCooldown, "Cooldown.Movement.ALSAction");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGRagdollAbility, "Ability.Type.Ragdoll");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGDashCooldown, "Cooldown.Movement.Dash");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGFireCooldown, "Cooldown.Combat.Fire");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGDashCue, "GameplayCue.Movement.Dash");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGActivatingItem, "State.ActivatingItem");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemActivateAbility, "Ability.Type.ItemActivate");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGHealingAmount, "Data.Healing");
-UE_DEFINE_GAMEPLAY_TAG(TAG_NGDeathRagdollCue, "GameplayCue.Character.Death.Ragdoll");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGFireInput, "Input.Combat.Fire");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadInput, "Input.Combat.Reload");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionBlocked, "State.Interaction.Blocked");
@@ -71,3 +69,6 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentBack, "Item.Equipment.Back");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentWeapon, "Item.Equipment.Weapon");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentFeet, "Item.Equipment.Feet");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentTorso, "Item.Equipment.Torso");
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGDeathRagdollCue, "GameplayCue.Character.Death.Ragdoll");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGLaserSightCue, "GameplayCue.Weapon.LaserSight");

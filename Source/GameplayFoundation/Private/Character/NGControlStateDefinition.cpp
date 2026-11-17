@@ -3,10 +3,7 @@
 #include "InputMappingContext.h"
 #include "Input/NGGameplayInputConfig.h"
 #include "InputAction.h"
-#include "AbilitySystemGlobals.h"
 #include "GameplayCueNotify_Static.h"
-#include "GameplayCueManager.h"
-#include "GameplayCueSet.h"
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
 #endif
@@ -42,18 +39,9 @@ bool UNGControlStateDefinition::ValidateResources(FString& Error) const
 	Error.Reset(); return true;
 }
 
-FGameplayTag UNGControlStateDefinition::RegisterPresentationCue() const
+FGameplayTag UNGControlStateDefinition::GetPresentationCueTag() const
 {
-	if (!PresentationCue) return {};
-	const FGameplayTag Tag = PresentationCue.GetDefaultObject()->GameplayCueTag;
-	if (Tag.IsValid())
-		if (auto* Manager = UAbilitySystemGlobals::Get().GetGameplayCueManager())
-		{
-			if (!Manager->GetRuntimeCueSet()) Manager->InitializeRuntimeObjectLibrary();
-			if (auto* Set = Manager->GetRuntimeCueSet()) Set->AddCues({FGameplayCueReferencePair(Tag, FSoftObjectPath(PresentationCue.Get()))});
-			else return {};
-		}
-	return Tag;
+	return PresentationCue ? PresentationCue.GetDefaultObject()->GameplayCueTag : FGameplayTag();
 }
 
 bool UNGControlStateDefinition::ValidateInputMappings(const UNGGameplayInputConfig* InputConfig, FString& Error) const

@@ -9,7 +9,6 @@
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "GameFramework/Pawn.h"
 #include "AbilitySystemComponent.h"
-#include "Animation/AnimMontage.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
@@ -40,7 +39,8 @@ UNGFireAbility::UNGFireAbility()
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
 	CooldownGameplayEffectClass = UNGFireCooldownEffect::StaticClass();
 	ActivationRequiredTags.AddTag(TAG_NGWeaponAiming);
-	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive);
+	ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	ActivationBlockedTags.AddTag(TAG_NGDead);
 	ActivationBlockedTags.AddTag(TAG_NGActivatingItem);
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
@@ -50,13 +50,16 @@ UNGFireAbility::UNGFireAbility()
 
 UNGReloadAbility::UNGReloadAbility()
 {
-	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
 	ActivationBlockedTags.AddTag(TAG_NGDead);
 	ActivationBlockedTags.AddTag(TAG_NGActivatingItem);
-	ActivationBlockedTags.AddTag(TAG_NGMantleActive); ActivationBlockedTags.AddTag(TAG_NGDashActive); ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
+	ActivationBlockedTags.AddTag(TAG_NGDashActive);
+	ActivationBlockedTags.AddTag(TAG_NGReloadActive);
+	ActivationBlockedTags.AddTag(TAG_NGRollActive);
+	ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	ActivationOwnedTags.AddTag(TAG_NGReloadActive);
 }
 
