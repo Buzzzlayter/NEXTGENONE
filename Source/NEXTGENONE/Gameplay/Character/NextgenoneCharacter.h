@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Character/ALSCharacter.h"
 #include "AbilitySystemInterface.h"
+#include "AbilitySystem/NGAbilitySystemAvatar.h"
 #include "GameplayTagContainer.h"
 #include "NextgenoneCharacter.generated.h"
 
@@ -20,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FNGHealthChanged, float, Health, fl
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGDeathChanged, bool, bDead);
 
 UCLASS()
-class NEXTGENONE_API ANextgenoneCharacter : public AALSCharacter, public IAbilitySystemInterface
+class NEXTGENONE_API ANextgenoneCharacter : public AALSCharacter, public IAbilitySystemInterface, public INGAbilitySystemAvatar
 {
 	GENERATED_BODY()
 public:
@@ -53,7 +54,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Gameplay") float GetMaxHealth() const;
 	UPROPERTY(BlueprintAssignable) FNGHealthChanged OnHealthChanged;
 	UPROPERTY(BlueprintAssignable) FNGDeathChanged OnDeathChanged;
-	void TryInitializeGameplay();
+	virtual bool CanInitializeGameplay() const override;
+	virtual bool CanReleaseGameplay() const override;
+	virtual void TryInitializeGameplay() override;
+	virtual void ReleaseGameplayResources() override;
 	void UnbindGameplay();
 protected:
 	virtual bool CanAcceptClientLocomotion() const override;
@@ -69,7 +73,7 @@ private:
 	void HealthChanged(const FOnAttributeChangeData& Data);
 	void StateChanged(FGameplayTag Previous, FGameplayTag Current);
 	void StateResourcesFailed();
-	void EquipmentResourcesReady(AActor* Avatar);
+	void GameplayResourcesReady(AActor* Avatar);
 	void RefreshEquipment();
 	void UpdateJetpackContext();
 };

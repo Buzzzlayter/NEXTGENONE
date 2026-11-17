@@ -7,7 +7,7 @@
 #include "Gameplay/Inventory/NGPlayerInventoryManagerComponent.h"
 #include "NextgenonePlayerState.generated.h"
 
-class ANextgenoneCharacter;
+class APawn;
 class UNGTeamComponent;
 
 UCLASS()
@@ -19,15 +19,16 @@ public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override { return AbilitySystem; }
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Inventory") TObjectPtr<UNGPlayerInventoryManagerComponent> Inventory;
 	// Server-only life boundary; repeated possession/binds never heal or grant twice.
-	bool StartLife(ANextgenoneCharacter* Pawn);
-	void ResumePendingLife(ANextgenoneCharacter* PreviousPawn);
+	bool StartLife(APawn* Pawn);
+	bool ReleaseAvatar(APawn* ExpectedPawn);
+	void ResumePendingLife(APawn* PreviousPawn);
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 private:
 	UPROPERTY(VisibleAnywhere, Category="Team") TObjectPtr<UNGTeamComponent> Team;
 	UPROPERTY(VisibleAnywhere, Category="GAS") TObjectPtr<UNGAbilitySystemComponent> AbilitySystem;
 	UPROPERTY(VisibleAnywhere, Category="GAS") TObjectPtr<UNGHealthSet> HealthSet;
-	TWeakObjectPtr<ANextgenoneCharacter> InitializedPawn;
-	TWeakObjectPtr<ANextgenoneCharacter> PendingLifePawn;
+	TWeakObjectPtr<APawn> InitializedPawn;
+	TWeakObjectPtr<APawn> PendingLifePawn;
 	bool bChangingLife = false;
-	void StateResourcesReady(AActor* Avatar);
+	void ReleaseAvatarResources(AActor* Avatar);
 };

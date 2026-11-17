@@ -53,16 +53,26 @@ float ANextgenoneCharacter::GetMaxHealth() const
 	const auto* ASC = GetAbilitySystemComponent();
 	return ASC ? ASC->GetNumericAttribute(UNGHealthSet::GetMaxHealthAttribute()) : 0.f;
 }
+bool ANextgenoneCharacter::CanInitializeGameplay() const
+{
+	return !IsActorBeingDestroyed() && !IsDead() && !CharacterStateMachine->HasResourceFailure();
+}
+
+bool ANextgenoneCharacter::CanReleaseGameplay() const
+{
+	return CharacterStateMachine->CanReleaseAvatar();
+}
+
 void ANextgenoneCharacter::TryInitializeGameplay()
 {
 	ANextgenonePlayerState* PS = GetPlayerState<ANextgenonePlayerState>();
-	if (!PS || IsDead() || CharacterStateMachine->HasResourceFailure() || (PS->GetPawn() && PS->GetPawn() != this)) return;
+	if (!PS || !CanInitializeGameplay() || (PS->GetPawn() && PS->GetPawn() != this)) return;
 	auto* ASC = PS->GetAbilitySystemComponent();
 	// A delayed OnRep from an old Pawn must not steal a newer avatar.
-	if (!HasAuthority() && ASC->GetAvatarActor() && ASC->GetAvatarActor() != this)
+	if (!HasAuthority() && ASC->GetAvatarActor() && ASC->GetAvatarActor() != PS && ASC->GetAvatarActor() != this)
 	{
-		const auto* Old = Cast<ANextgenoneCharacter>(ASC->GetAvatarActor());
-		if (PS->GetPawn() != this && Old && !Old->IsDead()) return;
+		const auto* Old = Cast<INGAbilitySystemAvatar>(ASC->GetAvatarActor());
+		if (PS->GetPawn() != this && (!Old || Old->CanInitializeGameplay())) return;
 	}
 	if (BoundASC == ASC && ASC->GetAvatarActor() == this)
 	{
@@ -71,7 +81,7 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 		RefreshEquipment();
 		return;
 	}
-	UnbindGameplay();
+	if (BoundASC.IsValid()) UnbindGameplay();
 	if (HasAuthority()) { if (!PS->StartLife(this)) return; }
 	else ASC->InitAbilityActorInfo(PS, this);
 	BoundASC = ASC;
@@ -94,30 +104,55 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 }
 void ANextgenoneCharacter::UnbindGameplay()
 {
-	Equipment->BindContext(nullptr, nullptr, nullptr);
-	Combat->BindInventory(nullptr);
-	if (auto* ASC = BoundASC.Get())
+	auto* ASC = BoundASC.Get();
+	if (!ASC) return;
+	auto* PS = Cast<ANextgenonePlayerState>(ASC->GetOwnerActor());
+	if (HasAuthority() && PS && ASC->GetAvatarActor() == this)
+	{
+		PS->ReleaseAvatar(this);
+		return;
+	}
+	ReleaseGameplayResources();
+	if (ASC && ASC->GetAvatarActor() == this)
+	{
+		if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
+		ASC->CancelAllAbilities();
+		if (ASC->GetAvatarActor() == this) ASC->SetAvatarActor(nullptr);
+	}
+}
+
+void ANextgenoneCharacter::ReleaseGameplayResources()
+{
+	auto* ASC = BoundASC.Get();
+	BoundASC.Reset();
+	if (ASC)
 	{
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).Remove(HealthHandle);
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).Remove(MaxHealthHandle);
 		ASC->RegisterGameplayTagEvent(TAG_NGRagdollActive, EGameplayTagEventType::NewOrRemoved).Remove(RagdollTagHandle);
-		if (ASC->GetAvatarActor() == this)
-		{
-			CharacterStateMachine->SuspendResources();
-			if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
-			ASC->CancelAllAbilities();
-			ASC->SetAvatarActor(nullptr);
-		}
 	}
-	BoundASC.Reset();
+	HealthHandle.Reset(); MaxHealthHandle.Reset(); RagdollTagHandle.Reset();
+	GameplayInput->ShutdownInput();
+	Equipment->BindContext(nullptr, nullptr, nullptr);
+	CharacterStateMachine->SuspendResources();
+	Combat->BindInventory(nullptr);
 	Combat->BindAbilitySystem(nullptr);
 	Interaction->BindAbilitySystem(nullptr);
 	if (auto* Movement = Cast<UNGCharacterMovementComponent>(GetCharacterMovement())) Movement->SetJetpackContext({}, 0);
 }
-void ANextgenoneCharacter::EquipmentResourcesReady(AActor* Avatar)
+
+void ANextgenoneCharacter::GameplayResourcesReady(AActor* Avatar)
 {
-	if (Avatar == this) RefreshEquipment();
+	if (Avatar != this) return;
+	RefreshEquipment();
+	if (!HasAuthority() || !CanReleaseGameplay()) return;
+	const auto* ASC = BoundASC.Get();
+	auto* PS = ASC ? Cast<ANextgenonePlayerState>(ASC->GetOwnerActor()) : nullptr;
+	if (!PS || ASC->GetAvatarActor() != this) return;
+	if (!GetController()) PS->ReleaseAvatar(this);
+	else PS->ResumePendingLife(this);
 }
+
 void ANextgenoneCharacter::RefreshEquipment()
 {
 	auto* ASC = GetAbilitySystemComponent();
@@ -303,13 +338,13 @@ void ANextgenoneCharacter::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 	Equipment->OnContextChanged.AddUObject(this, &ThisClass::UpdateJetpackContext);
+	CharacterStateMachine->OnResourcesReady.AddUObject(this, &ThisClass::GameplayResourcesReady);
 	UpdateJetpackContext();
 }
 void ANextgenoneCharacter::BeginPlay()
 {
 	Combat->OnPresentationChanged.AddUObject(this, &ThisClass::ApplyCombatPresentation);
 	Equipment->BindContext(nullptr, nullptr, GetMesh());
-	CharacterStateMachine->OnResourcesReady.AddUObject(this, &ThisClass::EquipmentResourcesReady);
 	CharacterStateMachine->OnStateChanged.AddUObject(this, &ThisClass::StateChanged);
 	CharacterStateMachine->OnResourceFailure.AddUObject(this, &ThisClass::StateResourcesFailed);
 	Super::BeginPlay();
@@ -329,9 +364,8 @@ void ANextgenoneCharacter::EndPlay(const EEndPlayReason::Type Reason)
 	CharacterStateMachine->OnStateChanged.RemoveAll(this);
 	auto* ASC = BoundASC.Get();
 	auto* PS = ASC ? Cast<ANextgenonePlayerState>(ASC->GetOwnerActor()) : nullptr;
-	GameplayInput->ShutdownInput();
-	CharacterStateMachine->SuspendResources();
-	UnbindGameplay();
+	ReleaseGameplayResources();
+	if (HasAuthority() && IsValid(PS)) PS->ReleaseAvatar(this);
 	Super::EndPlay(Reason);
 	if (HasAuthority() && IsValid(PS) && Reason == EEndPlayReason::Destroyed) PS->ResumePendingLife(this);
 }
