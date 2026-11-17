@@ -11,7 +11,7 @@ UNGLaserSightComponent::UNGLaserSightComponent()
 	SetSpecularScale(0.f);
 	SetAffectReflection(false);
 	SetLightColor(FLinearColor::Red);
-	//SetAttenuationRadius(10000.f);
+	SetAttenuationRadius(10000.f);
 	SetOuterConeAngle(0.2f);
 	SetCastShadows(false);
 	SetVisibility(false);

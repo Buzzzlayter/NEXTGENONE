@@ -47,9 +47,8 @@ void ANGWeaponActor::UpdateAimPresentation(const FVector& ViewOrigin, const FVec
 	}
 
 	FHitResult Hit;
-	const FVector PreviewEnd = Start + (End - Start).GetClampedToMaxSize(Definition->Range);
+	const FVector PreviewEnd = Start + (End - Start).GetClampedToMaxSize(LaserSight->AttenuationRadius);
 	const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, Start, PreviewEnd, ECC_Visibility, Params);
-	LaserSight->SetAttenuationRadius(Definition->Range);
 	LaserSight->SetTargetPoint(bBlocked ? Hit.ImpactPoint : PreviewEnd);
 	LaserSight->SetVisibility(true);
 }
