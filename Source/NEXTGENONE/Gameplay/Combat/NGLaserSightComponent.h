@@ -8,6 +8,7 @@ class NEXTGENONE_API UNGLaserSightComponent : public USpotLightComponent
 {
 	GENERATED_BODY()
 public:
+	static constexpr float MaxProjectionDistance = 10000.f;
 	UNGLaserSightComponent();
 	void SetTargetPoint(const FVector& Point);
 };
