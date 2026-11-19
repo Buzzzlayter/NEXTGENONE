@@ -11,7 +11,7 @@ UNGLaserSightComponent::UNGLaserSightComponent()
 	SetSpecularScale(0.f);
 	SetAffectReflection(false);
 	SetLightColor(FLinearColor::Red);
-	SetAttenuationRadius(10000.f);
+	SetAttenuationRadius(MaxProjectionDistance);
 	SetOuterConeAngle(0.2f);
 	SetCastShadows(false);
 	SetVisibility(false);
@@ -19,6 +19,8 @@ UNGLaserSightComponent::UNGLaserSightComponent()
 
 void UNGLaserSightComponent::SetTargetPoint(const FVector& Point)
 {
+	const FVector ToTarget = Point - GetComponentLocation();
+	SetAttenuationRadius(FMath::Min(MaxProjectionDistance, static_cast<float>(ToTarget.Size()) + 25.f));
 	if (!IsUsingAbsoluteRotation()) SetAbsolute(false, true, true);
-	SetWorldRotation((Point - GetComponentLocation()).Rotation());
+	SetWorldRotation(ToTarget.Rotation());
 }

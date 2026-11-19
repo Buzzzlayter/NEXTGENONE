@@ -47,10 +47,11 @@ void ANGWeaponActor::UpdateAimPresentation(const FVector& ViewOrigin, const FVec
 	}
 
 	FHitResult Hit;
-	const FVector PreviewEnd = Start + (End - Start).GetClampedToMaxSize(LaserSight->AttenuationRadius);
-	const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, Start, PreviewEnd, ECC_Visibility, Params);
-	LaserSight->SetTargetPoint(bBlocked ? Hit.ImpactPoint : PreviewEnd);
-	LaserSight->SetVisibility(true);
+	const FVector LaserOrigin = LaserSight->GetComponentLocation();
+	const FVector PreviewEnd = Start + (End - Start).GetSafeNormal() * UNGLaserSightComponent::MaxProjectionDistance;
+	const bool bHitSurface = GetWorld()->LineTraceSingleByChannel(Hit, LaserOrigin, PreviewEnd, ECC_Visibility, Params);
+	if (bHitSurface) LaserSight->SetTargetPoint(Hit.ImpactPoint);
+	LaserSight->SetVisibility(bHitSurface);
 }
 
 void ANGWeaponActor::SetLaserSightVisible(bool bVisible)
