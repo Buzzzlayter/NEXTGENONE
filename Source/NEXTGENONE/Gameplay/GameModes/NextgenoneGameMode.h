@@ -21,9 +21,6 @@ public:
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	UPROPERTY(EditDefaultsOnly, Category="NEXTGENONE|Respawn", meta=(ClampMin="0.1")) float RespawnDelay = 3.f;
 	UPROPERTY(EditDefaultsOnly, Category="NEXTGENONE|Respawn", meta=(ClampMin="1")) float CorpseLifetime = 15.f;
-	uint8 GetDefaultTeamId(const AController& Controller) const;
-	UPROPERTY(EditDefaultsOnly, Category="NEXTGENONE|Teams", meta=(ClampMax="254")) uint8 PlayerTeamId = 0;
-	UPROPERTY(EditDefaultsOnly, Category="NEXTGENONE|Teams", meta=(ClampMax="254")) uint8 BotTeamId = 1;
 
 	UPROPERTY(EditDefaultsOnly, Category="NEXTGENONE|Classes")
 	TSoftClassPtr<APawn> GameplayCharacterClass;
@@ -31,6 +28,10 @@ public:
 	TSoftClassPtr<APlayerController> GameplayControllerClass;
 	UPROPERTY(EditDefaultsOnly, Category="NEXTGENONE|Classes")
 	TSoftClassPtr<AHUD> GameplayHUDClass;
+
+protected:
+	virtual void InitStartSpot_Implementation(AActor* StartSpot, AController* NewPlayer) override;
+
 private:
 	void ScheduleRespawn(APawn* DeadPawn);
 	void ClearRespawn(AController* Controller);

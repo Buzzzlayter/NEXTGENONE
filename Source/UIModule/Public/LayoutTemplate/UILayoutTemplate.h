@@ -51,7 +51,7 @@ public:
 	const TMap<FGameplayTag, UWidget*>& GetPlaceholders();
 
 protected:
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(EditAnywhere)
 	ELayoutLayer Layer = ELayoutLayer::Content;
 
 	UPROPERTY(EditAnywhere)
