@@ -12,6 +12,12 @@ class UStaticMesh;
 class USoundBase;
 class UNiagaraSystem;
 
+struct FNGWeaponAmmoOption
+{
+	TSoftClassPtr<UNGInventoryItemDefinition> ItemClass;
+	FGameplayTag LoadedTag;
+};
+
 UCLASS(BlueprintType, Blueprintable)
 class NEXTGENONE_API UNGWeaponDefinition : public UNGEquipmentDefinition
 {
@@ -21,6 +27,7 @@ public:
 	virtual bool ValidateDefinition(FString& Error) const override;
 	virtual bool ValidateItemDefinition(const UNGInventoryItemDefinition& Item, FString& Error) const override;
 	virtual void ResolveResources(TArray<FNGEquipmentAbilityGrant>& OutAbilities, TArray<TSubclassOf<UGameplayEffect>>& OutEffects) const override;
+	virtual void GetReloadAmmoOptions(TArray<FNGWeaponAmmoOption>& OutOptions) const;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Ammo") TSoftClassPtr<UNGInventoryItemDefinition> AmmoItemClass;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics") TObjectPtr<USoundBase> FireSound;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics|Niagara") TObjectPtr<UNiagaraSystem> MuzzleFX;
@@ -33,6 +40,7 @@ public:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Cosmetics|Niagara") FName ShellEjectFXSocket=TEXT("ShellEject");
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) EALSOverlayState Overlay = EALSOverlayState::Default;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) bool bAutomatic = false;
+	UPROPERTY(EditDefaultsOnly, Category="Ammo") bool bAllowAimWhileReloading = false;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta=(ClampMin="0.1")) float ReloadDuration = 1.4f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TObjectPtr<UAnimSequence> WeaponFireAnimation;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly) TObjectPtr<UAnimSequence> WeaponReloadAnimation;

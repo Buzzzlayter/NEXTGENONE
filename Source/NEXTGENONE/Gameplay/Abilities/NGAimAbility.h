@@ -24,6 +24,8 @@ class NEXTGENONE_API UNGAimAbility : public UNGGameplayAbilityFromWeapon
 	GENERATED_BODY()
 public:
 	UNGAimAbility();
+	virtual bool CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+		const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const override;
 	virtual void ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
 		FGameplayAbilityActivationInfo Activation, const FGameplayEventData* Event) override;
 	virtual void EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
@@ -35,6 +37,7 @@ private:
 	TWeakObjectPtr<UNGAimComponent> AimSource;
 	TWeakObjectPtr<ANGWeaponActor> AimingWeapon;
 	void AimUpdated();
+	bool CanAimWhileReloading(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info) const;
 	UFUNCTION() void OnAimInputReleased(float TimeHeld);
 	void BlockingTagChanged(FGameplayTag Tag, int32 Count);
 };

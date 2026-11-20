@@ -44,11 +44,12 @@ protected:
 	virtual void PlayFireEffects_Implementation(UNGWeaponDefinition* Definition, FVector Start, FVector End);
 	UFUNCTION(BlueprintNativeEvent, Category="Weapon|Presentation") void PlayReloadEffects(UNGWeaponDefinition* Definition);
 	virtual void PlayReloadEffects_Implementation(UNGWeaponDefinition* Definition);
+	bool ResolveShotPath(const FVector& ViewOrigin, const FVector& ViewDirection, const UNGWeaponDefinition& Definition,
+		FVector& OutStart, FVector& OutEnd, FCollisionQueryParams& Params) const;
+	void NotifyProjectileShot(UNGWeaponDefinition* Definition, const FVector& Start, const FVector& End);
 private:
 	APawn* GetPawn() const;
 	bool HasWeaponContext() const;
-	bool ResolveShotPath(const FVector& ViewOrigin, const FVector& ViewDirection, const UNGWeaponDefinition& Definition,
-		FVector& OutStart, FVector& OutEnd, FCollisionQueryParams& Params) const;
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize Start, FVector_NetQuantize End, bool bHit, int32 ShotId, UNGWeaponDefinition* Definition);
 	int32 ShotSerial = 0;
 };

@@ -2,6 +2,7 @@
 #include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Gameplay/Combat/NGWeaponActor.h"
+#include "Gameplay/Combat/NGWeaponDefinition.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
@@ -25,9 +26,21 @@ UNGAimAbility::UNGAimAbility()
 	ActivationBlockedTags.AddTag(TAG_NGActivatingItem);
 	ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
-	ActivationBlockedTags.AddTag(TAG_NGReloadActive);
 	ActivationBlockedTags.AddTag(TAG_NGRollActive);
 	ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
+}
+
+bool UNGAimAbility::CanActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* RelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, Info, SourceTags, TargetTags, RelevantTags)) return false;
+	return !Info->AbilitySystemComponent->HasMatchingGameplayTag(TAG_NGReloadActive) || CanAimWhileReloading(Handle, Info);
+}
+
+bool UNGAimAbility::CanAimWhileReloading(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info) const
+{
+	FNGWeaponAbilityContext Context;
+	return ResolveWeaponContext(Handle, Info, Context) && Context.Definition->bAllowAimWhileReloading;
 }
 
 void UNGAimAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
@@ -96,7 +109,10 @@ void UNGAimAbility::AimUpdated()
 
 void UNGAimAbility::BlockingTagChanged(FGameplayTag Tag, int32 Count)
 {
-	if (IsActive() && ((Count > 0 && Tag.MatchesAny(ActivationBlockedTags)) || (Tag == TAG_NGWeaponAiming && Count == 0)))
+	if (!IsActive()) return;
+	const bool bReloadBlocksAim = Count > 0 && Tag == TAG_NGReloadActive
+		&& !CanAimWhileReloading(CurrentSpecHandle, CurrentActorInfo);
+	if (bReloadBlocksAim || (Count > 0 && Tag.MatchesAny(ActivationBlockedTags)) || (Tag == TAG_NGWeaponAiming && Count == 0))
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 

@@ -12,6 +12,8 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGMantleActive, "State.Action.Mantle");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGMovementAbility, "Ability.Type.Movement");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadActive, "State.Action.Reload");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGMagazineAmmo, "Weapon.MagazineAmmo");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGRocketLoadedAmmo, "Weapon.LoadedAmmo.Rocket");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGRocketLoadedAirburst, "Weapon.LoadedAmmo.Rocket.Airburst");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGReserveAmmo, "Weapon.ReserveAmmo");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputInteract, "Input.Interaction.Interact");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPing, "Input.Ping");

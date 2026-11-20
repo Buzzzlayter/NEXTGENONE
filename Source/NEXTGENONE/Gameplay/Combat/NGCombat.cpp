@@ -69,8 +69,14 @@ int32 UNGCombatComponent::GetReserveAmmo() const
 	const auto* Weapon = GetWeaponActor();
 	const auto* Definition = Weapon ? Weapon->GetDefinition() : nullptr;
 	const auto* Inventory = BoundInventory.Get();
-	const auto AmmoClass = Definition ? Definition->AmmoItemClass.LoadSynchronous() : nullptr;
-	return Inventory && AmmoClass ? Inventory->GetTotalItemCountByDefinition(AmmoClass) : 0;
+	if (!Inventory || !Definition) return 0;
+	TArray<FNGWeaponAmmoOption> AmmoOptions;
+	Definition->GetReloadAmmoOptions(AmmoOptions);
+	int64 Total = 0;
+	for (const auto& Option : AmmoOptions)
+		if (auto* AmmoClass = Option.ItemClass.LoadSynchronous())
+			Total += Inventory->GetTotalItemCountByDefinition(AmmoClass);
+	return static_cast<int32>(FMath::Min<int64>(Total, MAX_int32));
 }
 void UNGCombatComponent::BeginPlay()
 {

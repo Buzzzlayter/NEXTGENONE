@@ -1,4 +1,5 @@
 #include "Gameplay/Abilities/NGWeaponAbilities.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "Gameplay/Combat/NGWeaponActor.h"
 #include "Gameplay/Combat/NGWeaponDefinition.h"
 #include "Gameplay/Combat/NGWeaponTargetData.h"
@@ -19,6 +20,18 @@ namespace
 	{
 		const auto* Owner = Info ? Info->OwnerActor.Get() : nullptr;
 		return Owner ? Owner->FindComponentByClass<UNGInventoryManagerComponent>() : nullptr;
+	}
+
+	UClass* FindReloadAmmo(const UNGInventoryManagerComponent& Inventory, const TArray<FNGWeaponAmmoOption>& Options, FGameplayTag* OutLoadedTag = nullptr)
+	{
+		for (const auto& Option : Options)
+		{
+			auto* AmmoClass = Option.ItemClass.LoadSynchronous();
+			if (!AmmoClass || Inventory.GetTotalItemCountByDefinition(AmmoClass) <= 0) continue;
+			if (OutLoadedTag) *OutLoadedTag = Option.LoadedTag;
+			return AmmoClass;
+		}
+		return nullptr;
 	}
 }
 
@@ -70,8 +83,11 @@ void UNGReloadAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const 
 	const auto* Inventory = FindAbilityInventory(Info);
 	if (!Info || !Info->IsNetAuthority() || !Inventory || !ResolveWeaponContext(Handle, Info, Context)
 		|| !Context.Definition->ValidateDefinition(DefinitionError)
-		|| Context.Weapon->GetMagazineAmmo() >= Context.Definition->MagazineCapacity
-		|| Inventory->GetTotalItemCountByDefinition(Context.Definition->AmmoItemClass.LoadSynchronous()) <= 0
+		|| Context.Weapon->GetMagazineAmmo() >= Context.Definition->MagazineCapacity)
+	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	TArray<FNGWeaponAmmoOption> AmmoOptions;
+	Context.Definition->GetReloadAmmoOptions(AmmoOptions);
+	if (!FindReloadAmmo(*Inventory, AmmoOptions)
 		|| !ResolveWeaponContext(Handle, Info, Context) || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	if (!IsActive()) return;
@@ -105,14 +121,24 @@ bool UNGReloadAbility::CompleteReloadOnServer()
 	auto* Inventory = FindAbilityInventory(CurrentActorInfo);
 	if (!IsActive() || !CurrentActorInfo || !CurrentActorInfo->IsNetAuthority() || !Inventory
 		|| !ResolveWeaponContext(CurrentSpecHandle, CurrentActorInfo, Context)) return false;
-	UClass* AmmoClass = Context.Definition->AmmoItemClass.LoadSynchronous();
+	TArray<FNGWeaponAmmoOption> AmmoOptions;
+	Context.Definition->GetReloadAmmoOptions(AmmoOptions);
+	FGameplayTag LoadedTag;
+	UClass* AmmoClass = FindReloadAmmo(*Inventory, AmmoOptions, &LoadedTag);
 	if (!AmmoClass || !ResolveWeaponContext(CurrentSpecHandle, CurrentActorInfo, Context)) return false;
 	auto* Item = Context.Source->GetItem();
 	const int32 Amount = FMath::Min(FMath::Max(0, Context.Definition->MagazineCapacity - Context.Weapon->GetMagazineAmmo()),
 		Inventory->GetTotalItemCountByDefinition(AmmoClass));
 	if (Amount <= 0) return false;
-	return Inventory->ConsumeItemsByDefinition(AmmoClass, Amount, [Item, Amount]
+	return Inventory->ConsumeItemsByDefinition(AmmoClass, Amount, [Item, Amount, LoadedTag, &AmmoOptions]
 	{
+		for (const auto& Option : AmmoOptions)
+		{
+			if (!Option.LoadedTag.IsValid() || Option.LoadedTag == LoadedTag) continue;
+			if (const int32 Count = Item->GetStatTagStackCount(Option.LoadedTag); Count > 0)
+				Item->RemoveStatTagStack(Option.LoadedTag, Count);
+		}
+		if (LoadedTag.IsValid() && !Item->HasStatTag(LoadedTag)) Item->AddStatTagStack(LoadedTag, 1);
 		Item->AddStatTagStack(TAG_NGMagazineAmmo, Amount);
 	});
 }
@@ -146,6 +172,12 @@ void UNGFireAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	const bool bFired = ResolveWeaponContext(Handle, Info, Context) && Context.Weapon->FireOnServer(Origin, Direction);
 	if (bFired && IsActive() && ResolveWeaponContext(Handle, Info, Context) && Context.Definition->CharacterFireMontage)
 		Info->AbilitySystemComponent->PlayMontage(this, Activation, Context.Definition->CharacterFireMontage, 1.f);
+	if (bFired && IsActive() && ResolveWeaponContext(Handle, Info, Context)
+		&& Context.Weapon->GetMagazineAmmo() == 0)
+	{
+		if (auto* ASC = Cast<UNGAbilitySystemComponent>(Info->AbilitySystemComponent.Get()))
+			ASC->TryActivateAbilityByInputTag(TAG_NGReloadInput);
+	}
 	if (IsActive()) EndAbility(Handle, Info, Activation, true, !bFired);
 }
 

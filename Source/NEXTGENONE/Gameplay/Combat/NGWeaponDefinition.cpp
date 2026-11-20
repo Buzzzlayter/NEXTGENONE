@@ -34,6 +34,11 @@ bool UNGWeaponDefinition::ValidateDefinition(FString& Error) const
 	return true;
 }
 
+void UNGWeaponDefinition::GetReloadAmmoOptions(TArray<FNGWeaponAmmoOption>& OutOptions) const
+{
+	if (!AmmoItemClass.IsNull()) OutOptions.Add({AmmoItemClass, {}});
+}
+
 void UNGWeaponDefinition::ResolveResources(TArray<FNGEquipmentAbilityGrant>& OutAbilities, TArray<TSubclassOf<UGameplayEffect>>& OutEffects) const
 {
 	Super::ResolveResources(OutAbilities, OutEffects);
