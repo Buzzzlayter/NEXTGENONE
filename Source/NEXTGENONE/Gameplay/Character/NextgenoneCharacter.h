@@ -18,9 +18,10 @@ class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FNGHealthChanged, float, Health, float, MaxHealth);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FNGShieldChanged, float, Shield, float, MaxShield);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGDeathChanged, bool, bDead);
 
-UCLASS()
+UCLASS(PrioritizeCategories = ("Gameplay"))
 class NEXTGENONE_API ANextgenoneCharacter : public AALSCharacter, public IAbilitySystemInterface, public INGAbilitySystemAvatar
 {
 	GENERATED_BODY()
@@ -52,7 +53,11 @@ public:
 	UFUNCTION(BlueprintPure, Category="Gameplay") bool IsDead() const;
 	UFUNCTION(BlueprintPure, Category="Gameplay") float GetHealth() const;
 	UFUNCTION(BlueprintPure, Category="Gameplay") float GetMaxHealth() const;
+	UFUNCTION(BlueprintPure, Category="Gameplay") float GetShield() const;
+	UFUNCTION(BlueprintPure, Category="Gameplay") float GetMaxShield() const;
+	UFUNCTION(BlueprintPure, Category="Gameplay") float GetShieldSegmentPercent(int32 SegmentIndex, int32 SegmentCount) const;
 	UPROPERTY(BlueprintAssignable) FNGHealthChanged OnHealthChanged;
+	UPROPERTY(BlueprintAssignable) FNGShieldChanged OnShieldChanged;
 	UPROPERTY(BlueprintAssignable) FNGDeathChanged OnDeathChanged;
 	virtual bool CanInitializeGameplay() const override;
 	virtual bool CanReleaseGameplay() const override;
@@ -67,10 +72,13 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	FDelegateHandle HealthHandle;
 	FDelegateHandle MaxHealthHandle;
+	FDelegateHandle ShieldHandle;
+	FDelegateHandle MaxShieldHandle;
 	FDelegateHandle RagdollTagHandle;
 	void RagdollTagChanged(FGameplayTag Tag, int32 Count);
 	void RequestALSAbility(FGameplayTag InputTag);
 	void HealthChanged(const FOnAttributeChangeData& Data);
+	void ShieldChanged(const FOnAttributeChangeData& Data);
 	void StateChanged(FGameplayTag Previous, FGameplayTag Current);
 	void StateResourcesFailed();
 	void GameplayResourcesReady(AActor* Avatar);

@@ -1,6 +1,45 @@
 #include "Inventory/UIInventorySlotsList.h"
 #include "Inventory/UIInventorySlotWidget.h"
+#include "Components/UniformGridPanel.h"
 #include "Components/WrapBox.h"
+
+void UUIInventorySlotsList::SetSlotLayout(const FVector2D& Size, int32 Columns)
+{
+	SlotSize = Size;
+	if (!WrapBox) return;
+
+	Columns = FMath::Max(0, Columns);
+	const bool bColumnsChanged = SlotColumns != Columns;
+	SlotColumns = Columns;
+	if (SlotColumns > 0 && !FixedGrid)
+	{
+		FixedGrid = NewObject<UUniformGridPanel>(this);
+		FixedGrid->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		const FVector2D InnerSlotPadding = WrapBox->GetInnerSlotPadding();
+		FixedGrid->SetSlotPadding(FMargin(0.f, 0.f, static_cast<float>(InnerSlotPadding.X), static_cast<float>(InnerSlotPadding.Y)));
+		WrapBox->AddChildToWrapBox(FixedGrid);
+	}
+	else if (SlotColumns == 0 && FixedGrid)
+	{
+		FixedGrid->RemoveFromParent();
+		FixedGrid = nullptr;
+	}
+
+	for (int32 Index = 0; Index < InventorySlots.Num(); ++Index)
+	{
+		auto* SlotWidget = InventorySlots[Index].Get();
+		SlotWidget->SetSlotSize(SlotSize);
+		if (bColumnsChanged) AddSlotToLayout(SlotWidget, Index);
+	}
+}
+
+void UUIInventorySlotsList::AddSlotToLayout(UUIInventorySlotWidget* SlotWidget, int32 Index)
+{
+	if (FixedGrid)
+		FixedGrid->AddChildToUniformGrid(SlotWidget, Index / SlotColumns, Index % SlotColumns);
+	else
+		WrapBox->AddChildToWrapBox(SlotWidget);
+}
 
 void UUIInventorySlotsList::SetData(const TArray<FUIInventorySlotData>& InSlots, UObject* InOperationHandler)
 {
@@ -20,7 +59,8 @@ void UUIInventorySlotsList::SetData(const TArray<FUIInventorySlotData>& InSlots,
 			auto* SlotWidget = CreateWidget<UUIInventorySlotWidget>(GetOwningPlayer(), SlotClass);
 			if (!SlotWidget) return;
 			InventorySlots.Add(SlotWidget);
-			WrapBox->AddChildToWrapBox(SlotWidget);
+			SlotWidget->SetSlotSize(SlotSize);
+			AddSlotToLayout(SlotWidget, Index);
 		}
 		InventorySlots[Index]->SetData(InSlots[Index], InOperationHandler);
 	}
@@ -28,7 +68,8 @@ void UUIInventorySlotsList::SetData(const TArray<FUIInventorySlotData>& InSlots,
 }
 void UUIInventorySlotsList::NativeDestruct()
 {
-	if (WrapBox) WrapBox->ClearChildren();
+	if (FixedGrid) FixedGrid->ClearChildren();
+	else if (WrapBox) WrapBox->ClearChildren();
 	InventorySlots.Reset();
 	Super::NativeDestruct();
 }

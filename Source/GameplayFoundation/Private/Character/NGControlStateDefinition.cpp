@@ -47,7 +47,11 @@ FGameplayTag UNGControlStateDefinition::GetPresentationCueTag() const
 bool UNGControlStateDefinition::ValidateInputMappings(const UNGGameplayInputConfig* InputConfig, FString& Error) const
 {
 	if (MappingContexts.IsEmpty()) { Error.Reset(); return true; }
-	if (!InputConfig) { Error = TEXT("State mapping contexts require the Pawn's CharacterDefinition.InputConfig routes."); return false; }
+	if (!InputConfig)
+	{
+		Error = TEXT("Assign a Gameplay Input Config in the Pawn's CharacterDefinition > InputConfig.");
+		return false;
+	}
 	TSet<const UInputAction*> RoutedActions;
 	for (const auto& Route : InputConfig->NativeInputActions) if (Route.InputAction) RoutedActions.Add(Route.InputAction.Get());
 	for (const auto& Route : InputConfig->AbilityInputActions) if (Route.InputAction) RoutedActions.Add(Route.InputAction.Get());
@@ -57,7 +61,8 @@ bool UNGControlStateDefinition::ValidateInputMappings(const UNGGameplayInputConf
 		for (const auto& Mapping : Entry.MappingContext->GetMappings())
 			if (Mapping.Action && !RoutedActions.Contains(Mapping.Action.Get()))
 			{
-				Error = FString::Printf(TEXT("State context %s maps %s without a Native/GAS route in %s."), *Entry.MappingContext->GetName(), *Mapping.Action->GetName(), *InputConfig->GetName());
+				Error = FString::Printf(TEXT("%s maps %s. In %s, add this Input Action to AbilityInputActions with the ability's InputTag, or to NativeInputActions for a native action."),
+					*Entry.MappingContext->GetName(), *Mapping.Action->GetName(), *InputConfig->GetName());
 				return false;
 			}
 	}

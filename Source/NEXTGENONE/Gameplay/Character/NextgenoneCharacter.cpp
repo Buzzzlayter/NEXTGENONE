@@ -53,6 +53,22 @@ float ANextgenoneCharacter::GetMaxHealth() const
 	const auto* ASC = GetAbilitySystemComponent();
 	return ASC ? ASC->GetNumericAttribute(UNGHealthSet::GetMaxHealthAttribute()) : 0.f;
 }
+float ANextgenoneCharacter::GetShield() const
+{
+	const auto* ASC = GetAbilitySystemComponent();
+	return !IsDead() && ASC ? ASC->GetNumericAttribute(UNGHealthSet::GetShieldAttribute()) : 0.f;
+}
+float ANextgenoneCharacter::GetMaxShield() const
+{
+	const auto* ASC = GetAbilitySystemComponent();
+	return ASC ? ASC->GetNumericAttribute(UNGHealthSet::GetMaxShieldAttribute()) : 0.f;
+}
+float ANextgenoneCharacter::GetShieldSegmentPercent(int32 SegmentIndex, int32 SegmentCount) const
+{
+	const float MaxShield = GetMaxShield();
+	if (SegmentIndex < 0 || SegmentIndex >= SegmentCount || MaxShield <= 0.f) return 0.f;
+	return FMath::Clamp(GetShield() / MaxShield * SegmentCount - SegmentIndex, 0.f, 1.f);
+}
 bool ANextgenoneCharacter::CanInitializeGameplay() const
 {
 	return !IsActorBeingDestroyed() && !IsDead() && !CharacterStateMachine->HasResourceFailure();
@@ -92,11 +108,14 @@ void ANextgenoneCharacter::TryInitializeGameplay()
 	Combat->BindInventory(PS->Inventory);
 	HealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
 	MaxHealthHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
+	ShieldHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetShieldAttribute()).AddUObject(this, &ThisClass::ShieldChanged);
+	MaxShieldHandle = ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxShieldAttribute()).AddUObject(this, &ThisClass::ShieldChanged);
 	RagdollTagHandle = ASC->RegisterGameplayTagEvent(TAG_NGRagdollActive, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ThisClass::RagdollTagChanged);
 	RagdollTagChanged(TAG_NGRagdollActive, ASC->GetTagCount(TAG_NGRagdollActive));
 	// Startup effects run before delegate binding; observe their final health, including a lethal result.
-	FOnAttributeChangeData InitialHealth;
-	HealthChanged(InitialHealth);
+	FOnAttributeChangeData InitialVitals;
+	HealthChanged(InitialVitals);
+	ShieldChanged(InitialVitals);
 	CharacterStateMachine->NotifyGameplayReady(ASC);
 	RefreshEquipment();
 
@@ -129,9 +148,12 @@ void ANextgenoneCharacter::ReleaseGameplayResources()
 	{
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).Remove(HealthHandle);
 		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxHealthAttribute()).Remove(MaxHealthHandle);
+		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetShieldAttribute()).Remove(ShieldHandle);
+		ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetMaxShieldAttribute()).Remove(MaxShieldHandle);
 		ASC->RegisterGameplayTagEvent(TAG_NGRagdollActive, EGameplayTagEventType::NewOrRemoved).Remove(RagdollTagHandle);
 	}
 	HealthHandle.Reset(); MaxHealthHandle.Reset(); RagdollTagHandle.Reset();
+	ShieldHandle.Reset(); MaxShieldHandle.Reset();
 	GameplayInput->ShutdownInput();
 	Equipment->BindContext(nullptr, nullptr, nullptr);
 	CharacterStateMachine->SuspendResources();
@@ -302,6 +324,10 @@ void ANextgenoneCharacter::HealthChanged(const FOnAttributeChangeData& Data)
 	}
 	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
 }
+void ANextgenoneCharacter::ShieldChanged(const FOnAttributeChangeData&)
+{
+	if (GetAbilitySystemComponent()) OnShieldChanged.Broadcast(GetShield(), GetMaxShield());
+}
 void ANextgenoneCharacter::StateChanged(FGameplayTag Previous, FGameplayTag Current)
 {
 	const bool bNowDead = IsDead();
@@ -315,6 +341,7 @@ void ANextgenoneCharacter::StateChanged(FGameplayTag Previous, FGameplayTag Curr
 	}
 	if (Previous.MatchesTag(TAG_NGDead) != bNowDead) OnDeathChanged.Broadcast(bNowDead);
 	OnHealthChanged.Broadcast(GetHealth(), GetMaxHealth());
+	OnShieldChanged.Broadcast(GetShield(), GetMaxShield());
 }
 void ANextgenoneCharacter::StateResourcesFailed()
 {

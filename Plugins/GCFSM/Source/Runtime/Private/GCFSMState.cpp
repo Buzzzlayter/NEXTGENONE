@@ -116,9 +116,10 @@ void UGCFSMState::PrivateExit(FName event)
 	// First of all, terminate all submachines
 	for (auto& fsm : makeCopy(FSMs))
 	{
+		if (!IsValid(fsm.Value) || GetFSM(fsm.Key) != fsm.Value.Get()) continue;
 		// Sub-FSMs do not get the event name
 		fsm.Value->ExitActiveState(NAME_None);
-		fsm.Value->Stop();
+		if (IsValid(fsm.Value) && GetFSM(fsm.Key) == fsm.Value.Get()) fsm.Value->Stop();
 	}
 	FSMs.Empty();
 
@@ -128,15 +129,19 @@ void UGCFSMState::PrivateExit(FName event)
 
 UGCFSMBasicState::TickResult UGCFSMState::PrivateTick(float deltaTime)
 {
+	if (!IsValid(GetRootState()) || !GetContextObject()) return TickResult::NoProcess;
 	const float rootTime = GetRootTime();
 	auto result = Super::PrivateTick(deltaTime);
 
 	// call customization point
 	Tick(deltaTime);
+	if (!IsValid(this) || !GetContextObject()) return TickResult::NoProcess;
 
 	for (auto& fsm : makeCopy(FSMs))
 	{
-		fsm.Value->Tick(rootTime, deltaTime);
+		if (!IsValid(this) || !GetContextObject()) return TickResult::NoProcess;
+		if (IsValid(fsm.Value) && GetFSM(fsm.Key) == fsm.Value.Get())
+			fsm.Value->Tick(rootTime, deltaTime);
 	}
 
 	return result;

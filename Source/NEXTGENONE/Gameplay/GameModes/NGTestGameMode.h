@@ -22,6 +22,7 @@ private:
 	int32 ActionSlot = INDEX_NONE;
 	int32 ExpectedAmmo = 0;
 	float ExpectedHealth = 0.f;
+	float ExpectedShield = 0.f;
 	float ShotDamage = 0.f;
 	float ShotWait = 0.f;
 	TWeakObjectPtr<ANextgenoneCharacter> Corpse;

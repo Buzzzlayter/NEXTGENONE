@@ -3,7 +3,7 @@
 #include "Character/ALSPlayerController.h"
 #include "NextgenonePlayerController.generated.h"
 
-UCLASS()
+UCLASS(PrioritizeCategories = ("ALS", "ALS|Input"))
 class NEXTGENONE_API ANextgenonePlayerController : public AALSPlayerController
 {
     GENERATED_BODY()

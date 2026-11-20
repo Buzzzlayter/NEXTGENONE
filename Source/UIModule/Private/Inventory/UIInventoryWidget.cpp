@@ -9,6 +9,11 @@
 #include "Components/SizeBox.h"
 #include "Framework/Application/SlateApplication.h"
 
+void UUIInventoryWidget::SetSlotLayout(const FVector2D& Size, int32 Columns)
+{
+	if (SlotsList) SlotsList->SetSlotLayout(Size, Columns);
+}
+
 void UUIInventoryWidget::SetInventoryData(FText Name, const TArray<FUIInventorySlotData>& InSlots, UObject* Handler)
 {
 	if (InSlots.IsEmpty()) { ReleasePress(); CancelOwnedDrag(); }

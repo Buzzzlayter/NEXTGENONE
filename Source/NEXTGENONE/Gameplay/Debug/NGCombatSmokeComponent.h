@@ -14,6 +14,7 @@ struct FNGCombatSmokeRequest
 	UPROPERTY() TObjectPtr<ANextgenoneCharacter> Shooter;
 	UPROPERTY() TObjectPtr<ANextgenoneCharacter> Target;
 	UPROPERTY() float ExpectedHealth = 0.f;
+	UPROPERTY() float ExpectedShield = 0.f;
 	UPROPERTY() int32 ExpectedAmmo = INDEX_NONE;
 	UPROPERTY() int32 ActionSlot = 0;
 };

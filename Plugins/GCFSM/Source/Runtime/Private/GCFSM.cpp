@@ -150,7 +150,7 @@ void UGCFSM::Tick(float rootTime, float deltaTime)
 {
 	if (activeState && IsValid(activeState))
 	{
-		while (eventQueue.Num() > 0)
+		while (IsValid(this) && IsValid(activeState) && eventQueue.Num() > 0)
 		{
 			auto event = eventQueue[0];
 			eventQueue.RemoveAt(0);
@@ -169,11 +169,6 @@ void UGCFSM::Tick(float rootTime, float deltaTime)
 					GC_VLOG_FSM(Verbose, TEXT("event %s executes a transition"), *event.name.ToString());
 					ProcessTransition(event.name);
 
-					// if we didn't reach a new state, return immediately, otherwise proceed with ticking the new state
-					if (activeState == nullptr)
-					{
-						return;
-					}
 				}
 				else if (auto handler = (event.triggerInternalEvents ? activeState->GetInternalEventHandler(event.name) : nullptr))
 				{
@@ -188,7 +183,12 @@ void UGCFSM::Tick(float rootTime, float deltaTime)
 			}
 		}
 
-		switch (activeState->PrivateTick(deltaTime))
+		if (!IsValid(this) || !IsValid(activeState)) return;
+		auto* TickedState = activeState.Get();
+		const auto TickResult = TickedState->PrivateTick(deltaTime);
+		if (!IsValid(this) || !IsValid(activeState) || activeState.Get() != TickedState) return;
+
+		switch (TickResult)
 		{
 		case UGCFSMBasicState::TickResult::ProcessTickEvent:
 			latentExecutor.ProcessTick(deltaTime);

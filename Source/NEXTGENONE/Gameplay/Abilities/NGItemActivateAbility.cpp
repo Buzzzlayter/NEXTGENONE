@@ -139,7 +139,8 @@ void UNGActivateMedkitAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle
     ActivationCount = ActivationInventory->GetCount(GetAssociatedItem());
     ActivationEffect = ActivationASC->ApplyGameplayEffectToSelf(GetDefault<UNGActivatingItemEffect>(), 1.f, ActivationASC->MakeEffectContext());
     if (!ActivationEffect.IsValid()) { CancelActivation(); return; }
-    HealthHandle = ActivationASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HealthChanged);
+    HealthHandle = ActivationASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).AddUObject(this, &ThisClass::VitalChanged);
+    ShieldHandle = ActivationASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetShieldAttribute()).AddUObject(this, &ThisClass::VitalChanged);
     TagHandle = ActivationASC->RegisterGenericGameplayTagEvent().AddUObject(this, &ThisClass::BlockingTagChanged);
     ActivationInventory->OnInventoryChanged.AddUniqueDynamic(this, &ThisClass::InventoryChanged);
     auto* Task = UAbilityTask_WaitDelay::WaitDelay(this, Medical->ActivationDuration);
@@ -154,7 +155,7 @@ void UNGActivateMedkitAbility::InventoryChanged()
     if (!HasCurrentItem() || !ActivationInventory.IsValid() || ActivationInventory->GetSlotIndex(GetAssociatedItem()) != ActivationSlot
         || ActivationInventory->GetCount(GetAssociatedItem()) != ActivationCount) CancelActivation();
 }
-void UNGActivateMedkitAbility::HealthChanged(const FOnAttributeChangeData& Change)
+void UNGActivateMedkitAbility::VitalChanged(const FOnAttributeChangeData& Change)
 {
     if (Change.NewValue < Change.OldValue) CancelActivation();
 }
@@ -191,11 +192,13 @@ void UNGActivateMedkitAbility::EndAbility(FGameplayAbilitySpecHandle Handle, con
     if (auto* ASC = ActivationASC.Get())
     {
         ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetHealthAttribute()).Remove(HealthHandle);
+        ASC->GetGameplayAttributeValueChangeDelegate(UNGHealthSet::GetShieldAttribute()).Remove(ShieldHandle);
         ASC->RegisterGenericGameplayTagEvent().Remove(TagHandle);
         if (ActivationEffect.IsValid()) ASC->RemoveActiveGameplayEffect(ActivationEffect);
     }
     if (ActivationInventory.IsValid()) ActivationInventory->OnInventoryChanged.RemoveDynamic(this, &ThisClass::InventoryChanged);
     ActivationASC.Reset(); ActivationInventory.Reset(); ActivationAvatar.Reset(); HealthHandle.Reset(); TagHandle.Reset(); ActivationSlot = INDEX_NONE;
+    ShieldHandle.Reset();
     ActivationEffect.Invalidate();
     Super::EndAbility(Handle, Info, Activation, bReplicateEnd, bCancelled);
 }

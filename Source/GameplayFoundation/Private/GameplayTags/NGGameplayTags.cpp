@@ -20,6 +20,7 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPing, "Input.Ping");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGPingCooldown, "Cooldown.Ping");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractEvent, "Event.Interaction.Request");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputAim, "Input.Aim");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputCameraShoulder, "Input.Camera.Shoulder");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGWeaponAiming, "State.Weapon.Aiming");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputRoll, "Input.Roll");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputRagdoll, "Input.Ragdoll");

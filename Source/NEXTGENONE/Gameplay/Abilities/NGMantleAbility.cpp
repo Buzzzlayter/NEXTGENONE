@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
+#include "GameplayEffectComponents/TargetTagsGameplayEffectComponent.h"
 
 UNGALSMantleExecutor::UNGALSMantleExecutor()
 {
@@ -135,6 +136,16 @@ void UNGALSMantleExecutor::EndPlay(EEndPlayReason::Type Reason)
 	Super::EndPlay(Reason);
 }
 
+UNGMantleStateEffect::UNGMantleStateEffect()
+{
+	DurationPolicy = EGameplayEffectDurationType::Infinite;
+	FInheritedTagContainer Tags;
+	Tags.AddTag(TAG_NGMantleActive);
+	auto* TargetTags = CreateDefaultSubobject<UTargetTagsGameplayEffectComponent>(TEXT("MantleTags"));
+	GEComponents.Add(TargetTags);
+	TargetTags->SetAndApplyTargetTagChanges(Tags);
+}
+
 UNGMantleAbility::UNGMantleAbility()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -142,7 +153,6 @@ UNGMantleAbility::UNGMantleAbility()
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyTermination;
 	ActivationBlockedTags.AddTag(TAG_NGDead); ActivationBlockedTags.AddTag(TAG_NGDashActive);
 	ActivationBlockedTags.AddTag(TAG_NGMantleActive);
-	ActivationOwnedTags.AddTag(TAG_NGMantleActive);
 	ActivationBlockedTags.AddTag(TAG_NGJetpackActive);
 	ActivationBlockedTags.AddTag(TAG_NGRollActive); ActivationBlockedTags.AddTag(TAG_NGRagdollActive);
 	FGameplayTagContainer Tags; Tags.AddTag(TAG_NGMovementAbility); SetAssetTags(Tags);
@@ -160,9 +170,25 @@ void UNGMantleAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const 
 	auto* Component = Info && Info->AvatarActor.IsValid() ? Info->AvatarActor->FindComponentByClass<UNGALSMantleExecutor>() : nullptr;
 	if (!Component || !Info->IsNetAuthority() || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
+	if (!IsActive()) return;
 	ExecutionComponent = Component;
 	Component->OnMantleFinished.AddDynamic(this, &ThisClass::Finished);
-	if (!Component->StartFromAbility()) EndAbility(Handle, Info, Activation, true, true);
+	if (!Component->StartFromAbility())
+	{
+		EndAbility(Handle, Info, Activation, true, true);
+		return;
+	}
+	if (!IsActive()) return;
+
+	const auto ApplyingASC = Info->AbilitySystemComponent;
+	const auto Applied = ApplyGameplayEffectToOwner(Handle, Info, Activation, GetDefault<UNGMantleStateEffect>(), GetAbilityLevel(Handle, Info));
+	if (!IsActive())
+	{
+		if (auto* ASC = ApplyingASC.Get(); ASC && Applied.IsValid()) ASC->RemoveActiveGameplayEffect(Applied);
+		return;
+	}
+	MantleEffect = Applied;
+	if (!MantleEffect.IsValid()) EndAbility(Handle, Info, Activation, true, true);
 }
 void UNGMantleAbility::Finished(bool bCancelled)
 { EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, bCancelled); }
@@ -176,5 +202,9 @@ void UNGMantleAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const FGame
 		Component->OnMantleFinished.RemoveDynamic(this, &ThisClass::Finished);
 		if (bCancelled) Component->CancelFromAbility();
 	}
+	const auto Effect = MantleEffect;
+	MantleEffect.Invalidate();
+	if (auto* ASC = Info ? Info->AbilitySystemComponent.Get() : nullptr; ASC && Effect.IsValid())
+		ASC->RemoveActiveGameplayEffect(Effect);
 	Super::EndAbility(Handle, Info, Activation, bReplicateEnd, bCancelled);
 }

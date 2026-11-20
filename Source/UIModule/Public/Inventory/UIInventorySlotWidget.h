@@ -9,6 +9,7 @@
 
 class UButton;
 class UImage;
+class USizeBox;
 class UTextBlock;
 
 DECLARE_DELEGATE_ThreeParams(FInventoryDragDetected, const FGeometry&, const FPointerEvent&, UDragDropOperation*&);
@@ -24,6 +25,7 @@ public:
 	FKey GetSecondaryActionButton() const { return SecondaryActionButton; }
 	bool IsItemDragHidden() const { return bItemDragHidden; }
 	void SetItemDragHidden(bool bHidden);
+	void SetSlotSize(const FVector2D& Size);
 	UFUNCTION(BlueprintCallable, Category="Inventory") void SetData(const FUIInventorySlotData& InData, UObject* InOperationHandler);
 	UFUNCTION(BlueprintPure, Category="Inventory") bool ContainsItem() const { return IsValid(Data.Item) && Data.Count > 0; }
 	UFUNCTION(BlueprintCallable, Category="Inventory") bool RequestOperation(EUIInventoryOperation Operation, int32 Amount=0);
@@ -40,6 +42,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|DragDrop") FKey DragButton = EKeys::LeftMouseButton;
 	UPROPERTY(EditDefaultsOnly, Category="Inventory") FKey SecondaryActionButton = EKeys::RightMouseButton;
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UButton> btn_Root;
+	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<USizeBox> SlotSizeBox;
 	/** Optional item image. Updated for every slot snapshot, including empty slots. */
 	UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UImage> img_item;
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> txt_name;

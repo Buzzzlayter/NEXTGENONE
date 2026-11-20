@@ -246,9 +246,20 @@ bool UNGPlayerInventoryManagerComponent::RequestActivationItem(UNGInventoryItemI
 
 bool UNGPlayerInventoryManagerComponent::RequestActivationSlot(int32 ActionSlot)
 {
-	const int32 Slot = FindSlotByTag(TAG_NGSlotAction, ActionSlot);
-	auto* Item = GetItemAtSlot(Slot);
-	return Item && RequestActivationItem(Item);
+	const bool bAuthority = GetOwner()->HasAuthority();
+	if (!bAuthority && !IsLocalController()) return false;
+	auto* CurrentPawn = GetInventoryPawn();
+	if (!CurrentPawn || ActionSlot < 0) return false;
+	if (bAuthority) ServerActivateActionSlot_Implementation(CurrentPawn, ActionSlot);
+	else ServerActivateActionSlot(CurrentPawn, ActionSlot);
+	return true;
+}
+
+void UNGPlayerInventoryManagerComponent::ServerActivateActionSlot_Implementation(APawn* ExpectedPawn, int32 ActionSlot)
+{
+	if (!ExpectedPawn || ExpectedPawn != GetInventoryPawn()) return;
+	const int32 SlotIndex = FindSlotByTag(TAG_NGSlotAction, ActionSlot);
+	if (auto* Item = GetItemAtSlot(SlotIndex)) ActivateItemOnServer(Item);
 }
 
 void UNGPlayerInventoryManagerComponent::ServerActivationItem_Implementation(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* Item, int32 ExpectedSlot)

@@ -6,7 +6,7 @@
 class UNGAIBehavior;
 
 /** Shared character gameplay with bot-specific authoring settings. */
-UCLASS(PrioritizeCategories = ("Team"))
+UCLASS(PrioritizeCategories = ("AI", "Team", "Gameplay"))
 class NEXTGENONE_API ANGBotCharacter : public ANextgenoneCharacter
 {
 	GENERATED_BODY()

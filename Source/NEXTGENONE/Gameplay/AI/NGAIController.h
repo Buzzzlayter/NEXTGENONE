@@ -13,14 +13,14 @@ class UNGAIBehavior;
 struct FGameplayTag;
 
 /** Project bot controller. Gameplay stays on the existing Character and PlayerState. */
-UCLASS()
+UCLASS(PrioritizeCategories = ("Bot", "Bot|Perception"))
 class NEXTGENONE_API ANGAIController : public AAIController
 {
 	GENERATED_BODY()
 
 public:
 	ANGAIController();
-	UPROPERTY(EditAnywhere, BlueprintGetter=GetBehaviorClass, Category="AI|Behavior") TSubclassOf<UNGAIBehavior> BehaviorClass;
+	UPROPERTY(EditAnywhere, BlueprintGetter=GetBehaviorClass, Category="Bot", meta=(DisplayPriority="1")) TSubclassOf<UNGAIBehavior> BehaviorClass;
 	UFUNCTION(BlueprintGetter, Category="AI|Behavior") TSubclassOf<UNGAIBehavior> GetBehaviorClass() const;
 	UNGAIMemoryComponent* GetMemory() const { return Memory; }
 
@@ -40,9 +40,9 @@ protected:
 	virtual void OnUnPossess() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 private:
-	UPROPERTY(VisibleAnywhere, Category="AI") TObjectPtr<UNGAIMemoryComponent> Memory;
-	UPROPERTY(VisibleAnywhere, Instanced, Category="AI|Perception") TObjectPtr<UAISenseConfig_Sight> SightConfig;
-	UPROPERTY(VisibleAnywhere, Instanced, Category="AI|Perception") TObjectPtr<UAISenseConfig_Hearing> HearingConfig;
+	UPROPERTY(VisibleAnywhere, Category="Bot") TObjectPtr<UNGAIMemoryComponent> Memory;
+	UPROPERTY(VisibleAnywhere, Instanced, Category="Bot|Perception") TObjectPtr<UAISenseConfig_Sight> SightConfig;
+	UPROPERTY(VisibleAnywhere, Instanced, Category="Bot|Perception") TObjectPtr<UAISenseConfig_Hearing> HearingConfig;
 	TWeakObjectPtr<UNGCharacterStateMachineComponent> ObservedCharacterFSM;
 	FDelegateHandle StateChangedHandle;
 	FDelegateHandle ResourcesReadyHandle;
