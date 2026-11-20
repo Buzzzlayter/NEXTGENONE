@@ -1,10 +1,10 @@
 #include "Gameplay/Teams/NGTeamComponent.h"
 
-#include "Gameplay/GameModes/NextgenoneGameMode.h"
 #include "GameFramework/PlayerState.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
-#include "Engine/World.h"
+#include "Net/Core/Misc/NetConditionGroupManager.h"
 #include "Net/UnrealNetwork.h"
 
 UNGTeamComponent::UNGTeamComponent()
@@ -25,30 +25,52 @@ UNGTeamComponent* UNGTeamComponent::Find(const AActor* Actor)
 ETeamAttitude::Type UNGTeamComponent::GetAttitudeTowards(const AActor* Other) const
 {
 	const auto* Team = Find(Other);
-	if (!Team || GetTeamId() == FGenericTeamId::NoTeam || Team->GetTeamId() == FGenericTeamId::NoTeam)
+	if (!Team || TeamName.IsNone() || Team->TeamName.IsNone())
 		return ETeamAttitude::Neutral;
-	return GetTeamId() == Team->GetTeamId() ? ETeamAttitude::Friendly : ETeamAttitude::Hostile;
+	return TeamName == Team->TeamName ? ETeamAttitude::Friendly : ETeamAttitude::Hostile;
 }
 
 void UNGTeamComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	if (!GetOwner()->HasAuthority() || TeamId != FGenericTeamId::NoTeam.GetId()) return;
-	const auto* State = Cast<APlayerState>(GetOwner());
-	const auto* Controller = State ? Cast<AController>(State->GetOwner()) : Cast<AController>(GetOwner());
-	const auto* Mode = GetWorld()->GetAuthGameMode<ANextgenoneGameMode>();
-	if (Controller && Mode) SetTeamId(FGenericTeamId(Mode->GetDefaultTeamId(*Controller)));
+	if (!GetOwner()->HasAuthority() || TeamName.IsNone()) return;
+	if (UE::Net::IsSpecialNetConditionGroup(TeamName))
+	{
+		SetTeamName(NAME_None);
+		return;
+	}
+	if (auto* Player = GetOwningPlayerController()) Player->IncludeInNetConditionGroup(TeamName);
+}
+
+void UNGTeamComponent::EndPlay(EEndPlayReason::Type Reason)
+{
+	if (GetOwner()->HasAuthority() && !TeamName.IsNone())
+		if (auto* Player = GetOwningPlayerController()) Player->RemoveFromNetConditionGroup(TeamName);
+	Super::EndPlay(Reason);
+}
+
+APlayerController* UNGTeamComponent::GetOwningPlayerController() const
+{
+	if (const auto* State = Cast<APlayerState>(GetOwner())) return Cast<APlayerController>(State->GetOwner());
+	return Cast<APlayerController>(GetOwner());
 }
 
 void UNGTeamComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(UNGTeamComponent, TeamId);
+	DOREPLIFETIME(UNGTeamComponent, TeamName);
 }
 
-void UNGTeamComponent::SetTeamId(FGenericTeamId NewTeamId)
+void UNGTeamComponent::SetTeamName(FName NewTeamName)
 {
-	if (!GetOwner()->HasAuthority() || TeamId == NewTeamId.GetId()) return;
-	TeamId = NewTeamId.GetId();
+	if (!GetOwner()->HasAuthority() || TeamName == NewTeamName || UE::Net::IsSpecialNetConditionGroup(NewTeamName)) return;
+
+	const FName PreviousTeamName = TeamName;
+	TeamName = NewTeamName;
+	if (auto* Player = GetOwningPlayerController())
+	{
+		if (!PreviousTeamName.IsNone()) Player->RemoveFromNetConditionGroup(PreviousTeamName);
+		if (!TeamName.IsNone()) Player->IncludeInNetConditionGroup(TeamName);
+	}
 	GetOwner()->ForceNetUpdate();
 }

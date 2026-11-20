@@ -3,13 +3,22 @@
 #include "Gameplay/Player/NextgenonePlayerController.h"
 #include "Gameplay/Player/NextgenonePlayerState.h"
 #include "GameFramework/HUD.h"
+#include "GameFramework/PlayerStart.h"
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
+#include "Gameplay/Teams/NGTeamComponent.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "TimerManager.h"
 
-uint8 ANextgenoneGameMode::GetDefaultTeamId(const AController& Controller) const
+void ANextgenoneGameMode::InitStartSpot_Implementation(AActor* StartSpot, AController* NewPlayer)
 {
-	return Controller.IsPlayerController() ? PlayerTeamId : BotTeamId;
+	Super::InitStartSpot_Implementation(StartSpot, NewPlayer);
+
+	auto* Team = UNGTeamComponent::Find(NewPlayer);
+	if (!Team || !Team->GetTeamName().IsNone()) return;
+
+	const auto* PlayerStart = Cast<APlayerStart>(StartSpot);
+	if (PlayerStart && !PlayerStart->PlayerStartTag.IsNone())
+		Team->SetTeamName(PlayerStart->PlayerStartTag);
 }
 
 ANextgenoneGameMode::ANextgenoneGameMode()

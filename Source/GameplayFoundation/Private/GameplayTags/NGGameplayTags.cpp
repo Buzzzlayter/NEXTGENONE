@@ -14,6 +14,8 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadActive, "State.Action.Reload");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGMagazineAmmo, "Weapon.MagazineAmmo");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGReserveAmmo, "Weapon.ReserveAmmo");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputInteract, "Input.Interaction.Interact");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputPing, "Input.Ping");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGPingCooldown, "Cooldown.Ping");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractEvent, "Event.Interaction.Request");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputAim, "Input.Aim");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGWeaponAiming, "State.Weapon.Aiming");

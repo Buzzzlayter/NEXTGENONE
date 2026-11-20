@@ -7,6 +7,7 @@ public class UIModule : ModuleRules
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
         bEnableExceptions = true;
+        SetupIrisSupport(Target);
 
         if (Target.bBuildEditor)
         {
@@ -31,6 +32,7 @@ public class UIModule : ModuleRules
 				"EnhancedInput",
                 "GCFSM",
                 "UMG",
+                "NetCore",
             }
         );
 
@@ -39,7 +41,6 @@ public class UIModule : ModuleRules
             {
                 "Slate",
                 "SlateCore",
-                "DeveloperSettings",
                 "DeveloperSettings",
             }
         );
