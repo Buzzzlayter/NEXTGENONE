@@ -190,13 +190,14 @@ void UNGActivateMedkitAbility::BlockingTagChanged(FGameplayTag Tag, int32 Count)
 void UNGActivateMedkitAbility::FinishActivation()
 {
     auto* ASC = ActivationASC.Get();
-    if (!HasCurrentItem() || !ASC || ASC->GetAvatarActor() != ActivationAvatar.Get() || !ActivationInventory.IsValid()
+    auto* HealingAvatar = ActivationAvatar.Get();
+    if (!HasCurrentItem() || !ASC || ASC->GetAvatarActor() != HealingAvatar || !ActivationInventory.IsValid()
         || ActivationInventory->GetSlotIndex(GetAssociatedItem()) != ActivationSlot || ActivationInventory->GetCount(GetAssociatedItem()) != ActivationCount)
     { CancelActivation(); return; }
     const float Health = ASC->GetNumericAttribute(UNGHealthSet::GetHealthAttribute());
     const float MaxHealth = ASC->GetNumericAttribute(UNGHealthSet::GetMaxHealthAttribute());
     if (Health <= 0.f || Health >= MaxHealth || ASC->HasMatchingGameplayTag(TAG_NGDead)) { CancelActivation(); return; }
-    auto Context = ASC->MakeEffectContext(); Context.AddSourceObject(ActivationAvatar.Get());
+    auto Context = ASC->MakeEffectContext(); Context.AddSourceObject(HealingAvatar);
     auto Spec = ASC->MakeOutgoingSpec(UNGHealingEffect::StaticClass(), 1.f, Context);
     if (!Spec.IsValid()) { CancelActivation(); return; }
     Spec.Data->SetSetByCallerMagnitude(TAG_NGHealingAmount, FMath::Min(HealingAmount, MaxHealth - Health));
@@ -207,7 +208,8 @@ void UNGActivateMedkitAbility::FinishActivation()
         ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
     });
     // Healing callbacks may end the ability synchronously (for example, project-specific lifecycle code).
-    if (IsActive()) EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bActivated);
+    if (IsActive()) EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true,
+        !bActivated || ASC->GetAvatarActor() != HealingAvatar);
 }
 void UNGActivateMedkitAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
     FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bCancelled)
