@@ -57,5 +57,7 @@ public:
 private:
 	FActiveGameplayEffectHandle RagdollEffect;
 	TWeakObjectPtr<UAbilitySystemComponent> RagdollASC;
+	void WaitForBotRecovery();
+	UFUNCTION() void CheckBotRecovery();
 	UFUNCTION() void GetUpPressed(float TimeWaited);
 };

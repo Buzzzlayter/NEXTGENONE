@@ -17,7 +17,8 @@
 void UGCFSM::LatentExecutor::Set(const FLatentActionInfo& latentInfo, FName& _eventName, float& _deltaTime)
 {
 	target = latentInfo.CallbackTarget;
-	function = target->FindFunction(latentInfo.ExecutionFunction);
+	const auto* Target = target.Get();
+	function = Target ? Target->FindFunction(latentInfo.ExecutionFunction) : nullptr;
 	linkage = latentInfo.Linkage;
 	eventName = &_eventName;
 	deltaTime = &_deltaTime;
@@ -26,19 +27,23 @@ void UGCFSM::LatentExecutor::Set(const FLatentActionInfo& latentInfo, FName& _ev
 
 void UGCFSM::LatentExecutor::ProcessEvent(FName name)
 {
+	auto* Target = target.Get();
+	if (!Target || !function) return;
 	*eventName = name;
-	target->ProcessEvent(function, &linkage);
+	Target->ProcessEvent(function, &linkage);
 }
 
 void UGCFSM::LatentExecutor::ProcessTick(float _deltaTime)
 {
-	check(deltaTime);
+	auto* Target = target.Get();
+	if (!Target || !function) return;
 	*deltaTime = _deltaTime;
-	target->ProcessEvent(function, &linkage);
+	Target->ProcessEvent(function, &linkage);
 }
 
 void UGCFSM::EnterState(UGCFSMBasicState* state, FGuid nodeGuid, FLatentActionInfo latentInfo, FName& eventName, float& deltaTime, const TArray<FName>& _processedEvents, int32 _numTransitions)
 {
+	if (!IsValid(this) || bExitingState || bStopRequested) return;
 	if (activeState)
 	{
 		GC_LOG(Error, TEXT("FSM %s tried to enter a state, while it is already running state %s"), *GetNameForLogging(), *activeState->GetName());
@@ -64,6 +69,7 @@ void UGCFSM::EnterState(UGCFSMBasicState* state, FGuid nodeGuid, FLatentActionIn
 
 		GC_VLOG_FSM_MSG(Log, TEXT("FSM %s: enters state %s"));
 		state->PrivateEnter();
+		if (!IsValid(this) || activeState.Get() != state) return;
 
 		// append all events currently being deferred to the event queue and clear the deferred queue
 		eventQueue.Append(std::move(eventsBeingDeferred));
@@ -73,15 +79,18 @@ void UGCFSM::EnterState(UGCFSMBasicState* state, FGuid nodeGuid, FLatentActionIn
 void UGCFSM::ReplicationLatentExecutor::Set(const FLatentActionInfo& latentInfo, FName& _stateOrStop)
 {
 	target = latentInfo.CallbackTarget;
-	function = target->FindFunction(latentInfo.ExecutionFunction);
+	const auto* Target = target.Get();
+	function = Target ? Target->FindFunction(latentInfo.ExecutionFunction) : nullptr;
 	linkage = latentInfo.Linkage;
 	stateOrStop = &_stateOrStop;
 }
 
 void UGCFSM::ReplicationLatentExecutor::Process(FName _stateOrStop)
 {
+	auto* Target = target.Get();
+	if (!Target || !function) return;
 	*stateOrStop = _stateOrStop;
-	target->ProcessEvent(function, &linkage);
+	Target->ProcessEvent(function, &linkage);
 }
 
 void UGCFSM::ReplicationWaitFunction(FName& stateOrStop, FLatentActionInfo latentInfo)
@@ -124,8 +133,7 @@ float UGCFSM::GetActiveStateTime() const
 
 void UGCFSM::ProcessTransition(FName event)
 {
-	ExitActiveState(event);
-	check(!activeNodeGuid.IsValid());
+	if (!IsValid(this) || !IsValid(activeState) || bExitingState) return;
 
 	if (role == EGCFSMRole::Authority)
 	{
@@ -134,9 +142,11 @@ void UGCFSM::ProcessTransition(FName event)
 		exitEventToReplicate = event;
 	}
 
+	ExitActiveState(event);
+	if (!IsValid(this) || activeState || !IsValid(GetContainerState()->GetContextObject())) return;
 	latentExecutor.ProcessEvent(event);
 
-	if (role == EGCFSMRole::Authority && !activeState && IsValid(this))
+	if (role == EGCFSMRole::Authority && !activeState && IsValid(this) && IsValid(replicationComponent))
 	{
 		// if ProcessEvent did not process either a EnterState or a Stop (this might happen if the execution flow has stopped on a latent function)
 		// we still need to replicate the fact that we exited the state
@@ -148,20 +158,26 @@ void UGCFSM::ProcessTransition(FName event)
 
 void UGCFSM::Tick(float rootTime, float deltaTime)
 {
-	if (activeState && IsValid(activeState))
+	if (!bExitingState && IsValid(activeState))
 	{
-		while (IsValid(this) && IsValid(activeState) && eventQueue.Num() > 0)
+		constexpr int32 MaxEventsPerTick = 64;
+		for (int32 Processed = 0; Processed < MaxEventsPerTick && IsValid(this) && IsValid(activeState) && !eventQueue.IsEmpty(); ++Processed)
 		{
 			auto event = eventQueue[0];
-			eventQueue.RemoveAt(0);
+			eventQueue.RemoveAt(0, 1, EAllowShrinking::No);
+			const bool bStateEvent = !event.sourceState.IsExplicitlyNull();
+			if (bStateEvent && event.sourceState.Get() != activeState.Get()) continue;
 
 			if (rootTime <= event.expiryTimeStamp)
 			{
 				int index = processedEvents.Find(event.name);
 				if (index >= numTransitions)
 				{
-					GC_VLOG_FSM(Verbose, TEXT("event %s is deferred"), *event.name.ToString());
-					eventsBeingDeferred.Add(event);
+					if (!bStateEvent)
+					{
+						GC_VLOG_FSM(Verbose, TEXT("event %s is deferred"), *event.name.ToString());
+						eventsBeingDeferred.Add(event);
+					}
 				}
 				else if (index >= 0)
 				{
@@ -204,7 +220,7 @@ void UGCFSM::Tick(float rootTime, float deltaTime)
 
 void UGCFSM::TriggerEvent(const FGCFSMTriggeredEvent& event)
 {
-	if (role == EGCFSMRole::Proxy)
+	if (!IsValid(this) || bStopRequested || role == EGCFSMRole::Proxy)
 	{
 		// ignore TriggerEvent on proxies
 		return;
@@ -223,7 +239,7 @@ void UGCFSM::TriggerEvent(const FGCFSMTriggeredEvent& event)
 			float now = GetContainerState()->GetRootTime();
 			auto matchesNameExpired = [&] (const FGCFSMTriggeredEvent& e)
 			{
-				if (event.name == e.name)
+				if (event.name == e.name && event.sourceState.HasSameIndexAndSerialNumber(e.sourceState))
 				{
 					// found an event with same name, check timestamp
 					if (now < e.expiryTimeStamp)
@@ -249,7 +265,7 @@ void UGCFSM::TriggerEvent(const FGCFSMTriggeredEvent& event)
 		{
 			auto matchesName = [&] (const FGCFSMTriggeredEvent& e)
 			{
-				return event.name == e.name;
+				return event.name == e.name && event.sourceState.HasSameIndexAndSerialNumber(e.sourceState);
 			};
 			discardedEvents = eventQueue.RemoveAll(matchesName)
 							+ eventsBeingDeferred.RemoveAll(matchesName);
@@ -298,30 +314,42 @@ bool UGCFSM::InvokeEntryPoint(UObject* blueprintContext, FName fsmName, UGCFSMSt
 
 void UGCFSM::ExitActiveState(FName event)
 {
-	if (activeState)
+	if (!IsValid(this) || !IsValid(activeState) || bExitingState) return;
+	auto* ExitingState = activeState.Get();
 	{
-		activeState->PrivateExit(event);
+		TGuardValue<bool> ExitingGuard(bExitingState, true);
+		ExitingState->PrivateExit(event);
+		if (!IsValid(this) || activeState.Get() != ExitingState) return;
 		GC_VLOG_FSM_MSG(Log, TEXT("FSM %s: exits state %s"));
-		activeState->MarkAsGarbage();
 		activeState = nullptr;
-		// old object will be eventually destroyed by GC, since it's no longer referenced
 		activeNodeGuid = {};
-
-		// Do not replicate the "exit" here. Since it is probable that we are going to enter a new state immediately
-		// by simply replicating the new "enter" we avoid sending two multicast events in the same tick
+		if (IsValid(ExitingState)) ExitingState->MarkAsGarbage();
 	}
+	if (bStopRequested) Stop();
 }
 
 void UGCFSM::Stop()
 {
-	check(activeState == nullptr);
+	if (!IsValid(this)) return;
+	bStopRequested = true;
+	if (bExitingState) return;
+	if (IsValid(activeState))
+	{
+		ExitActiveState(NAME_None);
+		return;
+	}
 
 	auto containerState = GetContainerState();
 	GC_VLOG_FSM_MSG(Log, TEXT("FSM %s: stopped"));
+	activeState = nullptr;
+	activeNodeGuid = {};
+	eventQueue.Reset();
+	eventsBeingDeferred.Reset();
 	MarkAsGarbage();
-	containerState->RemoveFSM(GetFName());
+	if (IsValid(containerState) && containerState->GetFSM(GetFName()) == this)
+		containerState->RemoveFSM(GetFName());
 
-	if (role == EGCFSMRole::Authority)
+	if (role == EGCFSMRole::Authority && IsValid(replicationComponent))
 	{
 		replicationComponent->MulticastStopFSM(GetPathName(), exitEventToReplicate);
 		exitEventToReplicate = NAME_None;
@@ -330,17 +358,20 @@ void UGCFSM::Stop()
 
 void UGCFSM::ReplicatedEnterState(const FGuid& state)
 {
+	if (!IsValid(this) || bExitingState || bStopRequested) return;
 	check(activeState == nullptr);
 	replicationLatentExecutor.Process(*state.ToString());
-	check(activeNodeGuid == state);
+	if (IsValid(this) && activeNodeGuid != state)
+		GC_LOG(Warning, TEXT("FSM %s could not enter replicated state %s"), *GetNameForLogging(), *state.ToString());
 }
 
 void UGCFSM::ReplicatedExitState(FName event)
 {
-	if (activeState)
+	if (IsValid(this) && IsValid(activeState) && !bExitingState)
 	{
 		ExitActiveState(event);
-		latentExecutor.ProcessEvent(UGCFSMBasicState::GetReplicatedExitName());
+		if (IsValid(this) && !activeState && IsValid(GetContainerState()->GetContextObject()))
+			latentExecutor.ProcessEvent(UGCFSMBasicState::GetReplicatedExitName());
 	}
 }
 

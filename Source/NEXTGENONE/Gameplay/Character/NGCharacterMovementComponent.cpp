@@ -121,6 +121,21 @@ UAbilitySystemComponent* UNGCharacterMovementComponent::GetJetpackASC() const
 
 bool UNGCharacterMovementComponent::CanStartJetpack() const { return GetJetpackASC() != nullptr; }
 
+void UNGCharacterMovementComponent::SetFlightControl(UObject* FlightOwner, float RequestedAirControl, float RequestedThrustScale)
+{
+	FlightControlSource = FlightOwner;
+	FlightAirControlOverride = FMath::IsFinite(RequestedAirControl) ? FMath::Clamp(RequestedAirControl, 0.f, 1.f) : 0.f;
+	FlightThrustScale = FMath::IsFinite(RequestedThrustScale) ? FMath::Clamp(RequestedThrustScale, .5f, 2.f) : 1.f;
+}
+
+void UNGCharacterMovementComponent::ClearFlightControl(const UObject* FlightOwner)
+{
+	if (FlightControlSource.Get() != FlightOwner) return;
+	FlightControlSource.Reset();
+	FlightAirControlOverride = 0.f;
+	FlightThrustScale = 1.f;
+}
+
 bool UNGCharacterMovementComponent::IsJetpackThrustActive() const
 {
 	const bool bProxy = CharacterOwner && CharacterOwner->GetLocalRole() == ROLE_SimulatedProxy;
@@ -170,7 +185,14 @@ void UNGCharacterMovementComponent::UpdateCharacterStateBeforeMovement(float Del
 		JetpackMoveThrustAlpha = ((PreviousAlpha + JetpackThrustAlpha) * .5f * RampStep + DeltaSeconds - RampStep) / DeltaSeconds;
 	}
 	else JetpackMoveThrustAlpha = JetpackThrustAlpha = 1.f;
-	if (IsMovingOnGround()) SetMovementMode(MOVE_Falling);
+	if (IsMovingOnGround() && MoveSettings.MaxRiseSpeed > 0.f
+		&& GetJetpackThrustAcceleration() > FMath::Abs(GetGravityZ()))
+		SetMovementMode(MOVE_Falling);
+}
+
+float UNGCharacterMovementComponent::GetJetpackThrustAcceleration() const
+{
+	return MoveSettings.Acceleration * JetpackMoveThrustAlpha * (FlightControlSource.IsValid() ? FlightThrustScale : 1.f);
 }
 
 FVector UNGCharacterMovementComponent::NewFallVelocity(const FVector& InitialVelocity, const FVector& Gravity, float DeltaTime) const
@@ -180,13 +202,15 @@ FVector UNGCharacterMovementComponent::NewFallVelocity(const FVector& InitialVel
 	const FVector Up = -GetGravityDirection();
 	const float RiseSpeed = static_cast<float>(FVector::DotProduct(Result, Up));
 	// Keep gravity and existing momentum; add only thrust up to the configured rise speed.
-	const float AddedSpeed = FMath::Clamp(MoveSettings.MaxRiseSpeed - RiseSpeed, 0.f, MoveSettings.Acceleration * JetpackMoveThrustAlpha * DeltaTime);
+	const float AddedSpeed = FMath::Clamp(MoveSettings.MaxRiseSpeed - RiseSpeed, 0.f, GetJetpackThrustAcceleration() * DeltaTime);
 	return Result + Up * AddedSpeed;
 }
 
 FVector UNGCharacterMovementComponent::GetAirControl(float DeltaTime, float TickAirControl, const FVector& FallAcceleration)
 {
-	return Super::GetAirControl(DeltaTime, IsJetpackThrustActive() ? FMath::Max(TickAirControl, MoveSettings.AirControl) : TickAirControl, FallAcceleration);
+	const float JetpackAirControl = IsJetpackThrustActive() ? MoveSettings.AirControl : 0.f;
+	const float FlightAirControl = FlightControlSource.IsValid() ? FlightAirControlOverride : 0.f;
+	return Super::GetAirControl(DeltaTime, FMath::Max(TickAirControl, FMath::Max(JetpackAirControl, FlightAirControl)), FallAcceleration);
 }
 
 float UNGCharacterMovementComponent::GetMaxSpeed() const
@@ -196,7 +220,10 @@ float UNGCharacterMovementComponent::GetMaxSpeed() const
 
 float UNGCharacterMovementComponent::GetMaxAcceleration() const
 {
-	return IsFalling() && IsJetpackThrustActive() ? MoveSettings.HorizontalAcceleration : Super::GetMaxAcceleration();
+	const bool bAirborne = IsFalling();
+	const float BaseAcceleration = bAirborne && IsJetpackThrustActive() ? MoveSettings.HorizontalAcceleration : Super::GetMaxAcceleration();
+	constexpr float AssistedFlightAccelerationMultiplier = 1.6f;
+	return bAirborne && FlightControlSource.IsValid() ? BaseAcceleration * AssistedFlightAccelerationMultiplier : BaseAcceleration;
 }
 
 float UNGCharacterMovementComponent::GetMaxBrakingDeceleration() const

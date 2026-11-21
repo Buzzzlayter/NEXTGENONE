@@ -2,6 +2,7 @@
 #include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
 #include "Animation/AnimMontage.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -115,10 +116,39 @@ void UNGRagdollAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const
 	{
 		RagdollEffect = ApplyGameplayEffectToOwner(Handle, Info, Activation, GetDefault<UNGRagdollStateEffect>(), GetAbilityLevel(Handle, Info));
 		if (!RagdollEffect.IsValid()) { EndAbility(Handle, Info, Activation, true, true); return; }
+		const auto* Pawn = Cast<APawn>(Info->AvatarActor.Get());
+		if (Pawn && !Pawn->IsPlayerControlled())
+		{
+			WaitForBotRecovery();
+			return;
+		}
 	}
 	auto* Task = UAbilityTask_WaitInputPress::WaitInputPress(this, false);
 	Task->OnPress.AddDynamic(this, &ThisClass::GetUpPressed);
 	Task->ReadyForActivation();
+}
+
+void UNGRagdollAbility::WaitForBotRecovery()
+{
+	auto* Task = UAbilityTask_WaitDelay::WaitDelay(this, .25f);
+	Task->OnFinish.AddDynamic(this, &ThisClass::CheckBotRecovery);
+	Task->ReadyForActivation();
+}
+
+void UNGRagdollAbility::CheckBotRecovery()
+{
+	if (!IsActive() || !CurrentActorInfo || !CurrentActorInfo->IsNetAuthority()) return;
+	const auto* Pawn = Cast<ANextgenoneCharacter>(CurrentActorInfo->AvatarActor.Get());
+	const auto* ASC = RagdollASC.Get();
+	if (!Pawn || !ASC || ASC->GetAvatarActor() != Pawn || !Pawn->GetController() || Pawn->IsDead() || Pawn->GetHealth() <= 0.f)
+	{
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+		return;
+	}
+	if (Pawn->IsRagdollSettled() && CanRequestGetUp(ASC))
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+	else
+		WaitForBotRecovery();
 }
 
 bool UNGRagdollAbility::CanRequestGetUp(const UAbilitySystemComponent* ASC)

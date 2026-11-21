@@ -5,6 +5,7 @@
 #include "Gameplay/Character/NextgenoneCharacter.h"
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
 #include "Gameplay/Equipment/NGEquipmentDefinition.h"
+#include "Gameplay/Equipment/NGEquipmentInstance.h"
 #include "Inventory/NGInventoryItemInstance.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
@@ -66,6 +67,9 @@ UNGEquipWeaponItemAbility::UNGEquipWeaponItemAbility()
     // Equipment replacement owns its own cancellation. A Back action must not interrupt Hands/ADS,
     // and equipping a weapon must not cancel another installation's active thrust.
     ActivationOwnedTags.RemoveTag(TAG_NGActivatingItem);
+	for (const FGameplayTag BlockedTag : {TAG_NGInteractionBlocked.GetTag(), TAG_NGDashActive.GetTag(),
+		TAG_NGMantleActive.GetTag(), TAG_NGRollActive.GetTag(), TAG_NGRagdollActive.GetTag()})
+		ActivationBlockedTags.AddTag(BlockedTag);
 }
 
 void UNGEquipWeaponItemAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* Info,
@@ -93,7 +97,27 @@ void UNGEquipWeaponItemAbility::ActivateAbility(FGameplayAbilitySpecHandle Handl
 					&& Inventory->CanPlaceItemAtSlot(Item->GetItemDef(), I)) { Destination = I; break; }
 		}
 		else Destination = Inventory->FindSlotByTag(Definition->SlotTag, 0);
-		bEquipped = Destination != INDEX_NONE && Inventory->MoveEquipmentItemOnServer(Item, Destination);
+		if (Destination != INDEX_NONE && Definition->SlotTag == TAG_NGSlotEquipmentWeapon)
+		{
+			auto* ASC = Info->AbilitySystemComponent.Get();
+			if (const auto* EquippedWeapon = Equipment->FindInstance(TAG_NGSlotEquipmentWeapon))
+			{
+				FGameplayAbilitySpecHandle AimHandle;
+				for (const auto& Spec : ASC->GetActivatableAbilities())
+				{
+					if (Spec.IsActive() && Spec.SourceObject.Get() == EquippedWeapon
+						&& Spec.GetDynamicSpecSourceTags().HasTagExact(TAG_NGInputAim))
+					{
+						AimHandle = Spec.Handle;
+						break;
+					}
+				}
+				if (AimHandle.IsValid()) ASC->CancelAbilityHandle(AimHandle);
+			}
+		}
+		if (!IsActive()) return;
+		bEquipped = Destination != INDEX_NONE && HasCurrentItem() && Info->AvatarActor.Get() == Avatar
+			&& Inventory->GetItemAtSlot(CurrentSlot) == Item && Inventory->MoveEquipmentItemOnServer(Item, Destination);
 	}
 	if (IsActive()) EndAbility(Handle, Info, Activation, true, !bEquipped);
 }

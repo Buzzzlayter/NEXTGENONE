@@ -350,10 +350,8 @@ bool UNGPlayerInventoryManagerComponent::ExecuteTransferOnServer(UNGInventoryMan
 	UNGInventoryManagerComponent* Target, int32 TargetSlot, int32 Amount)
 {
 	auto* Pawn = GetInventoryPawn();
-	const auto* Interaction = Pawn ? Pawn->FindComponentByClass<UNGInteractionComponent>() : nullptr;
-	auto* Equipment = Pawn ? Pawn->FindComponentByClass<UNGEquipmentComponent>() : nullptr;
-	if (!GetOwner()->HasAuthority() || !Interaction || !Interaction->IsCurrentInteractor()
-		|| !CanAccessInventory(Source) || !CanAccessInventory(Target)) return false;
+	if (!GetOwner()->HasAuthority() || !Pawn) return false;
+	const auto* Equipment = Pawn->FindComponentByClass<UNGEquipmentComponent>();
 	auto* Item = Source->GetItemAtSlot(SourceSlot); auto* Other = Target->GetItemAtSlot(TargetSlot);
 	if (!Item) return false;
 	FString Error;

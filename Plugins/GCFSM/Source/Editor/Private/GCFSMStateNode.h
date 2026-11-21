@@ -171,6 +171,7 @@ private:
 
 	int indexOfEventPinBeingRenamed = -1;
 	bool bReconstructNode;
+	bool bPinReconstructionQueued = false;
 
 	void AddTransitionEvent(int eventIndex);
 	void RemoveTransitionEvent(int eventIndex);

@@ -22,10 +22,23 @@ namespace
 		return Owner ? Owner->FindComponentByClass<UNGInventoryManagerComponent>() : nullptr;
 	}
 
-	UClass* FindReloadAmmo(const UNGInventoryManagerComponent& Inventory, const TArray<FNGWeaponAmmoOption>& Options, FGameplayTag* OutLoadedTag = nullptr)
+	UClass* FindReloadAmmo(const UNGInventoryManagerComponent& Inventory, const UNGInventoryItemInstance& WeaponItem,
+		const TArray<FNGWeaponAmmoOption>& Options, FGameplayTag* OutLoadedTag = nullptr)
 	{
+		const bool bHasLoadedAmmo = WeaponItem.GetStatTagStackCount(TAG_NGMagazineAmmo) > 0;
+		FGameplayTag MagazineAmmoTag;
+		if (bHasLoadedAmmo)
+		{
+			for (const auto& Option : Options)
+				if (Option.LoadedTag.IsValid() && WeaponItem.HasStatTag(Option.LoadedTag))
+				{
+					MagazineAmmoTag = Option.LoadedTag;
+					break;
+				}
+		}
 		for (const auto& Option : Options)
 		{
+			if (bHasLoadedAmmo && Option.LoadedTag != MagazineAmmoTag) continue;
 			auto* AmmoClass = Option.ItemClass.LoadSynchronous();
 			if (!AmmoClass || Inventory.GetTotalItemCountByDefinition(AmmoClass) <= 0) continue;
 			if (OutLoadedTag) *OutLoadedTag = Option.LoadedTag;
@@ -87,7 +100,7 @@ void UNGReloadAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const 
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	TArray<FNGWeaponAmmoOption> AmmoOptions;
 	Context.Definition->GetReloadAmmoOptions(AmmoOptions);
-	if (!FindReloadAmmo(*Inventory, AmmoOptions)
+	if (!FindReloadAmmo(*Inventory, *Context.Source->GetItem(), AmmoOptions)
 		|| !ResolveWeaponContext(Handle, Info, Context) || !CommitAbility(Handle, Info, Activation))
 	{ EndAbility(Handle, Info, Activation, true, true); return; }
 	if (!IsActive()) return;
@@ -124,7 +137,7 @@ bool UNGReloadAbility::CompleteReloadOnServer()
 	TArray<FNGWeaponAmmoOption> AmmoOptions;
 	Context.Definition->GetReloadAmmoOptions(AmmoOptions);
 	FGameplayTag LoadedTag;
-	UClass* AmmoClass = FindReloadAmmo(*Inventory, AmmoOptions, &LoadedTag);
+	UClass* AmmoClass = FindReloadAmmo(*Inventory, *Context.Source->GetItem(), AmmoOptions, &LoadedTag);
 	if (!AmmoClass || !ResolveWeaponContext(CurrentSpecHandle, CurrentActorInfo, Context)) return false;
 	auto* Item = Context.Source->GetItem();
 	const int32 Amount = FMath::Min(FMath::Max(0, Context.Definition->MagazineCapacity - Context.Weapon->GetMagazineAmmo()),

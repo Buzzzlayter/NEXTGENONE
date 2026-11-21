@@ -205,7 +205,7 @@ void ANextgenoneCharacter::ApplyCombatPresentation()
 	const auto WeaponState = Combat->GetEquipment();
 	const auto* Def = WeaponState.Definition.Get();
 	const bool bArmed = !IsDead() && !CharacterStateMachine->HasResourceFailure() && WeaponState.bEquipped && Def;
-	const auto DesiredOverlay = bArmed ? Def->Overlay : EALSOverlayState::Default;
+	const auto DesiredOverlay = bArmed ? Def->Overlay : EALSOverlayState::Masculine;
 	if (GetOverlayState() != DesiredOverlay)
 	{
 		SetOverlayState(DesiredOverlay);
@@ -301,7 +301,8 @@ void ANextgenoneCharacter::RagdollTagChanged(FGameplayTag Tag, int32 Count)
 	const auto* ASC = GetAbilitySystemComponent();
 	if (!ASC || IsDead()) return;
 	if (Count > 0) RagdollStart();
-	else if (GetMovementState() == EALSMovementState::Ragdoll && GetHealth() > 0.f) RagdollEnd();
+	else if (HasAuthority() && GetMovementState() == EALSMovementState::Ragdoll && GetHealth() > 0.f)
+		Super::ReplicatedRagdollEnd();
 }
 void ANextgenoneCharacter::RagdollEnd()
 {

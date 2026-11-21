@@ -17,7 +17,7 @@ UNGRocketLauncherDefinition::UNGRocketLauncherDefinition()
 	AimAbilityClass = UNGAimAbility::StaticClass();
 	FireAbilityClass = UNGFireAbility::StaticClass();
 	ReloadAbilityClass = UNGReloadAbility::StaticClass();
-	MagazineCapacity = 1;
+	MagazineCapacity = 4;
 	bAllowAimWhileReloading = true;
 	ReloadDuration = 2.2f;
 	FireInterval = 0.85f;
@@ -29,10 +29,10 @@ UNGRocketLauncherDefinition::UNGRocketLauncherDefinition()
 bool UNGRocketLauncherDefinition::ValidateDefinition(FString& Error) const
 {
 	if (!Super::ValidateDefinition(Error)) return false;
-	if (!VisualActorClass->IsChildOf(ANGRocketLauncher::StaticClass()) || MagazineCapacity != 1 || AmmoItemClass.IsNull()
+	if (!VisualActorClass->IsChildOf(ANGRocketLauncher::StaticClass()) || AmmoItemClass.IsNull()
 		|| !RocketClass || RocketClass->HasAnyClassFlags(CLASS_Abstract))
 	{
-		Error = TEXT("Rocket launcher requires a launcher actor, a single-round magazine, ammo and a concrete rocket class.");
+		Error = TEXT("Rocket launcher requires a launcher actor, ammo and a concrete rocket class.");
 		return false;
 	}
 	if (!RocketClass.GetDefaultObject()->ValidateSettings(Error)) return false;
