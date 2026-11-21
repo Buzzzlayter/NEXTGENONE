@@ -10,7 +10,7 @@
 	"DocsURL": "http://gamecentric.com/gcfsm/",
 	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/be0b4cb9916b4eba882cbe9dffd4fb5a",
 	"SupportURL": "http://gamecentric.com/contacts/",
-	"EngineVersion": "5.8.0",
+	"EngineVersion": "5.9.0",
 	"CanContainContent": false,
 	"Installed": true,
 	"Modules": [
