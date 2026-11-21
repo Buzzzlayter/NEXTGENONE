@@ -14,6 +14,7 @@ class UIMODULE_API UUIInventoryWidget : public UUserWidget
 {
 	GENERATED_BODY()
 public:
+	void SetSlotLayout(const FVector2D& Size, int32 Columns);
 	UFUNCTION(BlueprintCallable, Category="Inventory") void SetInventoryData(FText Name, const TArray<FUIInventorySlotData>& InSlots, UObject* Handler);
 	UFUNCTION(BlueprintImplementableEvent, Category="Inventory") void OnInventoryUpdated();
 protected:

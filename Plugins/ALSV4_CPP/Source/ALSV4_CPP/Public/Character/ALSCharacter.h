@@ -13,9 +13,7 @@ public:
 	AALSCharacter(const FObjectInitializer& ObjectInitializer);
 
 	virtual ECollisionChannel GetThirdPersonTraceParams(FVector& TraceOrigin, float& TraceRadius) override;
-
 	virtual FTransform GetThirdPersonPivotTarget() override;
-
 	virtual FVector GetFirstPersonCameraTarget() override;
 
 };

@@ -5,11 +5,36 @@
 #include "Character/ALSCharacterMovementComponent.h"
 #include "Character/ALSBaseCharacter.h"
 
+#include "Components/SceneComponent.h"
 #include "Curves/CurveVector.h"
 
 UALSCharacterMovementComponent::UALSCharacterMovementComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+}
+
+void UALSCharacterMovementComponent::DiscardMovementBeforeRagdollRecovery()
+{
+	if (ClientPredictionData)
+	{
+		ClientPredictionData->PendingMove.Reset();
+		ClientPredictionData->LastAckedMove.Reset();
+		ClientPredictionData->SavedMoves.Reset();
+		ClientPredictionData->bUpdatePosition = false;
+		ClientPredictionData->MeshTranslationOffset = FVector::ZeroVector;
+		ClientPredictionData->OriginalMeshTranslationOffset = FVector::ZeroVector;
+		const FQuat SmoothingRotation = NetworkSmoothingMode == ENetworkSmoothingMode::Linear && UpdatedComponent
+			? UpdatedComponent->GetComponentQuat() : FQuat::Identity;
+		ClientPredictionData->MeshRotationOffset = SmoothingRotation;
+		ClientPredictionData->OriginalMeshRotationOffset = SmoothingRotation;
+		ClientPredictionData->MeshRotationTarget = SmoothingRotation;
+		bNetworkSmoothingComplete = true;
+	}
+	if (ServerPredictionData)
+	{
+		ServerPredictionData->PendingAdjustment.TimeStamp = 0.f;
+		ForceClientAdjustment();
+	}
 }
 
 void UALSCharacterMovementComponent::OnMovementUpdated(float DeltaTime, const FVector& OldLocation,

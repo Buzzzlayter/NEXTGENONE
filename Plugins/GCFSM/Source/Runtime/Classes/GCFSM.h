@@ -36,6 +36,7 @@ struct FGCFSMTriggeredEvent
 	bool propagateToSubstates : 1;
 	bool triggerInternalEvents : 1;
 	EGCFSMTriggerEventQueuePolicy queuePolicy;
+	TWeakObjectPtr<UGCFSMBasicState> sourceState;
 };
 
 enum class EGCFSMRole
@@ -99,6 +100,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UGCFSMBasicState> activeState;
+	bool bExitingState = false;
+	bool bStopRequested = false;
 
 	TArray<FName> processedEvents;
 	int numTransitions;
@@ -108,8 +111,8 @@ private:
 
 	struct LatentExecutor
 	{
-		UObject* target;
-		UFunction* function;
+		TWeakObjectPtr<UObject> target;
+		UFunction* function = nullptr;
 		int32 linkage;
 		FName* eventName;
 		float* deltaTime;
@@ -134,8 +137,8 @@ private:
 
 	struct ReplicationLatentExecutor
 	{
-		UObject* target;
-		UFunction* function;
+		TWeakObjectPtr<UObject> target;
+		UFunction* function = nullptr;
 		int32 linkage;
 		FName* stateOrStop;
 

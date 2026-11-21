@@ -20,6 +20,7 @@ void UNGInventoryStateComponent::Enter()
 	Super::Enter();
 	auto* Panel = Cast<UNGInventoryPanel>(GetWidget());
 	if (!Panel) return;
+	Panel->SetSlotLayout(SlotSize, MaxSlotColumns);
 	auto* PC = GetPlayerController();
 	auto* PlayerInventory = ResolveInventory(PC);
 	UNGInventoryManagerComponent* InventorySource = PlayerInventory;

@@ -30,15 +30,21 @@ public:
 	UNGHealthSet();
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_Health, Category="Health") FGameplayAttributeData Health;
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_MaxHealth, Category="Health") FGameplayAttributeData MaxHealth;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_Shield, Category="Health") FGameplayAttributeData Shield;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_MaxShield, Category="Health") FGameplayAttributeData MaxShield;
 	UPROPERTY() FGameplayAttributeData IncomingDamage;
 	static FGameplayAttribute GetHealthAttribute();
 	static FGameplayAttribute GetMaxHealthAttribute();
+	static FGameplayAttribute GetShieldAttribute();
+	static FGameplayAttribute GetMaxShieldAttribute();
 	static FGameplayAttribute GetIncomingDamageAttribute();
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	UFUNCTION() void OnRep_Health(const FGameplayAttributeData& Old);
 	UFUNCTION() void OnRep_MaxHealth(const FGameplayAttributeData& Old);
+	UFUNCTION() void OnRep_Shield(const FGameplayAttributeData& Old);
+	UFUNCTION() void OnRep_MaxShield(const FGameplayAttributeData& Old);
 };
 
 UCLASS()

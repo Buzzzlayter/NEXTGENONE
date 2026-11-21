@@ -78,13 +78,14 @@ public:
 private:
 	UFUNCTION() void FinishActivation();
 	UFUNCTION() void InventoryChanged();
-	void HealthChanged(const FOnAttributeChangeData& Change);
+	void VitalChanged(const FOnAttributeChangeData& Change);
 	void BlockingTagChanged(FGameplayTag Tag, int32 Count);
 	void CancelActivation();
 	TWeakObjectPtr<UAbilitySystemComponent> ActivationASC;
 	TWeakObjectPtr<UNGPlayerInventoryManagerComponent> ActivationInventory;
 	TWeakObjectPtr<AActor> ActivationAvatar;
 	FDelegateHandle HealthHandle;
+	FDelegateHandle ShieldHandle;
 	FDelegateHandle TagHandle;
 	int32 ActivationSlot = INDEX_NONE;
 	int32 ActivationCount = 0;

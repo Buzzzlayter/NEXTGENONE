@@ -116,9 +116,10 @@ void UGCFSMState::PrivateExit(FName event)
 	// First of all, terminate all submachines
 	for (auto& fsm : makeCopy(FSMs))
 	{
+		if (!IsValid(fsm.Value) || GetFSM(fsm.Key) != fsm.Value.Get()) continue;
 		// Sub-FSMs do not get the event name
 		fsm.Value->ExitActiveState(NAME_None);
-		fsm.Value->Stop();
+		if (IsValid(fsm.Value) && GetFSM(fsm.Key) == fsm.Value.Get()) fsm.Value->Stop();
 	}
 	FSMs.Empty();
 
@@ -128,15 +129,19 @@ void UGCFSMState::PrivateExit(FName event)
 
 UGCFSMBasicState::TickResult UGCFSMState::PrivateTick(float deltaTime)
 {
+	if (!IsValid(GetRootState()) || !GetContextObject()) return TickResult::NoProcess;
 	const float rootTime = GetRootTime();
 	auto result = Super::PrivateTick(deltaTime);
 
 	// call customization point
 	Tick(deltaTime);
+	if (!IsValid(this) || !GetContextObject()) return TickResult::NoProcess;
 
 	for (auto& fsm : makeCopy(FSMs))
 	{
-		fsm.Value->Tick(rootTime, deltaTime);
+		if (!IsValid(this) || !GetContextObject()) return TickResult::NoProcess;
+		if (IsValid(fsm.Value) && GetFSM(fsm.Key) == fsm.Value.Get())
+			fsm.Value->Tick(rootTime, deltaTime);
 	}
 
 	return result;
@@ -220,6 +225,8 @@ bool UGCFSMState::IsProxy() const
 
 void UGCFSMState::LaunchFSM(UObject* blueprintContext, FName fsmName, EGCFSMReplicationOptions replicationOptions)
 {
+	if (!IsValid(this) || !IsValid(blueprintContext)) return;
+	if (const auto* Parent = GetParentFSM(); Parent && (!IsValid(Parent) || Parent->bExitingState)) return;
 	if (replicationOptions == EGCFSMReplicationOptions::NonReplicated && restoringSnapshot)
 	{
 		GC_LOG(Verbose, TEXT("In state %s, ignoring launch of FSM %s, since we are restoring a snapshot"), *GetNameForLogging(), *fsmName.ToString());
@@ -246,9 +253,9 @@ bool UGCFSMState::IsFSMRunning(FName fsmName) const
 void UGCFSMState::TriggerTransitionEvent(FName eventName)
 {
 	auto* fsm = GetParentFSM();
-	if (!eventName.IsNone() && fsm && fsm->GetActiveState() == this)
+	if (!eventName.IsNone() && IsValid(fsm) && IsValid(GetRootState()) && fsm->GetActiveState() == this)
 		fsm->TriggerEvent({eventName, GetRootTime(), FLT_MAX, false, false,
-			EGCFSMTriggerEventQueuePolicy::QueueUnlessAlreadyInQueue});
+			EGCFSMTriggerEventQueuePolicy::QueueUnlessAlreadyInQueue, this});
 }
 
 void UGCFSMState::TriggerEvent(const FGCFSMTriggeredEvent& event)
@@ -272,7 +279,7 @@ UFunction* UGCFSMState::GetInternalEventHandler(FName eventName)
 	FString fullName { internalEventNamespacePrefix };
 	eventName.AppendString(fullName);
 	UObject* blueprintContext = rootState == this ? contextObject.Get() : static_cast<UObject*>(this);
-	return blueprintContext->FindFunction(*fullName);
+	return IsValid(blueprintContext) ? blueprintContext->FindFunction(*fullName) : nullptr;
 }
 
 void UGCFSMState::RemoveFSM(FName name)
@@ -303,11 +310,13 @@ void UGCFSMState::GetChildFSMs(TArray<UGCFSM*>& OutFSMs) const
 UGCFSM* UGCFSMState::GetFSMRecursive(FName name) const
 {
 	auto result = GetFSM(name);
-	if (result == nullptr)
+	if (!IsValid(result))
 	{
+		result = nullptr;
 		for (auto& fsm : FSMs)
 		{
-			result = fsm.Value->GetActiveState()->GetSubmachineFSM(name);
+			const auto* ActiveChild = IsValid(fsm.Value) ? fsm.Value->GetActiveState() : nullptr;
+			result = IsValid(ActiveChild) ? ActiveChild->GetSubmachineFSM(name) : nullptr;
 			if (result)
 			{
 				break;
@@ -327,10 +336,11 @@ UGCFSM* UGCFSMState::ResolveFSMPathName(const TArray<FName>& fsmPathName, bool s
 		// no FSM with this name found, try launching it
 		if (UGCFSM::InvokeEntryPoint(GetBlueprintContext(), name, this, EGCFSMReplicationOptions::Replicated))
 		{
-			fsm = FSMs.FindChecked(name);
+			fsm = GetFSM(name);
 		}
-		else
+		if (!IsValid(fsm))
 		{
+			fsm = nullptr;
 			GC_LOG(Error, TEXT("Could not start FSM %s in state object %s"), *name.ToString(), *GetNameForLogging());
 		}
 	}

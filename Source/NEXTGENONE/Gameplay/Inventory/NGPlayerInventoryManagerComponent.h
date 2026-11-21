@@ -42,6 +42,7 @@ private:
 	ANGItemPickup* DropItemOnServer(APawn* Pawn, UNGInventoryItemInstance* Item, int32 Count);
 	TSet<TWeakObjectPtr<UNGInventoryItemInstance>> ActiveDrops;
 	UFUNCTION(Server, Reliable) void ServerActivationItem(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* Item, int32 ExpectedSlot);
+	UFUNCTION(Server, Reliable) void ServerActivateActionSlot(APawn* ExpectedPawn, int32 ActionSlot);
 	double NextActivationTime = 0.;
 	bool TryBeginStarterGrant();
 	double NextDropTime = 0.0;

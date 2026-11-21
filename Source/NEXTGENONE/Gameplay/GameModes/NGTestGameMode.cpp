@@ -44,6 +44,7 @@ void ANGCombatTestGameMode::AskClients(int32 Command)
     Reports.Reset(); ExpectedReport = Command;
     FNGCombatSmokeRequest Request;
     Request.Command = Command; Request.ExpectedHealth = ExpectedHealth; Request.ExpectedAmmo = ExpectedAmmo;
+    Request.ExpectedShield = ExpectedShield;
     Request.Shooter = Cast<ANextgenoneCharacter>(Players[0]->GetPawn());
     Request.Target = Corpse.IsValid() ? Corpse.Get() : Cast<ANextgenoneCharacter>(Players[1]->GetPawn());
     for (auto PC : Players)
@@ -94,6 +95,21 @@ void ANGCombatTestGameMode::SmokeTick()
     auto* A = Cast<ANextgenoneCharacter>(Players[0]->GetPawn());
     auto* B = Cast<ANextgenoneCharacter>(Players[1]->GetPawn());
     if (!A || !B) { if (Phase == 7) return; Fail(TEXT("missing Pawn")); return; }
+    const auto VitalsMatch = [&]
+    {
+        return FMath::IsNearlyEqual(B->GetHealth(), ExpectedHealth) && FMath::IsNearlyEqual(B->GetShield(), ExpectedShield);
+    };
+    const auto FireExpectedShot = [&]
+    {
+        SendShooter(3);
+        ++Shots;
+        --ExpectedAmmo;
+        const float Absorbed = FMath::Min(ExpectedShield, ShotDamage);
+        ExpectedShield -= Absorbed;
+        ExpectedHealth = FMath::Max(0.f, ExpectedHealth - (ShotDamage - Absorbed));
+        Phase = 4;
+        PhaseTime = Now;
+    };
     if (Phase == 1)
     {
         if (Reports.Num() != 2) { if (Now - PhaseTime > 1.) AskClients(0); return; }
@@ -119,7 +135,8 @@ void ANGCombatTestGameMode::SmokeTick()
         { Fail(TEXT("fixture requires a valid single-projectile weapon with zero spread")); return; }
         ShotDamage = Def->Damage;
         ExpectedHealth = B->GetHealth(); ExpectedAmmo = A->Combat->GetMagazineAmmo();
-        if (ExpectedHealth <= 0.f || ExpectedAmmo < FMath::CeilToInt(ExpectedHealth / ShotDamage))
+        ExpectedShield = B->GetShield();
+        if (ExpectedHealth <= 0.f || ExpectedShield <= 0.f || ExpectedAmmo < FMath::CeilToInt((ExpectedHealth + ExpectedShield) / ShotDamage))
         { Fail(TEXT("fixture requires enough magazine ammo to kill target without reload")); return; }
         ShotWait = FMath::Max(.5f, Def->FireInterval + .2f + 600.f / Def->MuzzleSpeed);
         // Repeat initialization, then inspect the actual equipment input grants rather than whole-ASC size.
@@ -169,7 +186,7 @@ void ANGCombatTestGameMode::SmokeTick()
         if (!Reports.Contains(Players[0])) { SendShooter(7); return; }
         if (Now - PhaseTime < ShotWait) return;
         const auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(A->GetAbilitySystemComponent());
-        if (!ASC || !GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get()) || !FMath::IsNearlyEqual(B->GetHealth(), ExpectedHealth)
+        if (!ASC || !GetDefault<UNGFireAbility>()->CheckCooldown({}, ASC->AbilityActorInfo.Get()) || !VitalsMatch()
             || A->Combat->GetMagazineAmmo() != ExpectedAmmo)
         { Fail(TEXT("hip fire changed health/ammo or consumed an available fire gate")); return; }
         UE_LOG(LogTemp, Display, TEXT("NG_HIP_FIRE_PASS gate=open before_and_after ADS=off"));
@@ -178,17 +195,16 @@ void ANGCombatTestGameMode::SmokeTick()
     if (Phase == 3)
     {
         if (Now - PhaseTime < ShotWait) return;
-        if (!FMath::IsNearlyEqual(B->GetHealth(), ExpectedHealth) || A->Combat->GetMagazineAmmo() != ExpectedAmmo)
+        if (!VitalsMatch() || A->Combat->GetMagazineAmmo() != ExpectedAmmo)
         { Fail(TEXT("hip fire changed health/ammo")); return; }
         if (!Reports.Contains(Players[0]) || !A->Combat->IsAiming()) { SendShooter(2); return; }
-        SendShooter(3); ++Shots; --ExpectedAmmo; ExpectedHealth = FMath::Max(0.f, ExpectedHealth - ShotDamage);
-        Phase = 4; PhaseTime = Now; return;
+        FireExpectedShot(); return;
     }
     if (Phase == 4)
     {
         if (Now - PhaseTime < ShotWait) return;
-        if (!FMath::IsNearlyEqual(B->GetHealth(), ExpectedHealth) || A->Combat->GetMagazineAmmo() != ExpectedAmmo)
-        { Fail(FString::Printf(TEXT("shot %d expected hp=%.2f/ammo=%d actual hp=%.2f/ammo=%d"), Shots, ExpectedHealth, ExpectedAmmo, B->GetHealth(), A->Combat->GetMagazineAmmo())); return; }
+        if (!VitalsMatch() || A->Combat->GetMagazineAmmo() != ExpectedAmmo)
+        { Fail(FString::Printf(TEXT("shot %d expected hp=%.2f shield=%.2f ammo=%d actual hp=%.2f shield=%.2f ammo=%d"), Shots, ExpectedHealth, ExpectedShield, ExpectedAmmo, B->GetHealth(), B->GetShield(), A->Combat->GetMagazineAmmo())); return; }
         AskClients(ExpectedHealth <= 0.f ? 5 : 4); Phase = 5; return;
     }
     if (Phase == 5)
@@ -196,8 +212,7 @@ void ANGCombatTestGameMode::SmokeTick()
         if (Reports.Num() != 2) { if (Now - PhaseTime > 1.) AskClients(ExpectedHealth <= 0.f ? 5 : 4); return; }
         if (ExpectedHealth > 0.f)
         {
-            SendShooter(3); ++Shots; --ExpectedAmmo; ExpectedHealth = FMath::Max(0.f, ExpectedHealth - ShotDamage);
-            Phase = 4; PhaseTime = Now; return;
+            FireExpectedShot(); return;
         }
         Corpse = B;
         Players[1]->UnPossess(); RestartPlayer(Players[1].Get());
@@ -208,7 +223,9 @@ void ANGCombatTestGameMode::SmokeTick()
         auto* OldPawn = Corpse.Get();
         if (!OldPawn || B == OldPawn || !B->CharacterStateMachine->IsGameplayReady(TAG_NGAlive)) return;
         const float Health = B->GetHealth();
-        if (Health <= 0.f || !FMath::IsNearlyEqual(Health, B->GetMaxHealth()) || OldPawn->GetAbilitySystemComponent())
+        const float Shield = B->GetShield();
+        if (Health <= 0.f || !FMath::IsNearlyEqual(Health, B->GetMaxHealth()) || Shield <= 0.f
+            || !FMath::IsNearlyEqual(Shield, B->GetMaxShield()) || OldPawn->GetAbilitySystemComponent())
         { Fail(TEXT("respawn binding")); return; }
         OldPawn->TryInitializeGameplay(); OldPawn->UnbindGameplay();
         if (NGDamage::ApplyToPawn(OldPawn, A->GetAbilitySystemComponent(), ShotDamage))
@@ -218,7 +235,7 @@ void ANGCombatTestGameMode::SmokeTick()
         if (!StaleSpec.IsValid()) { Fail(TEXT("damage spec unavailable")); return; }
         StaleSpec.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(TEXT("Data.Damage")), ShotDamage);
         A->GetAbilitySystemComponent()->ApplyGameplayEffectSpecToTarget(*StaleSpec.Data, B->GetAbilitySystemComponent());
-        if (!FMath::IsNearlyEqual(B->GetHealth(), Health) || !B->GetAbilitySystemComponent())
+        if (!FMath::IsNearlyEqual(B->GetHealth(), Health) || !FMath::IsNearlyEqual(B->GetShield(), Shield) || !B->GetAbilitySystemComponent())
         { Fail(TEXT("old body affected new Avatar")); return; }
         AskClients(6); Phase = 8; return;
     }

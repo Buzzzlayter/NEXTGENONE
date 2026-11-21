@@ -1,5 +1,6 @@
 #include "Gameplay/Abilities/NGEquipmentControlAbilities.h"
 
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
@@ -131,12 +132,19 @@ void UNGPrimaryAttackAbility::ReceiveFireView(const FGameplayAbilityTargetDataHa
 void UNGPrimaryAttackAbility::ContinuePrimaryInput()
 {
 	if (!IsActive()) return;
-	if (!HasCurrentWeapon() || !ActiveCombat->IsAiming() || ActiveCombat->GetMagazineAmmo() <= 0)
+	if (!HasCurrentWeapon() || !ActiveCombat->IsAiming())
 	{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true); return; }
 	auto* ASC = CurrentActorInfo->AbilitySystemComponent.Get();
 	if (!CurrentActorInfo->IsLocallyControlled()
 		&& (!ServerView.IsSet() || GetWorld()->GetTimeSeconds() - LastViewReceivedTime > FireViewMaxAge))
 	{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true); return; }
+	if (ActiveCombat->GetMagazineAmmo() <= 0)
+	{
+		auto* WeaponASC = Cast<UNGAbilitySystemComponent>(ASC);
+		const bool bReloading = WeaponASC && WeaponASC->TryActivateAbilityByInputTag(TAG_NGReloadInput);
+		if (IsActive()) EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bReloading);
+		return;
+	}
 	if (!ASC->HasMatchingGameplayTag(TAG_NGFireCooldown))
 	{
 		FVector Origin, Direction;

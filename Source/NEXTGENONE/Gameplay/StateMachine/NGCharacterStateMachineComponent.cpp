@@ -1,15 +1,15 @@
 #include "NGCharacterStateMachineComponent.h"
-#include "GameplayTags/NGGameplayTags.h"
 #include "NGCharacterStateResources.h"
+#include "AbilitySystem/NGAbilitySystem.h"
 #include "AbilitySystemComponent.h"
 #include "GCFSMUtilities.h"
 #include "GCFSM.h"
 #include "GameFramework/Pawn.h"
 #include "Character/NGControlStateDefinition.h"
 #include "GameplayCueManager.h"
-#include "AbilitySystemGlobals.h"
-#include "AbilitySystem/NGAbilitySystem.h"
+#include "GameplayTags/NGGameplayTags.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
+#include "AbilitySystemGlobals.h"
 #include "Net/UnrealNetwork.h"
 
 bool UNGCharacterStateMachineComponent::StartIfReady()
@@ -53,8 +53,6 @@ void UNGCharacterStateMachineComponent::UnbindAbilitySpecNotifications()
 void UNGCharacterStateMachineComponent::NotifyAbilitySpecsReplicated(const UAbilitySystemComponent* ASC)
 {
 	if (bEnding || bResourcesFailed || !ASC || GetReadyASC() != ASC) return;
-	// Entry completion and ability replication are independent. Consumers recheck
-	// IsGameplayReady; this also invalidates readiness when required specs disappear.
 	OnResourcesReady.Broadcast(GetOwner());
 }
 
@@ -71,7 +69,6 @@ void UNGCharacterStateMachineComponent::NotifyDeath()
 {
 	if (bEnding || !GetOwner()->HasAuthority()) return;
 	if (!bResourcesFailed) { RequestStateTransition(TAG_NGDead, DeathEvent); return; }
-	// A broken graph cannot run GA_Death, but a later lethal hit must still mark this body dead.
 	FailedStateTag = TAG_NGDead;
 	GetOwner()->FlushNetDormancy(); GetOwner()->ForceNetUpdate();
 	NotifyStateChanged();
@@ -148,7 +145,7 @@ void UNGCharacterStateMachineComponent::NotifyResourcesReady(UNGCharacterStateRe
 void UNGCharacterStateMachineComponent::NotifyResourceFailure(FGameplayTag StateTag, const FString& Reason)
 {
 	if (bEnding || bResourcesFailed) return;
-	bResourcesFailed = true; // Terminal for this Pawn; never retry partially entered gameplay.
+	bResourcesFailed = true;
 	FailedStateTag = RequestedStateTag.IsValid() ? RequestedStateTag : StateTag;
 	RequestedStateTag = FGameplayTag();
 	RequestedStateEvent = FGameplayTag();
@@ -177,7 +174,6 @@ void UNGCharacterStateMachineComponent::OnRep_ResourceFailure()
 	}
 	OnResourceFailure.Broadcast();
 	NotifyStateChanged();
-	// This notification means the handoff barrier is released, not gameplay success.
 	OnResourcesReady.Broadcast(GetOwner());
 }
 
@@ -214,16 +210,16 @@ bool UNGCharacterStateMachineComponent::OwnsStateAbility(const UAbilitySystemCom
 
 bool UNGCharacterStateMachineComponent::IsGameplayReady(FGameplayTag RequiredState) const
 {
-	if (bEnding || bResourcesFailed || RequestedStateTag.IsValid() || !GetReadyASC() || ActiveResources.IsEmpty()) return false;
+	const auto* ASC = GetReadyASC();
+	if (bEnding || bResourcesFailed || RequestedStateTag.IsValid() || !ASC || ActiveResources.IsEmpty()) return false;
 	bool bHasRequiredState = !RequiredState.IsValid();
 	for (const auto& Resource : ActiveResources)
 	{
 		if (!Resource.IsValid() || !Resource->Definition || !Resource->IsEntryReady()) return false;
-		// State replication and owner-only ability specs can arrive in either order.
 		for (const auto& Grant : Resource->Definition->Abilities)
 		{
 			bool bFound = false;
-			for (const auto& Spec : GetReadyASC()->GetActivatableAbilities())
+			for (const auto& Spec : ASC->GetActivatableAbilities())
 				if (Spec.Ability && Spec.Ability->GetClass() == Grant.Ability.Get()) { bFound = true; break; }
 			if (!bFound) return false;
 		}
@@ -250,8 +246,7 @@ void UNGCharacterStateMachineComponent::SuspendResources()
 void UNGCharacterStateMachineComponent::EndPlay(EEndPlayReason::Type Reason)
 {
 	bEnding = true;
-	SuspendResources(); ActiveResources.Reset();
-	ReadyASC.Reset();
+	SuspendResources(); ActiveResources.Reset(); ReadyASC.Reset();
 	// Stop() asserts if a GCFSM state is active. Pause the dying owner's ticker instead.
 	if (UGCFSMUtilities::GetRootStateFromContext(GetOwner(), false)) UGCFSMUtilities::PauseFSMs(GetOwner(), true);
 	Super::EndPlay(Reason);

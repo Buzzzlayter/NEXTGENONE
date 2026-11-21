@@ -9,6 +9,10 @@
 #include "Engine/LocalPlayer.h"
 #include "Input/PlayerInputSubsystem.h"
 #include "InputMappingContext.h"
+#if WITH_EDITOR
+#include "Engine/World.h"
+#include "Logging/MessageLog.h"
+#endif
 
 namespace
 {
@@ -33,7 +37,19 @@ void UNGCharacterStateResources::Enter()
 	const auto* GameplayInput = Pawn->FindComponentByClass<UNGGameplayInputComponent>();
 	const auto* InputConfig = GameplayInput ? GameplayInput->InputConfig.Get() : nullptr;
 	if (!Definition->ValidateInputMappings(InputConfig, Error))
-	{ FailEntry(Error); return; }
+	{
+#if WITH_EDITOR
+		if (Pawn->IsPlayerControlled() && Pawn->GetWorld()->WorldType == EWorldType::PIE)
+		{
+			FMessageLog PlayLog(TEXT("PIE"));
+			PlayLog.Error(FText::Format(NSLOCTEXT("NGCharacterStateResources", "InputSetupFailure", "Character input setup failed for {0}. {1}"),
+				FText::FromString(Definition->GetName()), FText::FromString(Error)));
+			PlayLog.Notify(NSLOCTEXT("NGCharacterStateResources", "InputSetupNotification", "Fix the character input setup in the editor."));
+		}
+#endif
+		FailEntry(Error);
+		return;
+	}
 	bEntered = true;
 	bEntryReady = false;
 	if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->RegisterResources(this);

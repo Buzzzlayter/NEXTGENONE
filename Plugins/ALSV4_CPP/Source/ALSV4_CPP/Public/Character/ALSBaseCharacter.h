@@ -23,6 +23,18 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FJumpPressedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnJumpedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRagdollStateChangedSignature, bool, bRagdollState);
 
+USTRUCT()
+struct FALSRagdollRecovery
+{
+	GENERATED_BODY()
+
+	UPROPERTY() FVector Location = FVector::ZeroVector;
+	UPROPERTY() FRotator Rotation = FRotator::ZeroRotator;
+	UPROPERTY() FVector Velocity = FVector::ZeroVector;
+	UPROPERTY() bool bOnGround = false;
+	UPROPERTY() bool bFaceUp = false;
+};
+
 /*
  * Base character class
  */
@@ -59,6 +71,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Ragdoll System")
 	virtual void RagdollEnd();
+	bool IsRagdollSettled() const;
 
 	/** Character States */
 
@@ -154,8 +167,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ALS|Character States")
 	virtual void ReplicatedRagdollEnd();
 
-	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = "ALS|Character States")
-	void Multicast_RagdollEnd();
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_RagdollEnd(const FALSRagdollRecovery& Recovery);
 
 	/** Input */
 
@@ -330,9 +343,10 @@ protected:
 	/** Ragdoll System */
 	virtual bool CanAcceptClientLocomotion() const;
 
-	void RagdollUpdate(float DeltaTime);
+	FTransform GetRagdollPelvisTransform() const;
+	void RagdollUpdate(float DeltaSeconds);
 
-	void SetActorLocationDuringRagdoll(float DeltaTime);
+	void SetActorLocationDuringRagdoll(float DeltaSeconds);
 
 	/** State Changes */
 
@@ -566,11 +580,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "ALS|Ragdoll System")
 	FVector LastRagdollVelocity = FVector::ZeroVector;
 
-	UPROPERTY(BlueprintReadOnly, Replicated, Category = "ALS|Ragdoll System")
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_TargetRagdollLocation, Category = "ALS|Ragdoll System")
 	FVector TargetRagdollLocation = FVector::ZeroVector;
 
-	/* Server ragdoll pull force storage*/
-	float ServerRagdollPull = 0.0f;
 
 	/* Dedicated server mesh default visibility based anim tick option*/
 	EVisibilityBasedAnimTickOption DefVisBasedTickOp;
@@ -599,6 +611,9 @@ protected:
 	bool bEnableNetworkOptimizations = false;
 
 private:
+	UFUNCTION() void OnRep_TargetRagdollLocation();
+	bool bHasRagdollNetworkTarget = false;
+	const FALSRagdollRecovery* PendingRagdollRecovery = nullptr;
 	// Bounded client locomotion intents only. Actions/assets/transforms have no client RPC.
 	bool AcceptClientStateCommand(uint8 Command);
 	void QueueClientStateCommand(uint8 Command, uint8 Value);

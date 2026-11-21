@@ -175,6 +175,11 @@ bool ANGWeaponActor::ExecuteFire_Implementation(FVector Eye, FVector ViewDirecti
 	return true;
 }
 
+void ANGWeaponActor::NotifyProjectileShot(UNGWeaponDefinition* Definition, const FVector& Start, const FVector& End)
+{
+	MulticastShot(Start, End, false, ++ShotSerial, Definition);
+}
+
 void ANGWeaponActor::MulticastShot_Implementation(FVector_NetQuantize Start, FVector_NetQuantize End, bool bHit, int32 ShotId,UNGWeaponDefinition* ShotWeapon)
 {
 	if (GetNetMode() == NM_DedicatedServer) return;

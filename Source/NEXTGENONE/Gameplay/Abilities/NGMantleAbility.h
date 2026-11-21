@@ -3,9 +3,19 @@
 #include "CoreMinimal.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Components/ALSMantleComponent.h"
+#include "GameplayEffect.h"
 #include "NGMantleAbility.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNGMantleFinished, bool, bCancelled);
+
+UCLASS()
+class NEXTGENONE_API UNGMantleStateEffect : public UGameplayEffect
+{
+	GENERATED_BODY()
+
+public:
+	UNGMantleStateEffect();
+};
 
 /** Original ALS checks, timeline, motion and animation selection; GAS/network lifecycle bridge only. */
 UCLASS(Blueprintable, ClassGroup=Gameplay, meta=(BlueprintSpawnableComponent))
@@ -52,5 +62,6 @@ public:
 		FGameplayAbilityActivationInfo Activation, bool bReplicateEnd, bool bCancelled) override;
 private:
 	TWeakObjectPtr<UNGALSMantleExecutor> ExecutionComponent;
+	FActiveGameplayEffectHandle MantleEffect;
 	UFUNCTION() void Finished(bool bCancelled);
 };

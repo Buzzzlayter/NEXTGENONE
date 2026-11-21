@@ -7,10 +7,12 @@
 
 #include "Character/Animation/ALSCharacterAnimInstance.h"
 #include "Character/Animation/ALSPlayerCameraBehavior.h"
+#include "Animation/PoseSnapshot.h"
 #include "Library/ALSMathLibrary.h"
 #include "Components/ALSDebugComponent.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "Character/ALSCharacterMovementComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -19,6 +21,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Net/UnrealNetwork.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 
 const FName NAME_FP_Camera(TEXT("FP_Camera"));
@@ -26,9 +29,7 @@ const FName NAME_Pelvis(TEXT("Pelvis"));
 const FName NAME_RagdollPose(TEXT("RagdollPose"));
 const FName NAME_RotationAmount(TEXT("RotationAmount"));
 const FName NAME_YawOffset(TEXT("YawOffset"));
-const FName NAME_pelvis(TEXT("pelvis"));
 const FName NAME_root(TEXT("root"));
-const FName NAME_spine_03(TEXT("spine_03"));
 
 
 AALSBaseCharacter::AALSBaseCharacter(const FObjectInitializer& ObjectInitializer)
@@ -152,7 +153,7 @@ void AALSBaseCharacter::RagdollStart()
 		RagdollStateChangedDelegate.Broadcast(true);
 	}
 
-	/** When Networked, disables replicate movement reset TargetRagdollLocation and ServerRagdollPull variable
+	/** When Networked, disables replicate movement and resets TargetRagdollLocation
 	and if the host is a dedicated server, change character mesh optimisation option to avoid z-location bug*/
 	MyCharacterMovementComponent->bIgnoreClientMovementErrorChecksAndCorrection = 1;
 
@@ -161,8 +162,7 @@ void AALSBaseCharacter::RagdollStart()
 		DefVisBasedTickOp = GetMesh()->VisibilityBasedAnimTickOption;
 		GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	}
-	TargetRagdollLocation = GetMesh()->GetSocketLocation(NAME_Pelvis);
-	ServerRagdollPull = 0;
+	if (HasAuthority()) TargetRagdollLocation = GetMesh()->GetSocketLocation(NAME_Pelvis);
 
 	// Disable URO
 	bPreRagdollURO = GetMesh()->bEnableUpdateRateOptimizations;
@@ -190,8 +190,15 @@ void AALSBaseCharacter::RagdollStart()
 	SetReplicateMovement(false);
 }
 
+bool AALSBaseCharacter::IsRagdollSettled() const
+{
+	return GetMovementState() == EALSMovementState::Ragdoll && bRagdollOnGround
+		&& LastRagdollVelocity.SizeSquared() <= FMath::Square(150.f);
+}
+
 void AALSBaseCharacter::RagdollEnd()
 {
+	bHasRagdollNetworkTarget = false;
 	/** Re-enable Replicate Movement and if the host is a dedicated server set mesh visibility based anim
 	tick option back to default*/
 
@@ -208,9 +215,35 @@ void AALSBaseCharacter::RagdollEnd()
 	SetReplicateMovement(true);
 
 	// Step 1: Save a snapshot of the current Ragdoll Pose for use in AnimGraph to blend out of the ragdoll
-	if (GetMesh()->GetAnimInstance())
+	auto* RagdollMesh = GetMesh();
+	FPoseSnapshot RagdollPose;
+	FTransform RagdollPoseRootWorld;
+	if (RagdollMesh->GetAnimInstance() && RagdollMesh->GetSkeletalMeshAsset() && RagdollMesh->GetNumComponentSpaceTransforms() > 0)
 	{
-		GetMesh()->GetAnimInstance()->SavePoseSnapshot(NAME_RagdollPose);
+		RagdollMesh->SnapshotPose(RagdollPose);
+		if (RagdollPose.bIsValid)
+			RagdollPoseRootWorld = RagdollPose.LocalTransforms[0] * RagdollMesh->GetComponentTransform();
+	}
+	RagdollMesh->SetAllBodiesSimulatePhysics(false);
+	if (const auto* Recovery = PendingRagdollRecovery)
+	{
+		bRagdollOnGround = Recovery->bOnGround;
+		bRagdollFaceUp = Recovery->bFaceUp;
+		LastRagdollVelocity = Recovery->Velocity;
+		SetActorLocationAndRotation(Recovery->Location, Recovery->Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+		TargetRotation = Recovery->Rotation;
+		MyCharacterMovementComponent->DiscardMovementBeforeRagdollRecovery();
+		RagdollMesh->SetRelativeLocationAndRotation(GetBaseTranslationOffset(), GetBaseRotationOffset(),
+			false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	if (RagdollPose.bIsValid)
+	{
+		if (auto* RagdollAnimInstance = RagdollMesh->GetAnimInstance())
+		{
+			RagdollPose.LocalTransforms[0] = RagdollPoseRootWorld.GetRelativeTransform(RagdollMesh->GetComponentTransform());
+			RagdollPose.SnapshotName = NAME_RagdollPose;
+			RagdollAnimInstance->AddPoseSnapshot(NAME_RagdollPose) = MoveTemp(RagdollPose);
+		}
 	}
 
 	// Step 2: If the ragdoll is on the ground, set the movement mode to walking and play a Get Up animation.
@@ -229,11 +262,10 @@ void AALSBaseCharacter::RagdollEnd()
 		GetCharacterMovement()->Velocity = LastRagdollVelocity;
 	}
 
-	// Step 3: Re-Enable capsule collision, and disable physics simulation on the mesh.
+	// Step 3: Re-Enable capsule collision.
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetMesh()->SetCollisionObjectType(ECC_Pawn);
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	GetMesh()->SetAllBodiesSimulatePhysics(false);
 
 	if (RagdollStateChangedDelegate.IsBound())
 	{
@@ -454,8 +486,10 @@ void AALSBaseCharacter::Multicast_RagdollStart_Implementation()
 
 
 
-void AALSBaseCharacter::Multicast_RagdollEnd_Implementation()
+void AALSBaseCharacter::Multicast_RagdollEnd_Implementation(const FALSRagdollRecovery& Recovery)
 {
+	if (GetMovementState() != EALSMovementState::Ragdoll) return;
+	TGuardValue<const FALSRagdollRecovery*> RecoveryGuard(PendingRagdollRecovery, &Recovery);
 	RagdollEnd();
 }
 
@@ -618,7 +652,19 @@ void AALSBaseCharacter::GetCameraParameters(float& TPFOVOut, float& FPFOVOut, bo
 	bRightShoulderOut = bRightShoulder;
 }
 
-void AALSBaseCharacter::RagdollUpdate(float DeltaTime)
+FTransform AALSBaseCharacter::GetRagdollPelvisTransform() const
+{
+	const auto* PelvisBody = GetMesh()->GetBodyInstance(NAME_Pelvis, false);
+	return PelvisBody && PelvisBody->IsInstanceSimulatingPhysics()
+		? PelvisBody->GetUnrealWorldTransform() : GetMesh()->GetSocketTransform(NAME_Pelvis);
+}
+
+void AALSBaseCharacter::OnRep_TargetRagdollLocation()
+{
+	bHasRagdollNetworkTarget = !TargetRagdollLocation.ContainsNaN();
+}
+
+void AALSBaseCharacter::RagdollUpdate(float DeltaSeconds)
 {
 	GetMesh()->bOnlyAllowAutonomousTickPose = false;
 
@@ -640,21 +686,36 @@ void AALSBaseCharacter::RagdollUpdate(float DeltaTime)
 	GetMesh()->SetEnableGravity(bEnableGrav);
 
 	// Update the Actor location to follow the ragdoll.
-	SetActorLocationDuringRagdoll(DeltaTime);
+	SetActorLocationDuringRagdoll(DeltaSeconds);
 }
 
-void AALSBaseCharacter::SetActorLocationDuringRagdoll(float DeltaTime)
+void AALSBaseCharacter::SetActorLocationDuringRagdoll(float DeltaSeconds)
 {
+	const FTransform LocalPelvisPose = GetRagdollPelvisTransform();
+	FVector LocalPelvisLocation = LocalPelvisPose.GetLocation();
+	if (LocalPelvisLocation.ContainsNaN()) return;
 	if (HasAuthority())
 	{
 		// Server physics owns the capsule target; clients never supply body coordinates.
-		const FVector PelvisLocation = GetMesh()->GetSocketLocation(NAME_Pelvis);
-		if (!PelvisLocation.ContainsNaN()) TargetRagdollLocation = PelvisLocation;
+		TargetRagdollLocation = LocalPelvisLocation;
+	}
+	else if (bHasRagdollNetworkTarget && DeltaSeconds > 0.f
+		&& FVector::DistSquared(LocalPelvisLocation, TargetRagdollLocation) > FMath::Square(15.f))
+	{
+		const FVector CorrectedLocation = FMath::VInterpTo(LocalPelvisLocation, TargetRagdollLocation, DeltaSeconds, 7.f);
+		const FVector BodyOffset = (CorrectedLocation - LocalPelvisLocation).GetClampedToMaxSize(650.f * DeltaSeconds);
+		GetMesh()->ForEachBodyBelow(NAME_None, true, false, [&BodyOffset](FBodyInstance* RagdollBody)
+		{
+			if (!RagdollBody || !RagdollBody->IsInstanceSimulatingPhysics()) return;
+			FTransform BodyPose = RagdollBody->GetUnrealWorldTransform();
+			BodyPose.AddToTranslation(BodyOffset);
+			RagdollBody->SetBodyTransform(BodyPose, ETeleportType::TeleportPhysics, false);
+		});
+		LocalPelvisLocation += BodyOffset;
 	}
 
-	if (TargetRagdollLocation.ContainsNaN()) return;
 	// Determine whether the ragdoll is facing up or down and set the target rotation accordingly.
-	const FRotator PelvisRot = GetMesh()->GetSocketRotation(NAME_Pelvis);
+	const FRotator PelvisRot = LocalPelvisPose.Rotator();
 	if (PelvisRot.ContainsNaN()) return;
 
 	if (bReversedPelvis) {
@@ -669,8 +730,8 @@ void AALSBaseCharacter::SetActorLocationDuringRagdoll(float DeltaTime)
 
 	// Trace downward from the target location to offset the target location,
 	// preventing the lower half of the capsule from going through the floor when the ragdoll is laying on the ground.
-	const FVector TraceVect(TargetRagdollLocation.X, TargetRagdollLocation.Y,
-	                        TargetRagdollLocation.Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	const FVector TraceVect(LocalPelvisLocation.X, LocalPelvisLocation.Y,
+	                        LocalPelvisLocation.Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 
 	UWorld* World = GetWorld();
 	check(World);
@@ -679,13 +740,13 @@ void AALSBaseCharacter::SetActorLocationDuringRagdoll(float DeltaTime)
 	Params.AddIgnoredActor(this);
 
 	FHitResult HitResult;
-	const bool bHit = World->LineTraceSingleByChannel(HitResult, TargetRagdollLocation, TraceVect,
+	const bool bHit = World->LineTraceSingleByChannel(HitResult, LocalPelvisLocation, TraceVect,
 	                                                  ECC_Visibility, Params);
 
 	if (ALSDebugComponent && ALSDebugComponent->GetShowTraces())
 	{
 		UALSDebugComponent::DrawDebugLineTraceSingle(World,
-		                                             TargetRagdollLocation,
+		                                             LocalPelvisLocation,
 		                                             TraceVect,
 		                                             EDrawDebugTrace::Type::ForOneFrame,
 		                                             bHit,
@@ -696,23 +757,14 @@ void AALSBaseCharacter::SetActorLocationDuringRagdoll(float DeltaTime)
 	}
 
 	bRagdollOnGround = HitResult.IsValidBlockingHit();
-	FVector NewRagdollLoc = TargetRagdollLocation;
+	FVector NewRagdollLoc = LocalPelvisLocation;
 
 	if (bRagdollOnGround)
 	{
 		const float ImpactDistZ = FMath::Abs(HitResult.ImpactPoint.Z - HitResult.TraceStart.Z);
 		NewRagdollLoc.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - ImpactDistZ + 2.0f;
 	}
-	if (!HasAuthority())
-	{
-		ServerRagdollPull = FMath::FInterpTo(ServerRagdollPull, 750.0f, DeltaTime, 0.6f);
-		float RagdollSpeed = FVector(LastRagdollVelocity.X, LastRagdollVelocity.Y, 0).Size();
-		FName RagdollSocketPullName = RagdollSpeed > 300 ? NAME_spine_03 : NAME_pelvis;
-		GetMesh()->AddForce(
-			(TargetRagdollLocation - GetMesh()->GetSocketLocation(RagdollSocketPullName)) * ServerRagdollPull,
-			RagdollSocketPullName, true);
-	}
-	SetActorLocationAndTargetRotation(bRagdollOnGround ? NewRagdollLoc : TargetRagdollLocation, TargetRagdollRotation);
+	SetActorLocationAndTargetRotation(NewRagdollLoc, TargetRagdollRotation);
 }
 
 void AALSBaseCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
@@ -1391,9 +1443,17 @@ void AALSBaseCharacter::ReplicatedRagdollStart()
 
 void AALSBaseCharacter::ReplicatedRagdollEnd()
 {
-	if (HasAuthority())
+	if (HasAuthority() && GetMovementState() == EALSMovementState::Ragdoll)
 	{
-		Multicast_RagdollEnd();
+		RagdollUpdate(0.f);
+		FALSRagdollRecovery Recovery;
+		Recovery.Location = GetActorLocation();
+		Recovery.Rotation = GetActorRotation();
+		Recovery.Velocity = LastRagdollVelocity;
+		Recovery.bOnGround = bRagdollOnGround;
+		Recovery.bFaceUp = bRagdollFaceUp;
+		Multicast_RagdollEnd(Recovery);
+		ForceNetUpdate();
 	}
 }
 

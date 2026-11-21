@@ -1,6 +1,7 @@
 // Copyright (c) 2018 Gamecentric, All rights reserved
 
 #include "GCFSMStateNode.h"
+#include "Containers/Ticker.h"
 #include "GCFSMEditorModule.h"
 #include "GCFSMStateFactory.h"
 #include "GCFSM.h"
@@ -1240,10 +1241,19 @@ void UGCFSMStateNode::PinDefaultValueChanged(UEdGraphPin* pin)
 {
 	SyncPropertyWithPin(pin);
 
-	if (pin == Pins[ImplementationPinIndex] || pin == GetTimeOutPin())
+	const bool bImplementationPin = Pins.IsValidIndex(ImplementationPinIndex) && pin == Pins[ImplementationPinIndex];
+	if (bPinReconstructionQueued || (!bImplementationPin && pin != GetTimeOutPin())) return;
+	bPinReconstructionQueued = true;
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this](float)
 	{
-		ReconstructNode();
-	}
+		bPinReconstructionQueued = false;
+		if (auto* Graph = GetGraph(); IsValid(Graph) && Graph->Nodes.Contains(this))
+		{
+			ReconstructNode();
+			Graph->NotifyGraphChanged();
+		}
+		return false;
+	}));
 }
 
 void UGCFSMStateNode::PinConnectionListChanged(UEdGraphPin* pin)

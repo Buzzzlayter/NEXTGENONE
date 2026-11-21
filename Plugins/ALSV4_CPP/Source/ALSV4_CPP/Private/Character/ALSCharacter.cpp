@@ -18,6 +18,9 @@ ECollisionChannel AALSCharacter::GetThirdPersonTraceParams(FVector& TraceOrigin,
 
 FTransform AALSCharacter::GetThirdPersonPivotTarget()
 {
+	if (GetMovementState() == EALSMovementState::Ragdoll)
+		return FTransform(GetActorRotation(), GetRagdollPelvisTransform().GetLocation());
+
 	return FTransform(GetActorRotation(),
 	                  (GetMesh()->GetSocketLocation(TEXT("Head")) + GetMesh()->GetSocketLocation(TEXT("root"))) / 2.0f,
 	                  FVector::OneVector);

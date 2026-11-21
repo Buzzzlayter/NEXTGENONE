@@ -32,7 +32,8 @@ void UNGCombatSmokeComponent::ClientSmoke_Implementation(FNGCombatSmokeRequest R
 	{
 		if (ASC && ASC->GetOwnerActor() == PC->PlayerState && ASC->GetAvatarActor() == ControlledPawn
 			&& ControlledPawn->CharacterStateMachine->IsGameplayReady(TAG_NGAlive)
-			&& ControlledPawn->GetMaxHealth() > 0.f && FMath::IsNearlyEqual(ControlledPawn->GetHealth(), ControlledPawn->GetMaxHealth()))
+			&& ControlledPawn->GetMaxHealth() > 0.f && FMath::IsNearlyEqual(ControlledPawn->GetHealth(), ControlledPawn->GetMaxHealth())
+			&& ControlledPawn->GetMaxShield() > 0.f && FMath::IsNearlyEqual(ControlledPawn->GetShield(), ControlledPawn->GetMaxShield()))
 			ServerSmokeResult(Command, true);
 		return;
 	}
@@ -77,6 +78,7 @@ void UNGCombatSmokeComponent::ClientSmoke_Implementation(FNGCombatSmokeRequest R
 	{
 		if (!IsValid(Request.Target) || !IsValid(Request.Shooter)) return;
 		const bool bTargetCorrect = FMath::IsNearlyEqual(Request.Target->GetHealth(), Request.ExpectedHealth)
+			&& FMath::IsNearlyEqual(Request.Target->GetShield(), Request.ExpectedShield)
 			&& Request.Target->IsDead() == (Request.ExpectedHealth <= 0.f);
 		const bool bAmmoCorrect = ControlledPawn != Request.Shooter || ControlledPawn->Combat->GetMagazineAmmo() == Request.ExpectedAmmo;
 		if (bTargetCorrect && bAmmoCorrect && Request.Shooter->Combat->GetEquipment().bEquipped)

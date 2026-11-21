@@ -2,6 +2,7 @@
 #include "Inventory/UIInventoryOperationInterface.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
 
@@ -15,6 +16,13 @@ void UUIInventorySlotWidget::SetItemDragHidden(bool bHidden)
 {
 	bItemDragHidden = bHidden;
 	UpdateItemVisibility();
+}
+
+void UUIInventorySlotWidget::SetSlotSize(const FVector2D& Size)
+{
+	if (!SlotSizeBox) return;
+	if (Size.X > 0.0) SlotSizeBox->SetWidthOverride(static_cast<float>(Size.X));
+	if (Size.Y > 0.0) SlotSizeBox->SetHeightOverride(static_cast<float>(Size.Y));
 }
 
 void UUIInventorySlotWidget::SetData(const FUIInventorySlotData& InData, UObject* InOperationHandler)
