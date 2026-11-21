@@ -77,3 +77,4 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemEquipmentTorso, "Item.Equipment.Torso");
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGDeathRagdollCue, "GameplayCue.Character.Death.Ragdoll");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGLaserSightCue, "GameplayCue.Weapon.LaserSight");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGMedkitHealCue, "GameplayCue.Item.Medkit.Heal");

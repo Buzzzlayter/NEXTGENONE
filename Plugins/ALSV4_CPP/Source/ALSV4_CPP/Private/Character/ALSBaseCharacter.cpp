@@ -1118,9 +1118,12 @@ void AALSBaseCharacter::UpdateGroundedRotation(float DeltaTime)
 
 void AALSBaseCharacter::UpdateInAirRotation(float DeltaTime)
 {
-	if (RotationMode == EALSRotationMode::VelocityDirection || RotationMode == EALSRotationMode::LookingDirection)
+	if (RotationMode == EALSRotationMode::VelocityDirection)
 	{
-		// Velocity / Looking Direction Rotation
+		SmoothCharacterRotation({0.0f, LastVelocityRotation.Yaw, 0.0f}, 0.0f, 5.0f, DeltaTime);
+	}
+	else if (RotationMode == EALSRotationMode::LookingDirection)
+	{
 		SmoothCharacterRotation({0.0f, InAirRotation.Yaw, 0.0f}, 0.0f, 5.0f, DeltaTime);
 	}
 	else if (RotationMode == EALSRotationMode::Aiming)

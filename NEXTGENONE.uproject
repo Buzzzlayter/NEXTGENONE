@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.8",
+	"EngineAssociation": "{D3F74579-4773-598A-97B7-218263793B3D}",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -19,7 +19,6 @@
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}
-
 	],
 	"Plugins": [
 		{
@@ -51,6 +50,5 @@
 			"Enabled": true,
 			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/be0b4cb9916b4eba882cbe9dffd4fb5a"
 		}
-
 	]
 }

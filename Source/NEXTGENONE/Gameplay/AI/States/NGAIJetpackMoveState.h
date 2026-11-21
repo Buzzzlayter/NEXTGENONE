@@ -2,10 +2,12 @@
 
 #include "Gameplay/AI/States/NGAIActionState.h"
 #include "Gameplay/AI/States/NGAIAbilityInput.h"
+#include "Library/ALSCharacterEnumLibrary.h"
 #include "NGAIJetpackMoveState.generated.h"
 
 class UNGCharacterMovementComponent;
 class UEnvQuery;
+class ANavigationData;
 
 UCLASS(Blueprintable, DisplayName="AI Jetpack Move State", PrioritizeCategories=("Flight"))
 class NEXTGENONE_API UNGAIJetpackMoveState : public UNGAIActionState
@@ -37,14 +39,22 @@ protected:
 	virtual void ReleaseActionResources() override;
 
 private:
-	bool ProjectLandingPoint(const FVector& Point, FVector& ProjectedPoint) const;
+	bool ResolveLandingPoint(const FVector& Point, FVector& ProjectedPoint) const;
+	bool HasLandingRoute(const FVector& Point) const;
+	bool IsLandingApproachClear(const FVector& Point) const;
 	bool FindNearbyLandingPoint(FVector& ProjectedPoint) const;
+	bool FindLowerLandingPoint(FVector& ProjectedPoint) const;
 	void RequestLandingQuery();
 	FNGAIAbilityInput JetpackInput;
 	TWeakObjectPtr<UNGCharacterMovementComponent> FlightMovement;
+	TWeakObjectPtr<const ANavigationData> LandingNavData;
+	FVector LandingNavAnchor = FVector::ZeroVector;
 	FVector LandingPoint = FVector::ZeroVector;
 	float LandingUpdateRemaining = 0.f;
 	int32 LandingQueryID = INDEX_NONE;
+	EALSRotationMode PreviousRotationMode = EALSRotationMode::LookingDirection;
 	bool bWasAirborne = false;
 	bool bBrakeForEdge = false;
+	bool bRecoveryFlight = false;
+	bool bRestoreRotationMode = false;
 };
