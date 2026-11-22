@@ -5,6 +5,11 @@
 	"Description": "",
 	"Modules": [
 		{
+			"Name": "CommonLoadingScreen",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "GameplayFoundation",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"

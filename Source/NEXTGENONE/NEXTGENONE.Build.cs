@@ -16,7 +16,7 @@ public class NEXTGENONE : ModuleRules
 			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "Kismet", "BlueprintGraph", "AssetTools", "AssetRegistry", "UMGEditor" });
 		}
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "PhysicsCore", "Niagara", "NavigationSystem", "GeometryCollectionEngine", "FieldSystemEngine", "Chaos" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "PhysicsCore", "Niagara", "NavigationSystem", "GeometryCollectionEngine", "FieldSystemEngine", "Chaos", "CommonLoadingScreen" });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
