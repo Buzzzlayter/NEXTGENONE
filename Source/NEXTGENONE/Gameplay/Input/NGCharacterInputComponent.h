@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Input/NGGameplayInputComponent.h"
+#include "Engine/TimerHandle.h"
 #include "NGCharacterInputComponent.generated.h"
 
 class UPlayerInputSubsystem;
@@ -17,8 +18,12 @@ protected:
 	virtual void HandleNativeInput_Implementation(FGameplayTag Tag, const FInputActionValue& Value, ETriggerEvent Phase) override;
 	virtual void BindInputPolicy() override;
 	virtual void UnbindInputPolicy() override;
+	virtual void DispatchAbilityPress(UNGAbilitySystemComponent& ASC, FGameplayTag Tag) override;
 private:
 	TWeakObjectPtr<UPlayerInputSubsystem> LocalInput;
 	TSet<FGameplayTag> ActivatedNativeActions;
+	FTimerHandle DashInputTimer;
+	void DispatchDash();
+	void CancelPendingDash();
 	UFUNCTION() void GameplayBlocked(bool bBlocked);
 };

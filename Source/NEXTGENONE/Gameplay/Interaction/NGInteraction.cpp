@@ -5,9 +5,15 @@
 #include "Gameplay/Interaction/NGItemPickup.h"
 #include "Gameplay/Combat/NGAimComponent.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Input/PlayerInputSubsystem.h"
+#include "Input/NGGameplayInputComponent.h"
+#include "Input/NGGameplayInputConfig.h"
+#include "Gameplay/UI/NGInteractionMarkerModel.h"
+#include "Map/UIMarkerSubsystem.h"
 #include "Misc/ScopeExit.h"
 #include "Engine/World.h"
 #if WITH_EDITOR
@@ -195,15 +201,19 @@ void UNGInteractionComponent::ClearContext(UObject* ExpectedSource)
 void UNGInteractionComponent::TickComponent(float Delta,ELevelTick Tick,FActorComponentTickFunction* ThisTick)
 {
 	Super::TickComponent(Delta,Tick,ThisTick);
-	auto* Pawn=Cast<APawn>(GetOwner());
-	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this);
-	if (!Pawn || !Pawn->IsLocallyControlled() || (Input && Input->IsGameplayInputBlocked())) { UpdateFocus(nullptr); return; }
+	const auto* Pawn = Cast<APawn>(GetOwner());
+	const auto* Controller = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	const auto* LocalPlayer = Controller ? Controller->GetLocalPlayer() : nullptr;
+	const auto* Input = LocalPlayer ? LocalPlayer->GetSubsystem<UPlayerInputSubsystem>() : nullptr;
+	if (!LocalPlayer || (Input && Input->IsGameplayInputBlocked())) { UpdateFocus(nullptr); return; }
 	UpdateFocus(FindTarget());
 }
 void UNGInteractionComponent::UpdateFocus(AActor* Target)
 {
 	auto* Pawn=Cast<APawn>(GetOwner());
-	const FText Prompt=Target ? INGInteractable::Execute_GetInteractionPrompt(Target,Pawn) : FText::GetEmpty();
+	FText Prompt = Target ? INGInteractable::Execute_GetInteractionPrompt(Target, Pawn) : FText::GetEmpty();
+	if (Target && Prompt.IsEmptyOrWhitespace())
+		Prompt = NSLOCTEXT("NEXTGENONE", "InteractionDefaultLabel", "Interact");
 	const bool bAvailable=Target && INGInteractable::Execute_CanInteract(Target,Pawn);
 	const bool bChanged=FocusedActor.Get()!=Target || !FocusedPrompt.EqualTo(Prompt) || bFocusedAvailable!=bAvailable;
 	if (FocusedActor.Get()!=Target)
@@ -212,16 +222,67 @@ void UNGInteractionComponent::UpdateFocus(AActor* Target)
 		FocusedActor=Target; if (Target) INGInteractable::Execute_SetInteractionFocus(Target,Pawn,true);
 	}
 	FocusedPrompt=Prompt; bFocusedAvailable=bAvailable;
-	if (bChanged) OnFocusChanged.Broadcast(Target,Prompt,bAvailable);
+	if (bChanged || (Target && !FocusMarker.IsValid()))
+		UpdateFocusMarker(Pawn, Target);
+	if (bChanged)
+		OnFocusChanged.Broadcast(Target,Prompt,bAvailable);
 }
+
+void UNGInteractionComponent::UpdateFocusMarker(APawn* Pawn, AActor* Target)
+{
+	auto* Marker = FocusMarker.Get();
+	if (!Target && !Marker) return;
+	const auto* Player = Pawn ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	auto* LocalPlayer = Player ? Player->GetLocalPlayer() : nullptr;
+	auto* MarkerSubsystem = UWorld::GetSubsystem<UUIMarkerSubsystem>(GetWorld());
+	if (!MarkerSubsystem) return;
+	if (!Target || !LocalPlayer || FocusedPrompt.IsEmpty())
+	{
+		if (Marker) Marker->SetViewer(nullptr);
+		MarkerSubsystem->UnregisterMarker(Marker);
+		FocusMarker.Reset();
+		return;
+	}
+
+	const auto* GameplayInput = Pawn->FindComponentByClass<UNGGameplayInputComponent>();
+	const auto* InputConfig = GameplayInput ? GameplayInput->InputConfig.Get() : nullptr;
+	const auto* Action = InputConfig ? InputConfig->FindAbilityInputAction(TAG_NGInputInteract) : nullptr;
+	if (!Action && InputConfig) Action = InputConfig->FindNativeInputAction(TAG_NGInputInteract);
+	if (Marker)
+	{
+		Marker->SetFocus(Target, Action, FocusedPrompt, bFocusedAvailable);
+		return;
+	}
+
+	Marker = Cast<UNGInteractionMarkerModel>(UUIMarkerModel::CreateRuntimeModel(
+		MarkerSubsystem, GetMutableDefault<UNGInteractionMarkerModel>(), Target->GetActorLocation()));
+	if (!Marker) return;
+	Marker->SetViewer(LocalPlayer);
+	Marker->SetFocus(Target, Action, FocusedPrompt, bFocusedAvailable);
+	if (MarkerSubsystem->RegisterMarker(Marker)) FocusMarker = Marker;
+	else Marker->SetViewer(nullptr);
+}
+
 void UNGInteractionComponent::EndPlay(EEndPlayReason::Type Reason) { EndInteraction(); BindAbilitySystem(nullptr); UpdateFocus(nullptr); Super::EndPlay(Reason); }
 void UNGInteractionComponent::RequestInteract()
 {
-	auto* Pawn=Cast<APawn>(GetOwner()); if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
-	const auto* Input = UPlayerInputSubsystem::GetInputSubsystem(this); if (Input && Input->IsGameplayInputBlocked()) return;
-	AActor* Target=FindTarget();
-	if (!Target) { OnInteractionResult.Broadcast(false); return; }
-	if (Pawn->HasAuthority()) ServerRequestInteract_Implementation(Pawn,Target); else ServerRequestInteract(Pawn,Target);
+	auto* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn || (!Pawn->HasAuthority() && !Pawn->IsLocallyControlled())) return;
+
+	const auto* Controller = Cast<APlayerController>(Pawn->GetController());
+	const auto* LocalPlayer = Controller ? Controller->GetLocalPlayer() : nullptr;
+	const auto* Input = LocalPlayer ? LocalPlayer->GetSubsystem<UPlayerInputSubsystem>() : nullptr;
+	if (Input && Input->IsGameplayInputBlocked()) return;
+
+	AActor* Target = LocalPlayer ? FocusedActor.Get() : FindTarget();
+	if (!IsValid(Target) || (LocalPlayer && (!bFocusedAvailable || !ValidateTarget(Target))))
+	{
+		OnInteractionResult.Broadcast(false);
+		return;
+	}
+
+	if (Pawn->HasAuthority()) ServerRequestInteract_Implementation(Pawn, Target);
+	else ServerRequestInteract(Pawn, Target);
 }
 void UNGInteractionComponent::ServerRequestInteract_Implementation(APawn* ExpectedPawn,AActor* ProposedTarget)
 {

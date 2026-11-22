@@ -10,6 +10,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "GameSettings",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "GameplayFoundation",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
@@ -26,6 +31,10 @@
 		}
 	],
 	"Plugins": [
+		{
+			"Name": "AudioModulation",
+			"Enabled": true
+		},
 		{
 			"Name": "Niagara",
 			"Enabled": true

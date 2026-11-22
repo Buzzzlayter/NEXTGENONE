@@ -45,8 +45,8 @@ public:
 	void SetPosition(const FVector& Position);
 	virtual const FText& GetLabel() const { return Label; }
 	virtual UTexture2D* GetIcon() const;
-	UClass* GetWidgetClass() const;
-	const FUIMarkerVisibilityRules* GetVisibility(EUIMarkerSurface Surface) const;
+	virtual UClass* GetWidgetClass() const;
+	virtual const FUIMarkerVisibilityRules* GetVisibility(EUIMarkerSurface Surface) const;
 	FUIMarkerChanged& OnMarkerChanged() { return MarkerChanged; }
 
 protected:

@@ -242,9 +242,10 @@ void UUILevelMapWidget::MountOrUpdateMarker(UUIMarkerModel* Model, EUIMarkerSurf
 	}
 	auto* MarkerClass = Model->GetWidgetClass();
 	auto* MarkerWidget = MountedMarkers.FindRef(Id).Get();
+	const bool bAlreadyMounted = MarkerWidget && MarkerWidget->GetClass() == MarkerClass
+		&& MarkerWidget->GetOwningPlayer() == Player && MarkerWidget->GetParent() == MarkerCanvas.Get();
 	UCanvasPanelSlot* CanvasSlot = nullptr;
-	if (MarkerWidget && MarkerWidget->GetClass() == MarkerClass && MarkerWidget->GetOwningPlayer() == Player
-		&& MarkerWidget->GetParent() == MarkerCanvas.Get())
+	if (bAlreadyMounted)
 	{
 		if (bPresentationChanged) MarkerWidget->SetMarkerModel(Model);
 		CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot);
@@ -254,8 +255,32 @@ void UUILevelMapWidget::MountOrUpdateMarker(UUIMarkerModel* Model, EUIMarkerSurf
 		DemountMarker(Id, Surface);
 		CanvasSlot = UUIMarkerWidget::Mount(MarkerCanvas.Get(), Player, Model);
 		if (!CanvasSlot) return;
-		MountedMarkers.Add(Id, CastChecked<UUIMarkerWidget>(CanvasSlot->GetContent()));
+		MarkerWidget = CastChecked<UUIMarkerWidget>(CanvasSlot->GetContent());
+		MountedMarkers.Add(Id, MarkerWidget);
 		CanvasSlot->SetPosition(FVector2D::ZeroVector);
+	}
+
+	if (!bAlreadyMounted || bPresentationChanged)
+	{
+		const FText& Label = Model->GetLabel();
+		if (!Label.IsEmptyOrWhitespace())
+		{
+			MarkerWidget->SetToolTipText(Label);
+		}
+		else if (Model == LocalPing.Get())
+		{
+			MarkerWidget->SetToolTipText(NSLOCTEXT("UIMap", "LocalPingTooltip", "Map ping"));
+		}
+		else
+		{
+			MarkerWidget->SetToolTipText(NSLOCTEXT("UIMap", "MarkerTooltip", "Map marker"));
+		}
+
+		const ESlateVisibility MarkerVisibilityMode = MarkerWidget->GetVisibility();
+		if (MarkerVisibilityMode == ESlateVisibility::HitTestInvisible || MarkerVisibilityMode == ESlateVisibility::SelfHitTestInvisible)
+		{
+			MarkerWidget->SetVisibility(ESlateVisibility::Visible);
+		}
 	}
 
 	if (CanvasSlot)

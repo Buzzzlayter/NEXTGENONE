@@ -60,6 +60,7 @@ const FUIMarkerVisibilityRules* UUIMarkerModel::GetVisibility(EUIMarkerSurface S
 	switch (Surface)
 	{
 	case EUIMarkerSurface::Map:
+		return &MapVisibility;
 	case EUIMarkerSurface::Minimap:
 		return &MapVisibility;
 	case EUIMarkerSurface::World:

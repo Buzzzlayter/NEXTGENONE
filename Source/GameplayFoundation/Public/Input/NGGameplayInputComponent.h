@@ -28,13 +28,15 @@ protected:
 	virtual void HandleNativeInput_Implementation(FGameplayTag Tag, const FInputActionValue& Value, ETriggerEvent Phase) {}
 	virtual void BindInputPolicy() {}
 	virtual void UnbindInputPolicy() {}
+	virtual void DispatchAbilityPress(UNGAbilitySystemComponent& ASC, FGameplayTag Tag);
 	UNGAbilitySystemComponent* GetInputASC() const;
+	bool CanProcessInput() const;
+	bool IsAbilityInputHeld(FGameplayTag Tag) const { return HeldAbilities.Contains(Tag); }
 	void ReleaseHeldInput();
 private:
 	void NativeInput(const FInputActionValue& Value, FGameplayTag Tag, ETriggerEvent Phase);
 	void AbilityPressed(const FInputActionValue& Value, FGameplayTag Tag);
 	void AbilityReleased(const FInputActionValue& Value, FGameplayTag Tag);
-	bool CanProcessInput() const;
 	TWeakObjectPtr<UEnhancedInputComponent> BoundInput;
 	TWeakObjectPtr<UNGAbilitySystemComponent> PressedASC;
 	TArray<uint32> BindingHandles;
