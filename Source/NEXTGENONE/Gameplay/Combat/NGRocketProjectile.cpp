@@ -1,5 +1,6 @@
 #include "Gameplay/Combat/NGRocketProjectile.h"
 
+#include "Components/AudioComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/OverlapResult.h"
@@ -20,6 +21,12 @@
 #include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
+
+namespace
+{
+	constexpr float RocketParticleScale = 0.1f;
+	const FName RocketParticleScaleParameter(TEXT("User.RocketParticleScale"));
+}
 
 bool FNGRocketDetonation::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
@@ -77,7 +84,7 @@ ANGRocketProjectile::ANGRocketProjectile()
 
 ANGAirburstRocketProjectile::ANGAirburstRocketProjectile()
 {
-	LaunchSpeed = 3600.f;
+	LaunchSpeed = 1800.f;
 	FlightTime = 1.1f;
 	bAirburstOnExpiry = true;
 	BlastRadius = 600.f;
@@ -111,7 +118,7 @@ bool ANGRocketProjectile::ValidateSettings(FString& Error) const
 	return true;
 }
 
-bool ANGRocketProjectile::Initialize(APawn* Shooter, const FVector& Direction, float Damage, float Range)
+bool ANGRocketProjectile::Initialize(APawn* Shooter, const FVector& Direction, float Damage, float Range, USoundBase* InLaunchSound)
 {
 	auto* ASC = Cast<UNGPlayerAbilitySystemComponent>(NGDamage::FindLivingAbilitySystem(Shooter));
 	if (!ASC || !ASC->IsOwnerActorAuthoritative()) return false;
@@ -120,6 +127,7 @@ bool ANGRocketProjectile::Initialize(APawn* Shooter, const FVector& Direction, f
 	SourceGeneration = ASC->GetAvatarGeneration();
 	BaseDamage = Damage;
 	RemainingRange = Range;
+	LaunchSound = InLaunchSound;
 	Movement->Velocity = Direction * LaunchSpeed;
 	Movement->MaxSpeed = LaunchSpeed;
 	Collision->IgnoreActorWhenMoving(Shooter, true);
@@ -147,7 +155,16 @@ void ANGRocketProjectile::BeginPlay()
 		Movement->SetInterpolatedComponent(RocketMesh);
 	}
 	if (Detonation.bOccurred) OnRep_Detonation();
-	else if (GetNetMode() != NM_DedicatedServer && Trail->GetAsset()) Trail->Activate();
+	else if (GetNetMode() != NM_DedicatedServer)
+	{
+		if (Trail->GetAsset())
+		{
+			Trail->SetRelativeScale3D(Trail->GetRelativeScale3D() * RocketParticleScale);
+			Trail->SetVariableFloat(RocketParticleScaleParameter, RocketParticleScale);
+			Trail->Activate();
+		}
+		OnRep_LaunchSound();
+	}
 }
 
 void ANGRocketProjectile::Tick(float DeltaSeconds)
@@ -185,6 +202,7 @@ void ANGRocketProjectile::PostNetReceiveLocationAndRotation()
 void ANGRocketProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(ANGRocketProjectile, LaunchSound, COND_InitialOnly);
 	DOREPLIFETIME(ANGRocketProjectile, Detonation);
 }
 
@@ -192,6 +210,13 @@ void ANGRocketProjectile::OnProjectileStopped(const FHitResult& Hit)
 {
 	if (HasAuthority() && Hit.bBlockingHit)
 		Detonate(Hit.ImpactPoint, Hit.ImpactNormal, &Hit);
+}
+
+void ANGRocketProjectile::OnRep_LaunchSound()
+{
+	if (!HasActorBegunPlay() || Detonation.bOccurred || !LaunchSound || LaunchAudio.IsValid()) return;
+	LaunchAudio = UGameplayStatics::SpawnSoundAttached(LaunchSound, RocketMesh, NAME_None, FVector::ZeroVector,
+		EAttachLocation::KeepRelativeOffset, true);
 }
 
 void ANGRocketProjectile::Detonate(const FVector& Point, const FVector& Normal, const FHitResult* DirectHit)
@@ -218,12 +243,19 @@ void ANGRocketProjectile::OnRep_Detonation()
 	SetActorTickEnabled(false);
 	if (GetNetMode() == NM_DedicatedServer) return;
 
+	if (auto* Audio = LaunchAudio.Get())
+		Audio->Stop();
+	LaunchAudio.Reset();
+
 	const FVector Point = FRepMovement::RebaseOntoLocalOrigin(Detonation.Point, this);
 	auto* FX = ExplosionFX
-		? UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, ExplosionFX, Point, FVector(Detonation.Normal).Rotation(), FVector(ExplosionFXScale))
+		? UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, ExplosionFX, Point, FVector(Detonation.Normal).Rotation(),
+			FVector(ExplosionFXScale * RocketParticleScale), true, false)
 		: nullptr;
 	if (FX)
 	{
+		FX->SetVariableFloat(RocketParticleScaleParameter, RocketParticleScale);
+		FX->Activate(true);
 		FTimerHandle Cleanup;
 		const float Lifetime = FMath::IsFinite(ExplosionFXMaxLifetime) ? FMath::Max(ExplosionFXMaxLifetime, 0.1f) : 5.f;
 		GetWorldTimerManager().SetTimer(Cleanup, FTimerDelegate::CreateWeakLambda(FX, [FX]

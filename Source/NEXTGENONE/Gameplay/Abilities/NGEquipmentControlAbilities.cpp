@@ -132,6 +132,7 @@ void UNGPrimaryAttackAbility::ReceiveFireView(const FGameplayAbilityTargetDataHa
 void UNGPrimaryAttackAbility::ContinuePrimaryInput()
 {
 	if (!IsActive()) return;
+	CooldownWait = nullptr;
 	if (!HasCurrentWeapon() || !ActiveCombat->IsAiming())
 	{ EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true); return; }
 	auto* ASC = CurrentActorInfo->AbilitySystemComponent.Get();
@@ -192,8 +193,9 @@ void UNGPrimaryAttackAbility::ContinuePrimaryInput()
 
 void UNGPrimaryAttackAbility::FireCooldownFinished()
 {
-	CooldownWait = nullptr;
-	ContinuePrimaryInput();
+	auto* NextFrame = UAbilityTask_WaitDelay::WaitDelay(this, 0.f);
+	NextFrame->OnFinish.AddDynamic(this, &ThisClass::ContinuePrimaryInput);
+	NextFrame->ReadyForActivation();
 }
 
 void UNGPrimaryAttackAbility::HandleInputReleased(float TimeHeld)

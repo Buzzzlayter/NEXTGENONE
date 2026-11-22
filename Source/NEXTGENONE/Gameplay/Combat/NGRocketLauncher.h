@@ -45,4 +45,5 @@ class NEXTGENONE_API ANGRocketLauncher : public ANGWeaponActor
 
 protected:
 	virtual bool ExecuteFire_Implementation(FVector ViewOrigin, FVector ViewDirection) override;
+	virtual bool PlaysFireSoundAtMuzzle() const override { return false; }
 };

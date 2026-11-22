@@ -6,6 +6,7 @@
 #include "NGRocketProjectile.generated.h"
 
 class APawn;
+class UAudioComponent;
 class UNGPlayerAbilitySystemComponent;
 class UGameplayEffect;
 class UNiagaraSystem;
@@ -41,7 +42,7 @@ class NEXTGENONE_API ANGRocketProjectile : public AActor
 public:
 	ANGRocketProjectile();
 	bool ValidateSettings(FString& Error) const;
-	bool Initialize(APawn* Shooter, const FVector& Direction, float Damage, float Range);
+	bool Initialize(APawn* Shooter, const FVector& Direction, float Damage, float Range, USoundBase* InLaunchSound);
 
 protected:
 	virtual void BeginPlay() override;
@@ -50,7 +51,7 @@ protected:
 	virtual void PostNetReceiveLocationAndRotation() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UPROPERTY(EditDefaultsOnly, Category="Rocket|Flight", meta=(ClampMin="100", Units="cm/s")) float LaunchSpeed = 4000.f;
+	UPROPERTY(EditDefaultsOnly, Category="Rocket|Flight", meta=(ClampMin="100", Units="cm/s")) float LaunchSpeed = 2000.f;
 	UPROPERTY(EditDefaultsOnly, Category="Rocket|Flight", meta=(ClampMin="0.1", Units="s")) float FlightTime = 4.f;
 	UPROPERTY(EditDefaultsOnly, Category="Rocket|Flight") bool bAirburstOnExpiry = false;
 	UPROPERTY(EditDefaultsOnly, Category="Rocket|Blast", meta=(ClampMin="1", Units="cm")) float BlastRadius = 450.f;
@@ -70,6 +71,7 @@ protected:
 
 private:
 	UFUNCTION() void OnProjectileStopped(const FHitResult& Hit);
+	UFUNCTION() void OnRep_LaunchSound();
 	UFUNCTION() void OnRep_Detonation();
 	void Detonate(const FVector& Point, const FVector& Normal, const FHitResult* DirectHit);
 	void ApplyBlast(const FVector& Origin, const FHitResult* DirectHit);
@@ -77,7 +79,9 @@ private:
 	UNGPlayerAbilitySystemComponent* GetCurrentSource() const;
 
 	UPROPERTY() TObjectPtr<UProjectileMovementComponent> Movement;
+	UPROPERTY(ReplicatedUsing=OnRep_LaunchSound) TObjectPtr<USoundBase> LaunchSound;
 	UPROPERTY(ReplicatedUsing=OnRep_Detonation) FNGRocketDetonation Detonation;
+	TWeakObjectPtr<UAudioComponent> LaunchAudio;
 	TWeakObjectPtr<UNGPlayerAbilitySystemComponent> SourceASC;
 	uint32 SourceGeneration = 0;
 	float BaseDamage = 0.f;

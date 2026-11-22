@@ -193,7 +193,7 @@ void ANGWeaponActor::PlayFireEffects_Implementation(UNGWeaponDefinition* Definit
 {
 	if (!Definition || GetNetMode() == NM_DedicatedServer) return;
 	if (Definition->WeaponFireAnimation && WeaponMesh->GetSkeletalMeshAsset()) WeaponMesh->PlayAnimation(Definition->WeaponFireAnimation, false);
-	if (Definition->FireSound) UGameplayStatics::PlaySoundAtLocation(this, Definition->FireSound, Start);
+	if (PlaysFireSoundAtMuzzle() && Definition->FireSound) UGameplayStatics::PlaySoundAtLocation(this, Definition->FireSound, Start);
 	NGWeaponVFX::Shot(WeaponMesh, Definition, Start, (End - Start).GetSafeNormal());
 }
 
