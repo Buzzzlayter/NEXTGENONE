@@ -4,11 +4,15 @@
 #include "UIMarkerComponent.generated.h"
 
 class UUIMarkerModel;
+class UUIMarkerSubsystem;
 
 UCLASS(ClassGroup = UI, PrioritizeCategories = ("Marker"), meta = (BlueprintSpawnableComponent))
 class UIMODULE_API UUIMarkerComponent : public USceneComponent
 {
 	GENERATED_BODY()
+
+public:
+	UUIMarkerModel* CreateRuntimeMarker(UUIMarkerSubsystem* Subsystem, TSubclassOf<UUIMarkerModel> ModelClass) const;
 
 protected:
 	virtual void BeginPlay() override;

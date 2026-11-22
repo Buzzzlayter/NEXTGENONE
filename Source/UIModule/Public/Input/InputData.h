@@ -32,7 +32,6 @@ enum class EGamepadCursorMode : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInputTypeChanged, EInputType, InputType);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInputModeChanged, EInputMode, InputMode);
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameplayInputBlockedChanged, bool, bBlocked);
 
 /** A UI/FSM owner's local policy. Gameplay blocking composes across all active requests. */

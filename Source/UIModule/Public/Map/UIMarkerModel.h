@@ -39,6 +39,7 @@ public:
 	static UUIMarkerModel* CreateRuntimeModel(UObject* Outer, UUIMarkerModel* Template, const FVector& Position, FName RecipientGroup = NAME_None);
 	FGuid GetMarkerId() const { return MarkerId; }
 	virtual bool ShouldReplicateMarker() const { return bReplicateMarker; }
+	virtual bool ShouldRegisterOnBeginPlay() const { return true; }
 	FName GetRecipientGroup() const { return RecipientGroup; }
 	virtual bool IsVisibleTo(const APlayerController& Viewer) const;
 	virtual FVector GetPosition() const { return WorldPosition; }
@@ -61,6 +62,9 @@ protected:
 	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
 	FUIMarkerVisibilityRules WorldVisibility;
 
+	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
+	TSubclassOf<UUIMarkerWidget> WidgetClass;
+
 private:
 	UFUNCTION()
 	void OnRep_WorldPosition();
@@ -82,9 +86,6 @@ private:
 
 	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
 	TObjectPtr<UTexture2D> Icon;
-
-	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
-	TSubclassOf<UUIMarkerWidget> WidgetClass;
 
 	FUIMarkerChanged MarkerChanged;
 };
