@@ -4,6 +4,8 @@
 #include "GameplayTagContainer.h"
 #include "NGWaitForReadyComponent.generated.h"
 
+class ULoadingProcessTask;
+
 /** Local UI gate. Add to WaitForReady; does not initialize or possess the player. */
 UCLASS(Blueprintable, EditInlineNew, meta=(DisplayName="Wait For Player Ready"))
 class NEXTGENONE_API UNGWaitForReadyComponent : public UHFSMStateComponent
@@ -20,6 +22,11 @@ public:
 	virtual void Exit(FName Event) override;
 	virtual bool IsTickEnabled() override { return bWaiting; }
 private:
+	void TryCreateLoadingTask();
 	FName FindMissingDependency() const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ULoadingProcessTask> LoadingTask;
+
 	bool bWaiting = false;
 };

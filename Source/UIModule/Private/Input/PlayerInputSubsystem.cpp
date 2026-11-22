@@ -12,6 +12,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 
 UPlayerInputSubsystem* UPlayerInputSubsystem::GetInputSubsystem(const UObject* WCO)
 {
@@ -215,6 +216,7 @@ FGuid UPlayerInputSubsystem::AcquireMappingContext(UObject* Owner, UInputMapping
 	if (!IsValid(Owner) || !Context || !Enhanced || Priority < 0) return FGuid();
 	if (!OriginalContexts.Contains(Context))
 	{
+		if (auto* UserSettings = Enhanced->GetUserSettings()) UserSettings->RegisterInputMappingContext(Context);
 		int32 PreviousPriority = 0;
 		if (Enhanced->HasMappingContext(Context, PreviousPriority)) OriginalContexts.Add(Context, PreviousPriority);
 		else OriginalContexts.Add(Context, INDEX_NONE);

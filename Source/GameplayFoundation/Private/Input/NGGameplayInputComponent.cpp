@@ -74,8 +74,13 @@ void UNGGameplayInputComponent::AbilityPressed(const FInputActionValue& Value, F
 		if (ASC->GetAvatarActor() != GetOwner()) return;
 		PressedASC = ASC;
 		HeldAbilities.Add(Tag);
-		ASC->AbilityInputTagPressed(Tag);
+		DispatchAbilityPress(*ASC, Tag);
 	}
+}
+
+void UNGGameplayInputComponent::DispatchAbilityPress(UNGAbilitySystemComponent& ASC, FGameplayTag Tag)
+{
+	ASC.AbilityInputTagPressed(Tag);
 }
 
 void UNGGameplayInputComponent::AbilityReleased(const FInputActionValue& Value, FGameplayTag Tag)

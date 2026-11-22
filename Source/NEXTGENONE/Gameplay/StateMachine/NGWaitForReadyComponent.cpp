@@ -8,6 +8,7 @@
 #include "Inventory/NGInventoryManagerComponent.h"
 #include "HFSMLibrary.h"
 #include "HFSMState.h"
+#include "LoadingProcessTask.h"
 
 UNGWaitForReadyComponent::UNGWaitForReadyComponent()
 {
@@ -18,6 +19,7 @@ void UNGWaitForReadyComponent::Enter()
 {
 	bWaiting = true;
 	WaitingFor = TEXT("PlayerController");
+	TryCreateLoadingTask();
 	Super::Enter();
 }
 
@@ -25,7 +27,20 @@ void UNGWaitForReadyComponent::Exit(FName Event)
 {
 	bWaiting = false;
 	WaitingFor = NAME_None;
+	if (LoadingTask)
+	{
+		LoadingTask->Unregister();
+		LoadingTask = nullptr;
+	}
 	Super::Exit(Event);
+}
+
+void UNGWaitForReadyComponent::TryCreateLoadingTask()
+{
+	if (!LoadingTask && GetLocalPlayer())
+	{
+		LoadingTask = ULoadingProcessTask::CreateLoadingScreenProcessTask(this, TEXT("Waiting for the player UI to be ready."));
+	}
 }
 
 FName UNGWaitForReadyComponent::FindMissingDependency() const
@@ -53,6 +68,7 @@ void UNGWaitForReadyComponent::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	if (!bWaiting) return;
+	TryCreateLoadingTask();
 	WaitingFor = FindMissingDependency();
 	if (!WaitingFor.IsNone()) return;
 	if (ReadyEvent.IsNone()) { WaitingFor = TEXT("Ready"); return; }

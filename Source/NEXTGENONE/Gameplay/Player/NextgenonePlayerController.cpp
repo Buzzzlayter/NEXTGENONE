@@ -1,15 +1,20 @@
 #include "Gameplay/Player/NextgenonePlayerController.h"
 #include "Character/ALSBaseCharacter.h"
-#include "Gameplay/UI/NGSettingsPanel.h"
+#include "NGGameUserSettings.h"
 #include "Input/NGGameplayInputComponent.h"
 #include "Components/ALSDebugComponent.h"
 
-void ANextgenonePlayerController::BeginPlay() { Super::BeginPlay(); if (IsLocalController()) GetDefault<UNGInputPreferences>()->ApplyAudio(GetWorld()); }
-void ANextgenonePlayerController::AddYawInput(float Value) { Super::AddYawInput(Value*GetDefault<UNGInputPreferences>()->LookSensitivity); }
-void ANextgenonePlayerController::AddPitchInput(float Value)
+void ANextgenonePlayerController::BeginPlay()
 {
-    const auto* Preferences = GetDefault<UNGInputPreferences>();
-    Super::AddPitchInput(Value * Preferences->LookSensitivity * (Preferences->bInvertY ? -1.f : 1.f));
+    Super::BeginPlay();
+    if (IsLocalController())
+    {
+        if (auto* Settings = UNGGameUserSettings::Get())
+        {
+            Settings->RunStartupBenchmark();
+            Settings->ApplyForPlayer(*this);
+        }
+    }
 }
 void ANextgenonePlayerController::SetupInputComponent()
 {

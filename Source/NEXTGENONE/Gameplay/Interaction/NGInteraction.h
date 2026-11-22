@@ -10,6 +10,7 @@
 
 class APawn;
 class ANGItemPickup;
+class UNGInteractionMarkerModel;
 inline constexpr ECollisionChannel NGInteractionChannel=ECC_GameTraceChannel1;
 
 UINTERFACE(BlueprintType)
@@ -86,5 +87,7 @@ private:
 	TWeakObjectPtr<AActor> FocusedActor;
 	FText FocusedPrompt;
 	bool bFocusedAvailable=false;
+	TWeakObjectPtr<UNGInteractionMarkerModel> FocusMarker;
 	void UpdateFocus(AActor* Target);
+	void UpdateFocusMarker(APawn* Pawn, AActor* Target);
 };

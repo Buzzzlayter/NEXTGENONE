@@ -47,6 +47,9 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Marker")
 	void OnMarkerUpdated();
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> MarkerLabel;
+
 private:
 	void RefreshPresentation();
 
@@ -60,7 +63,4 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> MarkerIcon;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> MarkerLabel;
 };

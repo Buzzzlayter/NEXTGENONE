@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
-#include "GameplayTagContainer.h"
+#include "Curves/CurveFloat.h"
 #include "GameSettingsConfig.generated.h"
 
 class UGamepadCursorWidget;
@@ -26,15 +26,6 @@ public:
 	UGameSettingsConfig();
 
 	static const UGameSettingsConfig* Get();
-
-	UPROPERTY(Config, EditAnywhere, Category = Benchmark)
-	bool bShouldRunAutoBenchmarkAtStartup = false;
-
-	UPROPERTY(Config, EditAnywhere, Category = InputSettings)
-	FGameplayTag DefaultMappableKeyProfile = FGameplayTag::RequestGameplayTag("InputUserSettings.Profiles.Default");
-
-	UPROPERTY(Config, EditAnywhere, Category = CloudSettings)
-	FString CloudSettingsSlotName = TEXT("CloudGameSettings");
 
 	const FRichCurve* GetGamepadCursorAccelerationCurve() const;
 	float GetGamepadCursorAccelerationMultiplier() const;
