@@ -38,6 +38,8 @@ public:
 	UFUNCTION(Server, Reliable) void ServerDropItem(APawn* ExpectedPawn, UNGInventoryItemInstance* Item, int32 Count);
 
 private:
+	int32 FindQuickTransferSlot(const UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* Item,
+		const UNGInventoryManagerComponent* Target, int32 Amount) const;
 	bool ExecuteTransferOnServer(UNGInventoryManagerComponent* Source, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, int32 Amount);
 	ANGItemPickup* DropItemOnServer(APawn* Pawn, UNGInventoryItemInstance* Item, int32 Count);
 	TSet<TWeakObjectPtr<UNGInventoryItemInstance>> ActiveDrops;

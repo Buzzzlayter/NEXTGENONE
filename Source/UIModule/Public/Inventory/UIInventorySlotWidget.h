@@ -38,6 +38,7 @@ public:
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 	UPROPERTY(EditDefaultsOnly, Category="Inventory|DragDrop") FKey DragButton = EKeys::LeftMouseButton;
 	UPROPERTY(EditDefaultsOnly, Category="Inventory") FKey SecondaryActionButton = EKeys::RightMouseButton;
@@ -49,6 +50,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> txt_count;
 	UPROPERTY(BlueprintReadOnly, Category="Inventory") FUIInventorySlotData Data;
 private:
+	FReply HandleQuickTransfer(const FGeometry& Geometry, const FPointerEvent& Event);
 	void UpdateItemIcon();
 	void UpdateItemText();
 	void UpdateItemVisibility();

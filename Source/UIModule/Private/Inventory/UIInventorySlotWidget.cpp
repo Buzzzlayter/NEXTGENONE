@@ -5,6 +5,19 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
+#include "Widgets/SWidget.h"
+
+FReply UUIInventorySlotWidget::HandleQuickTransfer(const FGeometry&, const FPointerEvent& Event)
+{
+	return Event.GetEffectingButton() == EKeys::LeftMouseButton && RequestOperation(EUIInventoryOperation::QuickTransfer)
+		? FReply::Handled() : FReply::Unhandled();
+}
+
+FReply UUIInventorySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	const FReply Reply = HandleQuickTransfer(Geometry, Event);
+	return Reply.IsEventHandled() ? Reply : Super::NativeOnMouseButtonDoubleClick(Geometry, Event);
+}
 
 void UUIInventorySlotWidget::NativeOnDragDetected(const FGeometry& Geometry, const FPointerEvent& Event, UDragDropOperation*& Operation)
 {
@@ -93,6 +106,8 @@ void UUIInventorySlotWidget::NativeConstruct()
 	UpdateItemVisibility();
 	if (btn_Root)
 	{
+		if (const auto ButtonWidget = btn_Root->GetCachedWidget())
+			ButtonWidget->SetOnMouseDoubleClick(FPointerEventHandler::CreateUObject(this, &ThisClass::HandleQuickTransfer));
 		btn_Root->OnClicked.AddUniqueDynamic(this, &ThisClass::PrimaryAction);
 		btn_Root->OnPressed.AddUniqueDynamic(this, &ThisClass::OnActionPressed);
 		btn_Root->OnReleased.AddUniqueDynamic(this, &ThisClass::OnActionReleased);
@@ -105,6 +120,8 @@ void UUIInventorySlotWidget::NativeDestruct()
 	bItemDragHidden = false;
 	if (btn_Root)
 	{
+		if (const auto ButtonWidget = btn_Root->GetCachedWidget())
+			ButtonWidget->SetOnMouseDoubleClick({});
 		btn_Root->OnClicked.RemoveDynamic(this, &ThisClass::PrimaryAction);
 		btn_Root->OnPressed.RemoveDynamic(this, &ThisClass::OnActionPressed);
 		btn_Root->OnReleased.RemoveDynamic(this, &ThisClass::OnActionReleased);

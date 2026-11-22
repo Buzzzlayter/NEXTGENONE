@@ -6,7 +6,7 @@
 class UTexture2D;
 
 UENUM(BlueprintType)
-enum class EUIInventoryOperation : uint8 { PrimaryAction, SecondaryAction, Drop };
+enum class EUIInventoryOperation : uint8 { PrimaryAction, SecondaryAction, Drop, QuickTransfer };
 
 /** Presentation snapshot, not inventory authority. Item/Inventory identify the backend objects. */
 USTRUCT(BlueprintType)
