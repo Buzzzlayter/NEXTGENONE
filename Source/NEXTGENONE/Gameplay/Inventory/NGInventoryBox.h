@@ -7,6 +7,7 @@
 #include "NGInventoryBox.generated.h"
 
 class UBoxComponent;
+class USceneComponent;
 class UStaticMeshComponent;
 
 /** World storage using exactly the same inventory component as a player or bag. */
@@ -17,6 +18,8 @@ class NEXTGENONE_API ANGInventoryBox : public ANGInteractableActor
 public:
 	ANGInventoryBox();
 	virtual void BeginPlay() override;
+	virtual void Serialize(FArchive& Ar) override;
+	virtual void PostLoad() override;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UBoxComponent> Collision;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Mesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UNGInventoryManagerComponent> Inventory;
@@ -27,4 +30,10 @@ public:
 	virtual FText GetInteractionPrompt_Implementation(APawn* Interactor) const override;
 	virtual bool CanInteract_Implementation(APawn* Interactor) const override;
 	virtual bool Interact_Implementation(APawn* Interactor) override;
+
+private:
+	UPROPERTY(VisibleAnywhere, Category="Components")
+	TObjectPtr<USceneComponent> BoxRoot;
+
+	bool bNeedsCollisionRootMigration = false;
 };
