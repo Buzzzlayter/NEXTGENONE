@@ -1194,8 +1194,15 @@ void AALSBaseCharacter::SmoothCharacterRotation(FRotator Target, float TargetInt
 	// Interpolate the Target Rotation for extra smooth rotation behavior
 	TargetRotation =
 		FMath::RInterpConstantTo(TargetRotation, Target, DeltaTime, TargetInterpSpeed);
-	SetActorRotation(
-		FMath::RInterpTo(GetActorRotation(), TargetRotation, DeltaTime, ActorInterpSpeed));
+	const FRotator CurrentRotation = GetActorRotation();
+	FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, ActorInterpSpeed);
+	if (MaxSmoothedYawRate > 0.f)
+	{
+		const float MaxYawDelta = MaxSmoothedYawRate * DeltaTime;
+		const float YawDelta = FMath::FindDeltaAngleDegrees(CurrentRotation.Yaw, NewRotation.Yaw);
+		NewRotation.Yaw = CurrentRotation.Yaw + FMath::Clamp(YawDelta, -MaxYawDelta, MaxYawDelta);
+	}
+	SetActorRotation(NewRotation);
 }
 
 float AALSBaseCharacter::CalculateGroundedRotationRate() const

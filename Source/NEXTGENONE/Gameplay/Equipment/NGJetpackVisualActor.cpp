@@ -1,9 +1,15 @@
 #include "Gameplay/Equipment/NGJetpackVisualActor.h"
 
 #include "AbilitySystemComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameplayTags/NGGameplayTags.h"
 #include "NiagaraComponent.h"
+
+namespace
+{
+	const FName EngineAudioTag(TEXT("JetpackEngineAudio"));
+}
 
 ANGJetpackVisualActor::ANGJetpackVisualActor()
 {
@@ -44,5 +50,10 @@ void ANGJetpackVisualActor::UpdateExhaust()
 	{
 		if (bThrust) Exhaust->Activate(true);
 		else Exhaust->Deactivate();
+	}
+	if (auto* EngineAudio = FindComponentByTag<UAudioComponent>(EngineAudioTag))
+	{
+		if (bThrust && !EngineAudio->IsPlaying()) EngineAudio->FadeIn(0.08f);
+		else if (!bThrust && EngineAudio->IsPlaying()) EngineAudio->Stop();
 	}
 }

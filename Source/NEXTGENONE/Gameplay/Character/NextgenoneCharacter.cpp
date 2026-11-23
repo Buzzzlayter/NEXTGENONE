@@ -243,6 +243,14 @@ void ANextgenoneCharacter::Tick(float DeltaSeconds)
 }
 void ANextgenoneCharacter::RagdollStart()
 {
+	if (IsDead() && HitReaction && HitReaction->StartAlternateDeathRagdoll(GetMesh(), GetVelocity()))
+	{
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		GetCharacterMovement()->DisableMovement();
+		GetCharacterMovement()->SetComponentTickEnabled(false);
+		SetMovementState(EALSMovementState::Ragdoll);
+		return;
+	}
 	if (GetMovementState() != EALSMovementState::Ragdoll) Super::RagdollStart();
 	if (IsDead())
 	{

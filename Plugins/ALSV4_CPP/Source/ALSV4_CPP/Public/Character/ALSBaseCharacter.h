@@ -458,6 +458,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ALS|Movement System")
 	FDataTableRowHandle MovementModel;
 
+	UPROPERTY(EditDefaultsOnly, Category = "ALS|Movement System", meta = (ClampMin = "0", Units = "deg/s", DisplayPriority = "1"))
+	float MaxSmoothedYawRate = 0.f;
+
 	/** Essential Information */
 
 	UPROPERTY(BlueprintReadOnly, Category = "ALS|Essential Information")
