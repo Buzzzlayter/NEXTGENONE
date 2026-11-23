@@ -34,6 +34,9 @@ class NEXTGENONE_API UNGCharacterMovementComponent : public UALSCharacterMovemen
 public:
 	UNGCharacterMovementComponent(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
+	UPROPERTY(EditDefaultsOnly, Category = "Character Movement: Walking", meta = (ClampMin = "0.1", ClampMax = "1", DisplayPriority = "1"))
+	float GroundResponseScale = 1.f;
+
 	void SetJetpackContext(const FNGJetpackMovementSettings& Settings, int32 Generation);
 	FNGJetpackMoveState CaptureJetpackMove() const;
 	void RestoreJetpackMove(const FNGJetpackMoveState& State);

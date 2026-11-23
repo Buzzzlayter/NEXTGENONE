@@ -3,6 +3,7 @@
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "Character/ALSBaseCharacter.h"
+#include "Gameplay/Character/NextgenoneCharacter.h"
 
 
 UNGDeathRagdollCue::UNGDeathRagdollCue(const FObjectInitializer& Init) : Super(Init)
@@ -18,6 +19,6 @@ bool UNGDeathRagdollCue::OnExecute_Implementation(AActor* Target, const FGamepla
 	// A late cue from the previous ASC Avatar must not affect a new life.
 	// FSM entry/BeginPlay restores presentation if this cue arrives before the state.
 	if (!Pawn || !Pawn->HasActorBegunPlay() || !Machine || !Machine->HasStateTag(TAG_NGDead)) return false;
-	if (Pawn->GetMovementState() != EALSMovementState::Ragdoll) Pawn->RagdollStart();
+	if (Pawn->GetMovementState() != EALSMovementState::Ragdoll || Pawn->IsA<ANextgenoneCharacter>()) Pawn->RagdollStart();
 	return true;
 }

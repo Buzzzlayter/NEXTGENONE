@@ -31,10 +31,24 @@ void UNGHitReactionComponent::BeginPlay()
 	Super::BeginPlay();
 	auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); if (!Pawn) return;
 	auto* Mesh=Pawn->GetMesh();
+	if (!ImpactMeshTag.IsNone())
+	{
+		TArray<USkeletalMeshComponent*> Meshes;
+		Pawn->GetComponents(Meshes);
+		for (auto* Candidate : Meshes)
+			if (Candidate->ComponentHasTag(ImpactMeshTag) && Candidate->GetPhysicsAsset())
+			{
+				Mesh->SetCollisionResponseToChannel(ECC_GameTraceChannel2,ECR_Ignore);
+				Mesh=Candidate;
+				break;
+			}
+	}
+	ImpactMesh=Mesh;
 	// Bullets collide with Physics Asset bodies and return BoneName, never with the movement capsule.
 	Pawn->GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_GameTraceChannel2,ECR_Ignore);
 	Mesh->bEnablePhysicsOnDedicatedServer=true;
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics); Mesh->SetCollisionObjectType(ECC_Pawn); Mesh->SetCollisionResponseToChannel(ECC_GameTraceChannel2,ECR_Block);
+	if (Mesh!=Pawn->GetMesh()) Mesh->SetCollisionResponseToChannel(ECC_Pawn,ECR_Ignore);
 	Mesh->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	Mesh->bEnableUpdateRateOptimizations=false;
 	if (!Mesh->IsPhysicsStateCreated()) Mesh->RecreatePhysicsState();
@@ -42,7 +56,8 @@ void UNGHitReactionComponent::BeginPlay()
 }
 bool UNGHitReactionComponent::IsRagdoll() const
 {
-	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); return Pawn && Pawn->GetMovementState()==EALSMovementState::Ragdoll;
+	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner());
+	return Pawn && (ImpactMesh==Pawn->GetMesh() ? Pawn->GetMovementState()==EALSMovementState::Ragdoll : bAlternateRagdollStarted);
 }
 void UNGHitReactionComponent::ReleaseBodies(bool bRagdollOwnsBodies)
 {
@@ -61,7 +76,7 @@ void UNGHitReactionComponent::EndPlay(EEndPlayReason::Type Reason) { PendingDeat
 void UNGHitReactionComponent::ApplyImpact(const FHitResult& Hit,FVector Direction,float Impulse)
 {
 	if (!GetOwner()->HasAuthority() || !FMath::IsFinite(Impulse) || Impulse<=0.f || Direction.ContainsNaN() || Hit.ImpactPoint.ContainsNaN()) return;
-	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); auto* Mesh=Pawn ? Pawn->GetMesh() : nullptr;
+	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); auto* Mesh=ImpactMesh.Get();
 	if (!Mesh || Hit.GetActor()!=Pawn || Direction.IsNearlyZero()) return;
 	const FName Bone = Hit.GetComponent()==Mesh && !Hit.BoneName.IsNone() && Mesh->GetBodyInstance(Hit.BoneName) ? Hit.BoneName : TorsoFallbackBone;
 	if (Bone.IsNone() || !Mesh->GetBodyInstance(Bone)) return;
@@ -88,9 +103,31 @@ void UNGHitReactionComponent::ReleaseToRagdoll()
 		ApplyRagdollImpact(Impact.Bone,Impact.BonePoint,Impact.Direction,Impact.Impulse,true);
 	}
 }
+bool UNGHitReactionComponent::StartAlternateDeathRagdoll(USkeletalMeshComponent* AnimationMesh, const FVector& InitialVelocity)
+{
+	auto* Mesh=ImpactMesh.Get();
+	if (!Mesh || Mesh==AnimationMesh) return false;
+	if (bAlternateRagdollStarted) return true;
+
+	ReleaseBodies(false);
+	Mesh->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+	AnimationMesh->SetAllBodiesSimulatePhysics(false);
+	AnimationMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AnimationMesh->SetComponentTickEnabled(false);
+	Mesh->SetCollisionProfileName(TEXT("Ragdoll"));
+	Mesh->SetCollisionResponseToChannel(ECC_Pawn,ECR_Ignore);
+	Mesh->CanCharacterStepUpOn=ECB_No;
+	Mesh->SetAllBodiesSimulatePhysics(true);
+	Mesh->SetPhysicsBlendWeight(1.f);
+	Mesh->SetAllPhysicsLinearVelocity(InitialVelocity);
+	Mesh->WakeAllRigidBodies();
+	bAlternateRagdollStarted=true;
+	ReleaseToRagdoll();
+	return true;
+}
 void UNGHitReactionComponent::ApplyRagdollImpact(FName Bone,FVector BonePoint,FVector Direction,float Impulse,bool bFatal)
 {
-	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); auto* Mesh=Pawn ? Pawn->GetMesh() : nullptr;
+	auto* Mesh=ImpactMesh.Get();
 	if (!Mesh || !IsRagdoll() || !Mesh->GetBodyInstance(Bone)) return;
 	const FVector Point=Mesh->GetSocketTransform(Bone).TransformPosition(BonePoint);
 	const float Multiplier=bFatal && FMath::IsFinite(DeathImpulseMultiplier) ? FMath::Clamp(DeathImpulseMultiplier,0.f,10.f) : 1.f;
@@ -103,8 +140,8 @@ void UNGHitReactionComponent::ApplyRagdollImpact(FName Bone,FVector BonePoint,FV
 }
 void UNGHitReactionComponent::ReceiveImpact(FName Bone,FVector BonePoint,FVector Direction,float Impulse,bool bFatal)
 {
-	auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); auto* Mesh=Pawn ? Pawn->GetMesh() : nullptr;
-	if (!Mesh || !Mesh->GetPhysicsAsset() || !Mesh->GetBodyInstance(Bone)) return;
+	const auto* Pawn=Cast<ANextgenoneCharacter>(GetOwner()); auto* Mesh=ImpactMesh.Get();
+	if (!Pawn || !Mesh || !Mesh->GetPhysicsAsset() || !Mesh->GetBodyInstance(Bone)) return;
 	const FVector Point=Mesh->GetSocketTransform(Bone).TransformPosition(BonePoint),ImpulseVector=FVector(Direction)*FMath::Clamp(Impulse,0.f,10000.f);
 	if (IsRagdoll())
 	{
@@ -119,11 +156,14 @@ void UNGHitReactionComponent::ReceiveImpact(FName Bone,FVector BonePoint,FVector
 	if (Pawn->IsDead() || PendingDeathImpact.IsSet()) return;
 	// Damage is handled independently; never start drives against an unavailable animation pose.
 	if (!HasPhysicalAnimationPose(Mesh)) return;
+	const FBodyInstance* MeshRootBody = Mesh->GetBodyInstance();
+	const auto CanSimulateReactionBody = [MeshRootBody](FName BodyBone, const FBodyInstance* Body)
+	{
+		return Body && Body != MeshRootBody && BodyBone != TEXT("pelvis") && BodyBone != TEXT("root");
+	};
+	const FName ReactionRoot = CanSimulateReactionBody(Bone, Mesh->GetBodyInstance(Bone)) ? Bone : TorsoFallbackBone;
+	if (ReactionRoot.IsNone() || !CanSimulateReactionBody(ReactionRoot, Mesh->GetBodyInstance(ReactionRoot))) return;
 	if (!GetSkeletalMesh()) SetSkeletalMeshComponent(Mesh);
-	FName Root=Bone;
-	// Never simulate root/pelvis: the movement capsule must remain authoritative under ALS.
-	if (Root==TEXT("pelvis") || Root==TEXT("root")) Root=TorsoFallbackBone;
-	if (Root.IsNone() || Root==TEXT("pelvis") || Root==TEXT("root") || !Mesh->GetBodyInstance(Root)) return;
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	if (!bSavedBlend) { bOriginalBlend=Mesh->bBlendPhysics; bSavedBlend=true; }
 	Mesh->bBlendPhysics=false;
@@ -131,8 +171,9 @@ void UNGHitReactionComponent::ReceiveImpact(FName Bone,FVector BonePoint,FVector
 	for (const auto& Setup:Mesh->GetPhysicsAsset()->SkeletalBodySetups)
 	{
 		if (!Setup) continue; const FName Name=Setup->BoneName;
-		if (Name!=Root && !Mesh->BoneIsChildOf(Name,Root)) continue;
-		auto* Body=Mesh->GetBodyInstance(Name); if (!Body) continue;
+		if (Name != ReactionRoot && !Mesh->BoneIsChildOf(Name, ReactionRoot)) continue;
+		auto* Body = Mesh->GetBodyInstance(Name);
+		if (!CanSimulateReactionBody(Name, Body)) continue;
 		auto* State=ActiveBodies.FindByPredicate([&](const FBodyReaction& S){return S.Bone==Name;});
 		if (!State)
 		{
@@ -143,7 +184,7 @@ void UNGHitReactionComponent::ReceiveImpact(FName Bone,FVector BonePoint,FVector
 		Mesh->SetBodySimulatePhysics(Name,true); Body->PhysicsBlendWeight=FMath::Clamp(PeakBlend,0.f,1.f);
 	}
 	if (ActiveBodies.IsEmpty() && bSavedBlend) { Mesh->bBlendPhysics=bOriginalBlend; bSavedBlend=false; }
-	Mesh->AddImpulseAtLocation(ImpulseVector,Point,Root);
+	Mesh->AddImpulseAtLocation(ImpulseVector,Point,ReactionRoot);
 	OnBulletBodyImpact.Broadcast(Bone,Point,ImpulseVector);
 }
 void UNGHitReactionComponent::TickComponent(float Delta,ELevelTick Tick,FActorComponentTickFunction* ThisTick)

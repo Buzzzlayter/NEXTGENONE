@@ -220,6 +220,7 @@ float UNGCharacterMovementComponent::GetMaxSpeed() const
 
 float UNGCharacterMovementComponent::GetMaxAcceleration() const
 {
+	if (IsMovingOnGround()) return Super::GetMaxAcceleration() * GroundResponseScale;
 	const bool bAirborne = IsFalling();
 	const float BaseAcceleration = bAirborne && IsJetpackThrustActive() ? MoveSettings.HorizontalAcceleration : Super::GetMaxAcceleration();
 	constexpr float AssistedFlightAccelerationMultiplier = 1.6f;
@@ -228,11 +229,13 @@ float UNGCharacterMovementComponent::GetMaxAcceleration() const
 
 float UNGCharacterMovementComponent::GetMaxBrakingDeceleration() const
 {
+	if (IsMovingOnGround()) return Super::GetMaxBrakingDeceleration() * GroundResponseScale;
 	return IsFalling() && IsJetpackThrustActive() ? MoveSettings.HorizontalBraking : Super::GetMaxBrakingDeceleration();
 }
 
 void UNGCharacterMovementComponent::CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration)
 {
+	if (IsMovingOnGround()) Friction *= GroundResponseScale;
 	// PhysFalling calls this on horizontal velocity only. Keep its collision/air-control solver.
 	// No lateral friction during thrust: brake by the configured deceleration, without erasing inertia on turns.
 	Super::CalcVelocity(DeltaTime, IsFalling() && IsJetpackThrustActive() ? 0.f : Friction, bFluid, BrakingDeceleration);

@@ -15,6 +15,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(EEndPlayReason::Type Reason) override;
 	virtual void TickComponent(float Delta,ELevelTick Tick,FActorComponentTickFunction* ThisTick) override;
+	UPROPERTY(EditDefaultsOnly,Category="Hit Reaction") FName ImpactMeshTag=TEXT("HitReactionMesh");
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Hit Reaction",meta=(ClampMin="0.05",ClampMax="2")) float RecoveryTime=.35f;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Hit Reaction",meta=(ClampMin="0",ClampMax="1")) float PeakBlend=.8f;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Hit Reaction") FName TorsoFallbackBone=TEXT("spine_01");
@@ -25,7 +26,10 @@ public:
 	UPROPERTY(BlueprintAssignable,Category="Hit Reaction") FNGBulletBodyImpact OnBulletBodyImpact;
 	void ApplyImpact(const FHitResult& Hit,FVector Direction,float Impulse);
 	void ReleaseToRagdoll();
+	bool StartAlternateDeathRagdoll(USkeletalMeshComponent* AnimationMesh, const FVector& InitialVelocity);
 private:
+	UPROPERTY(Transient) TObjectPtr<USkeletalMeshComponent> ImpactMesh;
+	bool bAlternateRagdollStarted=false;
 	struct FPendingImpact { FName Bone; FVector BonePoint; FVector Direction; float Impulse; };
 	TOptional<FPendingImpact> PendingDeathImpact;
 	struct FBodyReaction { FName Bone; float Remaining=0.f; float OriginalBlend=0.f; };
