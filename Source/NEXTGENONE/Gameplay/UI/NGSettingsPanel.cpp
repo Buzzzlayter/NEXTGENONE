@@ -1,5 +1,6 @@
 #include "Gameplay/UI/NGSettingsPanel.h"
 
+#include "Online/NGConnectionPanel.h"
 #include "GameFramework/PlayerController.h"
 #include "HFSMState.h"
 #include "Input/PlayerInputSubsystem.h"
@@ -40,6 +41,7 @@ void UNGSettingsScreenMounter::Enter()
 		Super::Exit(NAME_None);
 		return;
 	}
+	Panel->SetSupplementalContent(CreateWidget<UNGConnectionPanel>(Controller));
 
 	FPlayerInputPolicy Policy;
 	Policy.InputMode = EInputMode::UI;

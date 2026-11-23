@@ -5,6 +5,11 @@
 	"Description": "",
 	"Modules": [
 		{
+			"Name": "Authorization",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "CommonLoadingScreen",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
@@ -31,6 +36,15 @@
 		}
 	],
 	"Plugins": [
+		{
+			"Name": "OnlineSubsystemEOS",
+			"Enabled": true
+		},
+		{
+			"Name": "OnlineSubsystemSteam",
+			"Enabled": true,
+			"PlatformAllowList": ["Win64"]
+		},
 		{
 			"Name": "AudioModulation",
 			"Enabled": true

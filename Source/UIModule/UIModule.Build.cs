@@ -42,6 +42,7 @@ public class UIModule : ModuleRules
                 "Slate",
                 "SlateCore",
                 "DeveloperSettings",
+                "Authorization",
             }
         );
     }
