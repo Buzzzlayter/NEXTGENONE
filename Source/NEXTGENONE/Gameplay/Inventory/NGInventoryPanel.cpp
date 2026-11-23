@@ -91,6 +91,13 @@ bool UNGInventoryPanel::RequestInventoryOperation_Implementation(const FUIInvent
 	}
 	if (Operation == EUIInventoryOperation::Drop && Inventory.Get() == Transport)
 		return Transport->RequestDropItem(Item, Amount);
+	if (Operation == EUIInventoryOperation::QuickTransfer)
+	{
+		auto* Viewed = Transport->GetViewedInventory();
+		if (!Viewed || (Inventory.Get() != Transport && Inventory.Get() != Viewed)) return false;
+		auto* Target = Inventory.Get() == Transport ? Viewed : Transport;
+		return Transport->RequestInventoryTransfer(Inventory.Get(), Item, SlotInfo.SlotIndex, Target, INDEX_NONE, nullptr, Amount);
+	}
 	return false;
 }
 

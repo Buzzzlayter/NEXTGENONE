@@ -34,6 +34,7 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_NGActivatingItem, "State.ActivatingItem");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGItemActivateAbility, "Ability.Type.ItemActivate");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGHealingAmount, "Data.Healing");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGFireInput, "Input.Combat.Fire");
+UE_DEFINE_GAMEPLAY_TAG(TAG_NGInputMelee, "Input.Combat.Melee");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGReloadInput, "Input.Combat.Reload");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionBlocked, "State.Interaction.Blocked");
 UE_DEFINE_GAMEPLAY_TAG(TAG_NGInteractionAbility, "Ability.Type.Interaction");

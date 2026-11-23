@@ -200,7 +200,7 @@ bool UNGPlayerInventoryManagerComponent::RequestInventoryTransfer(UNGInventoryMa
 
 void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(APawn* ExpectedPawn, UNGInventoryManagerComponent* Source, UNGInventoryItemInstance* ExpectedItem, int32 SourceSlot, UNGInventoryManagerComponent* Target, int32 TargetSlot, UNGInventoryItemInstance* ExpectedTarget, int32 Amount)
 {
-	if (Amount < 0 || SourceSlot < 0 || TargetSlot < 0 || !FMath::IsFinite(InventoryOperationInterval))
+	if (Amount < 0 || SourceSlot < 0 || TargetSlot < INDEX_NONE || !FMath::IsFinite(InventoryOperationInterval))
 	return;
 	if (!ExpectedPawn || GetInventoryPawn() != ExpectedPawn)
 	return;
@@ -211,9 +211,38 @@ void UNGPlayerInventoryManagerComponent::ServerInventoryTransfer_Implementation(
 	if (!Interaction || !Interaction->IsCurrentInteractor()) return;
 	if (!CanAccessInventory(Source)) return;
 	if (!CanAccessInventory(Target)) return;
-	if (!IsValid(ExpectedItem) || Source->GetItemAtSlot(SourceSlot) != ExpectedItem || Target->GetItemAtSlot(TargetSlot) != ExpectedTarget)
+	if (!IsValid(ExpectedItem) || Source->GetItemAtSlot(SourceSlot) != ExpectedItem)
 	return;
+	if (TargetSlot == INDEX_NONE)
+	{
+		const auto* Viewed = GetViewedInventory();
+		if (!Viewed || Source == Target || !((Source == this && Target == Viewed) || (Source == Viewed && Target == this))) return;
+		TargetSlot = FindQuickTransferSlot(Source, ExpectedItem, Target, Amount);
+		if (TargetSlot == INDEX_NONE) return;
+	}
+	else if (Target->GetItemAtSlot(TargetSlot) != ExpectedTarget) return;
 	ExecuteTransferOnServer(Source, SourceSlot, Target, TargetSlot, Amount);
+}
+
+int32 UNGPlayerInventoryManagerComponent::FindQuickTransferSlot(const UNGInventoryManagerComponent* Source,
+	UNGInventoryItemInstance* Item, const UNGInventoryManagerComponent* Target, int32 Amount) const
+{
+	const int32 SourceCount = Source->GetCount(Item);
+	const int32 TransferCount = Amount == 0 ? SourceCount : Amount;
+	const auto ItemClass = Item->GetItemDef();
+	if (!ItemClass || TransferCount < 1 || TransferCount > SourceCount) return INDEX_NONE;
+	const int32 MaxStackSize = GetDefault<UNGInventoryItemDefinition>(ItemClass)->MaxStackSize;
+	const FNGItemState ItemState = Item->CaptureState(TransferCount);
+	const FGameplayTag DestinationTag = Target == this ? TAG_NGSlotStorage.GetTag() : FGameplayTag();
+	for (int32 Index = 0; Index < Target->GetSlotCount(); ++Index)
+	{
+		auto* Other = Target->GetItemAtSlot(Index);
+		if (!Other || (DestinationTag.IsValid() && !Target->GetSlotTag(Index).MatchesTag(DestinationTag))) continue;
+		const int32 OtherCount = Target->GetCount(Other);
+		if (TransferCount <= MaxStackSize - OtherCount && ItemState.CanMergeStackWith(Other->CaptureState(OtherCount))
+			&& Target->CanPlaceItemAtSlot(ItemClass, Index)) return Index;
+	}
+	return Target->FindFirstAvailableSlot(ItemClass, TransferCount, DestinationTag);
 }
 
 void UNGPlayerInventoryManagerComponent::GrantStarterInventory()

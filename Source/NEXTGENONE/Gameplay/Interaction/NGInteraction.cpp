@@ -13,6 +13,7 @@
 #include "Input/NGGameplayInputComponent.h"
 #include "Input/NGGameplayInputConfig.h"
 #include "Gameplay/UI/NGInteractionMarkerModel.h"
+#include "Map/UIMarkerComponent.h"
 #include "Map/UIMarkerSubsystem.h"
 #include "Misc/ScopeExit.h"
 #include "Engine/World.h"
@@ -215,20 +216,21 @@ void UNGInteractionComponent::UpdateFocus(AActor* Target)
 	if (Target && Prompt.IsEmptyOrWhitespace())
 		Prompt = NSLOCTEXT("NEXTGENONE", "InteractionDefaultLabel", "Interact");
 	const bool bAvailable=Target && INGInteractable::Execute_CanInteract(Target,Pawn);
-	const bool bChanged=FocusedActor.Get()!=Target || !FocusedPrompt.EqualTo(Prompt) || bFocusedAvailable!=bAvailable;
-	if (FocusedActor.Get()!=Target)
+	const bool bTargetChanged = FocusedActor.Get() != Target;
+	const bool bChanged = bTargetChanged || !FocusedPrompt.EqualTo(Prompt) || bFocusedAvailable != bAvailable;
+	if (bTargetChanged)
 	{
 		if (auto* Old=FocusedActor.Get()) INGInteractable::Execute_SetInteractionFocus(Old,Pawn,false);
 		FocusedActor=Target; if (Target) INGInteractable::Execute_SetInteractionFocus(Target,Pawn,true);
 	}
 	FocusedPrompt=Prompt; bFocusedAvailable=bAvailable;
 	if (bChanged || (Target && !FocusMarker.IsValid()))
-		UpdateFocusMarker(Pawn, Target);
+		UpdateFocusMarker(Pawn, Target, bTargetChanged);
 	if (bChanged)
 		OnFocusChanged.Broadcast(Target,Prompt,bAvailable);
 }
 
-void UNGInteractionComponent::UpdateFocusMarker(APawn* Pawn, AActor* Target)
+void UNGInteractionComponent::UpdateFocusMarker(APawn* Pawn, AActor* Target, bool bTargetChanged)
 {
 	auto* Marker = FocusMarker.Get();
 	if (!Target && !Marker) return;
@@ -236,13 +238,15 @@ void UNGInteractionComponent::UpdateFocusMarker(APawn* Pawn, AActor* Target)
 	auto* LocalPlayer = Player ? Player->GetLocalPlayer() : nullptr;
 	auto* MarkerSubsystem = UWorld::GetSubsystem<UUIMarkerSubsystem>(GetWorld());
 	if (!MarkerSubsystem) return;
-	if (!Target || !LocalPlayer || FocusedPrompt.IsEmpty())
+	const bool bShowMarker = IsValid(Target) && LocalPlayer && !FocusedPrompt.IsEmpty();
+	if (Marker && (bTargetChanged || !bShowMarker))
 	{
-		if (Marker) Marker->SetViewer(nullptr);
+		Marker->SetViewer(nullptr);
 		MarkerSubsystem->UnregisterMarker(Marker);
 		FocusMarker.Reset();
-		return;
+		Marker = nullptr;
 	}
+	if (!bShowMarker) return;
 
 	const auto* GameplayInput = Pawn->FindComponentByClass<UNGGameplayInputComponent>();
 	const auto* InputConfig = GameplayInput ? GameplayInput->InputConfig.Get() : nullptr;
@@ -254,8 +258,17 @@ void UNGInteractionComponent::UpdateFocusMarker(APawn* Pawn, AActor* Target)
 		return;
 	}
 
-	Marker = Cast<UNGInteractionMarkerModel>(UUIMarkerModel::CreateRuntimeModel(
-		MarkerSubsystem, GetMutableDefault<UNGInteractionMarkerModel>(), Target->GetActorLocation()));
+	TInlineComponentArray<UUIMarkerComponent*> MarkerComponents(Target);
+	for (auto* Component : MarkerComponents)
+	{
+		Marker = Cast<UNGInteractionMarkerModel>(Component->CreateRuntimeMarker(MarkerSubsystem, UNGInteractionMarkerModel::StaticClass()));
+		if (!Marker) continue;
+		Marker->SetAnchor(Component);
+		break;
+	}
+	if (!Marker)
+		Marker = Cast<UNGInteractionMarkerModel>(UUIMarkerModel::CreateRuntimeModel(
+			MarkerSubsystem, GetMutableDefault<UNGInteractionMarkerModel>(), Target->GetActorLocation()));
 	if (!Marker) return;
 	Marker->SetViewer(LocalPlayer);
 	Marker->SetFocus(Target, Action, FocusedPrompt, bFocusedAvailable);

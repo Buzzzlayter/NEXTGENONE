@@ -4,12 +4,19 @@
 #include "Map/UIMarkerModel.h"
 #include "Map/UIMarkerSubsystem.h"
 
+UUIMarkerModel* UUIMarkerComponent::CreateRuntimeMarker(UUIMarkerSubsystem* Subsystem, TSubclassOf<UUIMarkerModel> ModelClass) const
+{
+	if (!IsValid(MarkerModel) || (ModelClass && !MarkerModel->IsA(ModelClass.Get()))) return nullptr;
+	return UUIMarkerModel::CreateRuntimeModel(Subsystem, MarkerModel.Get(), GetComponentLocation());
+}
+
 void UUIMarkerComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	if (!IsValid(MarkerModel) || !MarkerModel->ShouldRegisterOnBeginPlay()) return;
 	if (auto* Subsystem = UWorld::GetSubsystem<UUIMarkerSubsystem>(GetWorld()))
 	{
-		auto* Model = UUIMarkerModel::CreateRuntimeModel(Subsystem, MarkerModel.Get(), GetComponentLocation());
+		auto* Model = CreateRuntimeMarker(Subsystem, nullptr);
 		if (Subsystem->RegisterMarker(Model))
 		{
 			RegisteredModel = Model;

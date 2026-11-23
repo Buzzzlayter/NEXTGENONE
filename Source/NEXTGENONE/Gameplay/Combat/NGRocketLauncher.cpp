@@ -8,6 +8,7 @@
 #include "GameplayTags/NGGameplayTags.h"
 #include "Inventory/NGInventoryItemDefinition.h"
 #include "Inventory/NGInventoryItemInstance.h"
+#include "Sound/SoundBase.h"
 
 UNGRocketLauncherDefinition::UNGRocketLauncherDefinition()
 {
@@ -97,7 +98,7 @@ bool ANGRocketLauncher::ExecuteFire_Implementation(FVector ViewOrigin, FVector V
 	auto* Rocket = GetWorld()->SpawnActorDeferred<ANGRocketProjectile>(
 		ProjectileClass, Transform, nullptr, Shooter, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!Rocket) return false;
-	if (!Rocket->Initialize(Shooter, Direction, Definition->Damage, Definition->Range))
+	if (!Rocket->Initialize(Shooter, Direction, Definition->Damage, Definition->Range, Definition->FireSound))
 	{
 		Rocket->Destroy();
 		return false;

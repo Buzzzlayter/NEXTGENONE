@@ -2,6 +2,7 @@
 #include "Gameplay/UI/NGInteractionWidget.h"
 
 #include "Engine/LocalPlayer.h"
+#include "Components/SceneComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
 #include "GameFramework/Actor.h"
@@ -11,6 +12,12 @@
 UNGInteractionMarkerModel::UNGInteractionMarkerModel()
 {
 	WorldVisibility.bAlwaysVisible = true;
+	WidgetClass = UNGInteractionWidget::StaticClass();
+}
+
+void UNGInteractionMarkerModel::SetAnchor(USceneComponent* Component)
+{
+	AnchorComponent = Component;
 }
 
 void UNGInteractionMarkerModel::SetViewer(ULocalPlayer* Player)
@@ -77,6 +84,7 @@ bool UNGInteractionMarkerModel::IsVisibleTo(const APlayerController& Viewer) con
 
 FVector UNGInteractionMarkerModel::GetPosition() const
 {
+	if (const auto* Component = AnchorComponent.Get()) return Component->GetComponentLocation();
 	const auto* Target = FocusTarget.Get();
 	return Target ? Target->GetActorTransform().TransformPosition(LocalAnchor) : Super::GetPosition();
 }
@@ -84,9 +92,4 @@ FVector UNGInteractionMarkerModel::GetPosition() const
 const FUIMarkerVisibilityRules* UNGInteractionMarkerModel::GetVisibility(EUIMarkerSurface Surface) const
 {
 	return Surface == EUIMarkerSurface::World ? &WorldVisibility : nullptr;
-}
-
-UClass* UNGInteractionMarkerModel::GetWidgetClass() const
-{
-	return UNGInteractionWidget::StaticClass();
 }

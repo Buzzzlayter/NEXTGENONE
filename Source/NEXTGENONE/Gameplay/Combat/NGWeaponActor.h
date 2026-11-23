@@ -42,6 +42,7 @@ protected:
 	virtual bool ExecuteFire_Implementation(FVector ViewOrigin, FVector ViewDirection);
 	UFUNCTION(BlueprintNativeEvent, Category="Weapon|Presentation") void PlayFireEffects(UNGWeaponDefinition* Definition, FVector Start, FVector End);
 	virtual void PlayFireEffects_Implementation(UNGWeaponDefinition* Definition, FVector Start, FVector End);
+	virtual bool PlaysFireSoundAtMuzzle() const { return true; }
 	UFUNCTION(BlueprintNativeEvent, Category="Weapon|Presentation") void PlayReloadEffects(UNGWeaponDefinition* Definition);
 	virtual void PlayReloadEffects_Implementation(UNGWeaponDefinition* Definition);
 	bool ResolveShotPath(const FVector& ViewOrigin, const FVector& ViewDirection, const UNGWeaponDefinition& Definition,

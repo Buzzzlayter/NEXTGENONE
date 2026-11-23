@@ -7,6 +7,7 @@
 class ULocalPlayer;
 class UInputAction;
 class AActor;
+class USceneComponent;
 
 UCLASS()
 class UNGInteractionMarkerModel : public UUIMarkerModel
@@ -16,11 +17,13 @@ class UNGInteractionMarkerModel : public UUIMarkerModel
 public:
 	UNGInteractionMarkerModel();
 	void SetViewer(ULocalPlayer* Player);
+	void SetAnchor(USceneComponent* Component);
 	void SetFocus(AActor* Target, const UInputAction* Action, const FText& Prompt, bool bAvailable);
+	virtual bool ShouldReplicateMarker() const override { return false; }
+	virtual bool ShouldRegisterOnBeginPlay() const override { return false; }
 	virtual bool IsVisibleTo(const APlayerController& Viewer) const override;
 	virtual FVector GetPosition() const override;
 	virtual const FText& GetLabel() const override { return PromptLabel; }
-	virtual UClass* GetWidgetClass() const override;
 	virtual const FUIMarkerVisibilityRules* GetVisibility(EUIMarkerSurface Surface) const override;
 
 private:
@@ -28,6 +31,7 @@ private:
 	UFUNCTION() void InputTypeChanged(EInputType InputType);
 	TWeakObjectPtr<ULocalPlayer> LocalViewer;
 	TWeakObjectPtr<AActor> FocusTarget;
+	TWeakObjectPtr<USceneComponent> AnchorComponent;
 	TWeakObjectPtr<const UInputAction> InputAction;
 	FVector LocalAnchor = FVector::ZeroVector;
 	FText FocusPrompt;

@@ -89,5 +89,5 @@ private:
 	bool bFocusedAvailable=false;
 	TWeakObjectPtr<UNGInteractionMarkerModel> FocusMarker;
 	void UpdateFocus(AActor* Target);
-	void UpdateFocusMarker(APawn* Pawn, AActor* Target);
+	void UpdateFocusMarker(APawn* Pawn, AActor* Target, bool bTargetChanged);
 };
