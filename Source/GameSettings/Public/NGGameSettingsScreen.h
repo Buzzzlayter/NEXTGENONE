@@ -5,6 +5,7 @@
 
 class UNGGameSettingRegistry;
 class UGameSetting;
+class SBox;
 class SVerticalBox;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNGSettingsBack);
@@ -28,6 +29,7 @@ public:
 	void Defaults();
 
 	UNGGameSettingRegistry* GetRegistry() const { return Registry; }
+	void SetSupplementalContent(UWidget* Content);
 
 protected:
 	TSharedRef<SWidget> RebuildWidget() override;
@@ -43,5 +45,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UNGGameSettingRegistry> Registry;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UWidget> SupplementalWidget;
+
 	TSharedPtr<SVerticalBox> SettingsRows;
+	TSharedPtr<SBox> SupplementalContent;
 };

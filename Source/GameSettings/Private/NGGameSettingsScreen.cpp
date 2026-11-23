@@ -132,7 +132,18 @@ TSharedRef<SWidget> UNGGameSettingsScreen::RebuildWidget()
 {
 	if (WidgetTree && WidgetTree->RootWidget)
 	{
-		return Super::RebuildWidget();
+		return SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SAssignNew(SupplementalContent, SBox)
+				[
+					SupplementalWidget ? SupplementalWidget->TakeWidget() : SNullWidget::NullWidget
+				]
+			]
+			+ SVerticalBox::Slot().FillHeight(1.f)
+			[
+				Super::RebuildWidget()
+			];
 	}
 
 	const auto Weak = MakeWeakObjectPtr(this);
@@ -142,6 +153,13 @@ TSharedRef<SWidget> UNGGameSettingsScreen::RebuildWidget()
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
 			SNew(SScrollBox)
+			+ SScrollBox::Slot()
+			[
+				SAssignNew(SupplementalContent, SBox)
+				[
+					SupplementalWidget ? SupplementalWidget->TakeWidget() : SNullWidget::NullWidget
+				]
+			]
 			+ SScrollBox::Slot()
 			[
 				SAssignNew(SettingsRows, SVerticalBox)
@@ -170,6 +188,15 @@ TSharedRef<SWidget> UNGGameSettingsScreen::RebuildWidget()
 	];
 }
 
+void UNGGameSettingsScreen::SetSupplementalContent(UWidget* Content)
+{
+	SupplementalWidget = Content;
+	if (SupplementalContent)
+	{
+		SupplementalContent->SetContent(Content ? Content->TakeWidget() : SNullWidget::NullWidget);
+	}
+}
+
 void UNGGameSettingsScreen::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -196,6 +223,7 @@ void UNGGameSettingsScreen::ReleaseSlateResources(bool bReleaseChildren)
 {
 	Super::ReleaseSlateResources(bReleaseChildren);
 	SettingsRows.Reset();
+	SupplementalContent.Reset();
 }
 
 void UNGGameSettingsScreen::RefreshSettings()
