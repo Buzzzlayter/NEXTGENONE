@@ -48,16 +48,20 @@ private:
 	};
 	struct FSolePoint
 	{
-		FVector BoneLocal = FVector::ZeroVector;
+		FVector FootLocal = FVector::ZeroVector;
 		FVector MeshReference = FVector::ZeroVector;
 		bool bValid = false;
 	};
 	struct FFootActuator
 	{
+		FTransform PreviousWorldTarget = FTransform::Identity;
 		float Pitch = 0.f;
 		float PitchVelocity = 0.f;
 		float PreviousContact = 0.f;
+		float SupportBlendTime = 0.f;
 		bool bUnloading = false;
+		bool bHasTarget = false;
+		bool bStepArmed = false;
 	};
 
 	FFootLock LeftLock;
@@ -69,19 +73,20 @@ private:
 	FSolePoint LeftSole[2];
 	FSolePoint RightSole[2];
 	FVector PreviousGroundVelocity = FVector::ZeroVector;
+	FVector PreviousGroundFacing = FVector::ZeroVector;
 	FVector BodyOffset = FVector::ZeroVector;
 	FVector BodyOffsetVelocity = FVector::ZeroVector;
 	float TerrainOffset = 0.f;
 	float SuspensionOffset = 0.f;
 	float SuspensionVelocity = 0.f;
 	float FallingSpeed = 0.f;
-	bool bLeftPlanted = false;
-	bool bRightPlanted = false;
+	float BrakingLoad = 0.f;
+	float TurningLoad = 0.f;
 	bool bHasGroundVelocity = false;
 	void RefreshSolePoints(const USkeletalMeshComponent& MeshComponent);
-	static FSolePoint FindSolePoint(const USkeletalMesh& MeshAsset, const UPhysicsAsset* PhysicsAsset, FName Bone, FName Socket);
+	static FSolePoint FindSolePoint(const USkeletalMesh& MeshAsset, const UPhysicsAsset* PhysicsAsset, FName Bone, FName Socket, const FTransform& FootReference);
 	bool UpdateFoot(const ACharacter& Character, const UCharacterMovementComponent& Movement, const USkeletalMeshComponent& MeshComponent,
-		FName JointBone, FName FootBone, FName ToeBone, FName HeelContactSocket, FName ToeContactSocket,
-		const FSolePoint (&Sole)[2], double CapsuleBottom, float Contact, float DeltaSeconds, bool bTraveling,
+		FName JointBone, FName FootBone,
+		const FSolePoint (&Sole)[2], double CapsuleBottom, float Contact, float DeltaSeconds, bool bTraveling, bool& bBrace,
 		FFootLock& Lock, FFootActuator& Actuator, FNGMechFootContact& Foot, double& OutSupportHeight) const;
 };
