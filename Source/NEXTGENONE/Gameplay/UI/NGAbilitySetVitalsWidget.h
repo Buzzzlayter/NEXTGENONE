@@ -5,7 +5,6 @@
 
 class UAbilitySystemComponent;
 class UImage;
-class UMaterialInterface;
 class APawn;
 struct FOnAttributeChangeData;
 
@@ -14,25 +13,28 @@ class NEXTGENONE_API UNGAbilitySetVitalsWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
+public:
+	UFUNCTION(BlueprintCallable, Category = "Vitals")
+	void ObservePawn(APawn* Pawn);
+
 protected:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	UPROPERTY(EditDefaultsOnly, Category="Vitals") TObjectPtr<UMaterialInterface> HealthMaterial;
-	UPROPERTY(EditDefaultsOnly, Category="Vitals") TObjectPtr<UMaterialInterface> OuterShieldMaterial;
-	UPROPERTY(EditDefaultsOnly, Category="Vitals") TObjectPtr<UMaterialInterface> InnerShieldMaterial;
-	UPROPERTY(EditDefaultsOnly, Category="Vitals", meta=(ClampMin="1")) FVector2D BarSize = FVector2D(200.f, 14.f);
-	UPROPERTY(EditDefaultsOnly, Category="Vitals", meta=(ClampMin="0")) float BarSpacing = 4.f;
+	UFUNCTION(BlueprintImplementableEvent, Category = "Vitals")
+	void OnVitalsUpdated(float CurrentHealth, float MaxHealth, float CurrentShield, float MaxShield);
 
 private:
 	UFUNCTION() void PawnChanged(APawn* OldPawn, APawn* NewPawn);
+	void ObserveAbilitySystem(UAbilitySystemComponent* ASC);
 	void AttributesChanged(const FOnAttributeChangeData& Change);
 	void UnbindAttributes();
 	void RefreshBars();
 
 	TWeakObjectPtr<UAbilitySystemComponent> ObservedASC;
-	UPROPERTY(Transient) TObjectPtr<UImage> HealthBar;
-	UPROPERTY(Transient) TObjectPtr<UImage> OuterShieldBar;
-	UPROPERTY(Transient) TObjectPtr<UImage> InnerShieldBar;
+	TWeakObjectPtr<APawn> ExplicitPawn;
+	bool bObserveExplicitPawn = false;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> HealthBar;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> OuterShieldBar;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> InnerShieldBar;
 };

@@ -4,6 +4,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Map/UIMarkerModel.h"
 #include "Map/UIMarkerObserver.h"
@@ -82,14 +83,19 @@ void UUIWorldMarkersCanvas::NativeTick(const FGeometry& MyGeometry, float InDelt
 		if (bProjected)
 			USlateBlueprintLibrary::ScreenToWidgetLocal(this, CanvasGeometry, ScreenPosition, CanvasPosition);
 		const bool bOnScreen = bProjectedInFront && Bounds.IsInsideOrOn(CanvasPosition);
-		if (!bProjected || CanvasPosition.ContainsNaN() || (!bOnScreen && !bKeepAtEdge))
+		TOptional<FVector2D> OwnAnchor;
+		if (!bOnScreen && Model->GetSourceActor() && Model->GetSourceActor() == Controller->GetPawn().Get())
+			OwnAnchor = Model->GetWidgetClass(EUIMarkerSurface::World)->GetDefaultObject<UUIMarkerWidget>()->GetOwnMarkerScreenAnchor();
+		if (!OwnAnchor.IsSet() && (!bProjected || CanvasPosition.ContainsNaN() || (!bOnScreen && !bKeepAtEdge)))
 		{
 			DemountWidget(*Marker);
 			continue;
 		}
 
 		FVector2D Alignment(0.5, 0.5);
-		if (!bOnScreen)
+		if (OwnAnchor.IsSet())
+			CanvasPosition = OwnAnchor.GetValue() * Size;
+		else if (!bOnScreen)
 		{
 			Alignment = UUIMarkerWidget::GetEdgeAnchor(CanvasPosition / Size);
 			CanvasPosition = Alignment * Size;
@@ -98,7 +104,7 @@ void UUIWorldMarkersCanvas::NativeTick(const FGeometry& MyGeometry, float InDelt
 		auto* CanvasSlot = Marker->CanvasSlot.Get();
 		if (!CanvasSlot)
 		{
-			CanvasSlot = UUIMarkerWidget::Mount(RootCanvas.Get(), Controller, Model);
+			CanvasSlot = UUIMarkerWidget::Mount(RootCanvas.Get(), Controller, Model, EUIMarkerSurface::World);
 			if (!CanvasSlot) continue;
 			if (auto* Current = TrackedMarkers.Find(Id)) Current->CanvasSlot = CanvasSlot;
 			else
@@ -122,7 +128,7 @@ void UUIWorldMarkersCanvas::TrackMarker(UUIMarkerModel* Model, EUIMarkerSurface 
 	if (auto* CanvasSlot = Marker.CanvasSlot.Get())
 	{
 		auto* Widget = Cast<UUIMarkerWidget>(CanvasSlot->GetContent());
-		if (Widget && Widget->GetClass() == Model->GetWidgetClass() && Widget->GetOwningPlayer() == GetOwningPlayer())
+		if (Widget && Widget->GetClass() == Model->GetWidgetClass(Surface) && Widget->GetOwningPlayer() == GetOwningPlayer())
 			Widget->SetMarkerModel(Model);
 		else
 			DemountWidget(Marker);

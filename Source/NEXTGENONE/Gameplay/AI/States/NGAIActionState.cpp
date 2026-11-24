@@ -51,7 +51,7 @@ bool UNGAIActionState::IsCurrentRun(uint64 Serial) const
 		&& GetParentFSM() && GetParentFSM()->GetActiveState() == this;
 }
 
-void UNGAIActionState::FinishAction(ENGAIActionResult Outcome, FName Reason)
+void UNGAIActionState::FinishAction(ENGAIActionResult Outcome, FName Reason, FName SuccessEvent)
 {
 	if (!bRunning || Outcome == ENGAIActionResult::Running) return;
 	bRunning = false; // Cleanup may synchronously fire path/ability callbacks.
@@ -60,7 +60,9 @@ void UNGAIActionState::FinishAction(ENGAIActionResult Outcome, FName Reason)
 	if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(TimeoutTimer);
 	ReleaseActionResources();
 	UE_LOG(LogTemp, Verbose, TEXT("AI action %s: result=%d reason=%s"), *GetName(), static_cast<int32>(Outcome), *Reason.ToString());
-	const FName Event = Outcome == ENGAIActionResult::Succeeded ? NGAIEvents::Succeeded : NGAIEvents::Failed;
+	const FName Event = Outcome == ENGAIActionResult::Succeeded
+		? (SuccessEvent.IsNone() ? NGAIEvents::Succeeded : SuccessEvent)
+		: NGAIEvents::Failed;
 	if (!GetWorld() || Event.IsNone()) return;
 	const uint64 CompletedRun = RunSerial;
 	// Defer graph notification until Enter/activation/callback stacks have unwound.

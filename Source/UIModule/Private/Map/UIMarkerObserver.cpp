@@ -73,7 +73,6 @@ void UUIMarkerObserver::EvaluateMarker(UUIMarkerModel* Model, bool bPresentation
 	auto* LocalPlayer = Viewer.Get();
 	const auto* MarkerWorld = World.Get();
 	const auto* Player = MarkerWorld && LocalPlayer ? LocalPlayer->UPlayer::GetPlayerController(MarkerWorld) : nullptr;
-	const auto* WidgetDefaults = Model->GetWidgetClass()->GetDefaultObject<UUIMarkerWidget>();
 	const bool bCanViewMarker = Player && Model->IsVisibleTo(*Player);
 	const FGuid Id = Model->GetMarkerId();
 	const FVector Position = Model->GetPosition();
@@ -85,8 +84,11 @@ void UUIMarkerObserver::EvaluateMarker(UUIMarkerModel* Model, bool bPresentation
 		const auto* Visibility = Model->GetVisibility(Surface);
 		if (!bDataChanged && (!Visibility || (!bHasRecipientGroup && !Visibility->RequiresViewer()))) continue;
 
+		const auto* WidgetDefaults = Model->GetWidgetClass(Surface)->GetDefaultObject<UUIMarkerWidget>();
+		const bool bOwnWorldMarker = Player && Surface == EUIMarkerSurface::World && Model->GetSourceActor()
+			&& Model->GetSourceActor() == Player->GetPawn().Get() && WidgetDefaults->GetOwnMarkerScreenAnchor().IsSet();
 		if (!Visibility || !Id.IsValid() || !bCanViewMarker || !WidgetDefaults->SupportsSurface(Surface)
-			|| !CanSee(*Player, Position, *Visibility, LineOfSight))
+			|| (!bOwnWorldMarker && !CanSee(*Player, Position, *Visibility, LineOfSight)))
 		{
 			FVisibleMarker Previous;
 			if (States->RemoveAndCopyValue(Surface, Previous)) OnMarkerHidden.Broadcast(Previous.VisibleId, Surface);

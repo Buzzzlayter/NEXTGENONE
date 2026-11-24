@@ -240,7 +240,7 @@ void UUILevelMapWidget::MountOrUpdateMarker(UUIMarkerModel* Model, EUIMarkerSurf
 		DemountMarker(Id, Surface);
 		return;
 	}
-	auto* MarkerClass = Model->GetWidgetClass();
+	auto* MarkerClass = Model->GetWidgetClass(Surface);
 	auto* MarkerWidget = MountedMarkers.FindRef(Id).Get();
 	const bool bAlreadyMounted = MarkerWidget && MarkerWidget->GetClass() == MarkerClass
 		&& MarkerWidget->GetOwningPlayer() == Player && MarkerWidget->GetParent() == MarkerCanvas.Get();
@@ -253,7 +253,7 @@ void UUILevelMapWidget::MountOrUpdateMarker(UUIMarkerModel* Model, EUIMarkerSurf
 	else
 	{
 		DemountMarker(Id, Surface);
-		CanvasSlot = UUIMarkerWidget::Mount(MarkerCanvas.Get(), Player, Model);
+		CanvasSlot = UUIMarkerWidget::Mount(MarkerCanvas.Get(), Player, Model, Surface);
 		if (!CanvasSlot) return;
 		MarkerWidget = CastChecked<UUIMarkerWidget>(CanvasSlot->GetContent());
 		MountedMarkers.Add(Id, MarkerWidget);

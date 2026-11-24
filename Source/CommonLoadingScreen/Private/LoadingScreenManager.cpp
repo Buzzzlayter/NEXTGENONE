@@ -224,6 +224,14 @@ bool ULoadingScreenManager::NeedsLoadingScreen(const UGameViewportClient& Viewpo
 void ULoadingScreenManager::UpdateLoadingScreen()
 {
 	auto* Viewport = GetGameInstance()->GetGameViewportClient();
+	if (Viewport && Viewport->IsSimulateInEditorViewport())
+	{
+		PendingLoadingReason.Reset();
+		LoadingReason.Reset();
+		HideLoadingScreen();
+		return;
+	}
+
 	const auto* PreLoad = FPreLoadScreenManager::Get();
 	if (!Viewport || !FSlateApplication::IsInitialized() || (PreLoad && PreLoad->HasValidActivePreLoadScreen()))
 	{

@@ -123,12 +123,16 @@ void UNGHealthSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackDat
 UNGInitHealthEffect::UNGInitHealthEffect()
 {
 	DurationPolicy = EGameplayEffectDurationType::Instant;
+	FSetByCallerFloat InitialHealth;
+	InitialHealth.DataName = InitialHealthMagnitude;
 	FGameplayModifierInfo Max;
-	Max.Attribute = UNGHealthSet::GetMaxHealthAttribute(); Max.ModifierOp = EGameplayModOp::Override; Max.ModifierMagnitude = FScalableFloat(100.f);
+	Max.Attribute = UNGHealthSet::GetMaxHealthAttribute(); Max.ModifierOp = EGameplayModOp::Override; Max.ModifierMagnitude = FGameplayEffectModifierMagnitude(InitialHealth);
 	Modifiers.Add(Max);
 	FGameplayModifierInfo HP = Max; HP.Attribute = UNGHealthSet::GetHealthAttribute(); Modifiers.Add(HP);
-	Max.Attribute = UNGHealthSet::GetMaxShieldAttribute(); Modifiers.Add(Max);
-	HP.Attribute = UNGHealthSet::GetShieldAttribute(); Modifiers.Add(HP);
+	FSetByCallerFloat InitialShield;
+	InitialShield.DataName = InitialShieldMagnitude;
+	Max.Attribute = UNGHealthSet::GetMaxShieldAttribute(); Max.ModifierMagnitude = FGameplayEffectModifierMagnitude(InitialShield); Modifiers.Add(Max);
+	Max.Attribute = UNGHealthSet::GetShieldAttribute(); Modifiers.Add(Max);
 }
 UNGDamageEffect::UNGDamageEffect()
 {

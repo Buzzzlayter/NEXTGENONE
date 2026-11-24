@@ -4,6 +4,7 @@
 #include "Gameplay/StateMachine/NGCharacterStateMachineComponent.h"
 #include "Gameplay/Player/NextgenonePlayerState.h"
 #include "AbilitySystem/NGAbilitySystem.h"
+#include "Character/NGCharacterVitalsDefinition.h"
 #include "Gameplay/Player/NGPlayerContext.h"
 #include "Gameplay/Combat/NGCombat.h"
 #include "Gameplay/Equipment/NGEquipmentComponent.h"
@@ -72,6 +73,38 @@ float ANextgenoneCharacter::GetShieldSegmentPercent(int32 SegmentIndex, int32 Se
 bool ANextgenoneCharacter::CanInitializeGameplay() const
 {
 	return !IsActorBeingDestroyed() && !IsDead() && !CharacterStateMachine->HasResourceFailure();
+}
+
+void ANextgenoneCharacter::InitializeLifeAttributes(UAbilitySystemComponent& ASC) const
+{
+	const FGameplayEffectSpecHandle HealthSpec = ASC.MakeOutgoingSpec(
+		UNGInitHealthEffect::StaticClass(), 1.f, ASC.MakeEffectContext());
+	if (!HealthSpec.IsValid()) return;
+
+	const auto* DefaultVitals = GetDefault<UNGCharacterVitalsDefinition>();
+	float StartingHealth = DefaultVitals->MaxHealth;
+	float StartingShield = DefaultVitals->MaxShield;
+	if (StartingVitals)
+	{
+		if (FMath::IsFinite(StartingVitals->MaxHealth)) StartingHealth = FMath::Max(1.f, StartingVitals->MaxHealth);
+		if (FMath::IsFinite(StartingVitals->MaxShield)) StartingShield = FMath::Max(0.f, StartingVitals->MaxShield);
+	}
+	else
+	{
+		for (const UClass* CharacterClass = GetClass(); GConfig && CharacterClass; CharacterClass = CharacterClass->GetSuperClass())
+		{
+			float ConfiguredHealth = 0.f;
+			if (GConfig->GetFloat(TEXT("NEXTGENONE.CharacterHealth"), *CharacterClass->GetPathName(), ConfiguredHealth, GGameIni)
+				&& FMath::IsFinite(ConfiguredHealth) && ConfiguredHealth >= 1.f)
+			{
+				StartingHealth = ConfiguredHealth;
+				break;
+			}
+		}
+	}
+	HealthSpec.Data->SetSetByCallerMagnitude(UNGInitHealthEffect::InitialHealthMagnitude, StartingHealth);
+	HealthSpec.Data->SetSetByCallerMagnitude(UNGInitHealthEffect::InitialShieldMagnitude, StartingShield);
+	ASC.ApplyGameplayEffectSpecToSelf(*HealthSpec.Data);
 }
 
 bool ANextgenoneCharacter::CanReleaseGameplay() const
