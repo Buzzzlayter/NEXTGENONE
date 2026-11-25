@@ -268,6 +268,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Camera System")
 	void GetCameraParameters(float& TPFOVOut, float& FPFOVOut, bool& bRightShoulderOut) const;
+	virtual bool IsAimCameraActive() const { return false; }
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Camera System")
 	void SetCameraBehavior(UALSPlayerCameraBehavior* CamBeh) { CameraBehavior = CamBeh; }

@@ -10,6 +10,7 @@
 // forward declarations
 class UALSDebugComponent;
 class AALSBaseCharacter;
+class UCurveVector;
 
 /**
  * Player camera manager class
@@ -71,7 +72,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "ALS|Camera")
 	FVector DebugViewOffset;
 
+	UPROPERTY(EditDefaultsOnly, Category = "ALS|Camera|Aim", meta = (ClampMin = "0", Units = "cm"))
+	float AimZoomDistance = 80.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "ALS|Camera|Aim", meta = (ClampMin = "0.01", Units = "s"))
+	float AimZoomInDuration = 0.22f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "ALS|Camera|Aim", meta = (ClampMin = "0.01", Units = "s"))
+	float AimZoomOutDuration = 0.26f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "ALS|Camera|Aim", meta = (ToolTip = "Optional camera-local offset in centimeters sampled over normalized zoom progress. X is forward, Y is toward the active shoulder, Z is up."))
+	TObjectPtr<UCurveVector> AimZoomOffsetCurve;
+
 private:
+	float AimZoomProgress = 0.f;
+
 	UPROPERTY()
 	TObjectPtr<UALSDebugComponent> ALSDebugComponent = nullptr;
 };

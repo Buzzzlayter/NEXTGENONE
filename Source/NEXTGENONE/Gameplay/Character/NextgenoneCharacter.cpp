@@ -233,6 +233,12 @@ void ANextgenoneCharacter::UpdateJetpackContext()
 		Movement->SetJetpackContext(Definition->Movement, Source->GetGeneration());
 	else Movement->SetJetpackContext({}, 0);
 }
+bool ANextgenoneCharacter::IsAimCameraActive() const
+{
+	const auto* ASC = GetAbilitySystemComponent();
+	return IsLocallyControlled() && !IsDead() && ASC && ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming);
+}
+
 void ANextgenoneCharacter::ApplyCombatPresentation()
 {
 	const auto WeaponState = Combat->GetEquipment();
