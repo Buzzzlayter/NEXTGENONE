@@ -40,6 +40,7 @@ public:
 	UFUNCTION(BlueprintPure) FNGEquipmentState GetEquipment() const;
 	UFUNCTION(BlueprintPure) int32 GetMagazineAmmo() const;
 	UFUNCTION(BlueprintPure) int32 GetReserveAmmo() const;
+	bool HasAvailableReserveAmmo(const UNGWeaponDefinition& Definition) const;
 	UFUNCTION(BlueprintPure) bool IsAiming() const;
 	UFUNCTION(BlueprintPure) UNGInventoryItemInstance* GetEquippedItem() const;
 	UNGEquipmentInstance* GetWeaponInstance() const;

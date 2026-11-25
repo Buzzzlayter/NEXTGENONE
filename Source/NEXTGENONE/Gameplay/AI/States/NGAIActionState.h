@@ -28,7 +28,7 @@ protected:
 
 	virtual void StartAction() PURE_VIRTUAL(UNGAIActionState::StartAction, );
 	virtual void ReleaseActionResources() {}
-	void FinishAction(ENGAIActionResult Outcome, FName Reason);
+	void FinishAction(ENGAIActionResult Outcome, FName Reason, FName SuccessEvent = NAME_None);
 	bool IsCurrentRun(uint64 Serial) const;
 	bool HasCurrentAvatar() const;
 	TWeakObjectPtr<ANGAIController> ActionController;

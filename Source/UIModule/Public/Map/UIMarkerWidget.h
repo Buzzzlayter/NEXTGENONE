@@ -28,19 +28,22 @@ class UIMODULE_API UUIMarkerWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	static UCanvasPanelSlot* Mount(UCanvasPanel* Canvas, APlayerController* Player, UUIMarkerModel* Model);
+	static UCanvasPanelSlot* Mount(UCanvasPanel* Canvas, APlayerController* Player, UUIMarkerModel* Model, EUIMarkerSurface Surface);
 	static FVector2D GetEdgeAnchor(const FVector2D& ViewPosition);
 	void SetMarkerModel(UUIMarkerModel* Model);
 
 	UFUNCTION(BlueprintCallable, Category = "Marker", meta = (DeterminesOutputType = "ModelClass", DynamicOutputParam = "OutModel", CompactNodeTitle = "GetModel"))
 	void GetModel(TSubclassOf<UUIMarkerModel> ModelClass, UUIMarkerModel*& OutModel);
 
-	bool SupportsSurface(EUIMarkerSurface Surface) const
+	virtual TOptional<FVector2D> GetOwnMarkerScreenAnchor() const { return {}; }
+
+	virtual bool SupportsSurface(EUIMarkerSurface Surface) const
 	{
 		return (Surfaces & static_cast<int32>(Surface)) != 0;
 	}
 
 protected:
+	const UUIMarkerModel* GetMarkerModel() const { return MarkerModel.Get(); }
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 

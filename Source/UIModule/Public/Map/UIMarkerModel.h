@@ -36,7 +36,8 @@ class UIMODULE_API UUIMarkerModel : public UUIReplicatedObject
 	GENERATED_BODY()
 
 public:
-	static UUIMarkerModel* CreateRuntimeModel(UObject* Outer, UUIMarkerModel* Template, const FVector& Position, FName RecipientGroup = NAME_None);
+	static UUIMarkerModel* CreateRuntimeModel(UObject* Outer, UUIMarkerModel* Template, const FVector& Position, FName RecipientGroup = NAME_None, AActor* Source = nullptr);
+	AActor* GetSourceActor() const { return SourceActor.Get(); }
 	FGuid GetMarkerId() const { return MarkerId; }
 	virtual bool ShouldReplicateMarker() const { return bReplicateMarker; }
 	virtual bool ShouldRegisterOnBeginPlay() const { return true; }
@@ -46,7 +47,7 @@ public:
 	void SetPosition(const FVector& Position);
 	virtual const FText& GetLabel() const { return Label; }
 	virtual UTexture2D* GetIcon() const;
-	virtual UClass* GetWidgetClass() const;
+	virtual UClass* GetWidgetClass(EUIMarkerSurface Surface) const;
 	virtual const FUIMarkerVisibilityRules* GetVisibility(EUIMarkerSurface Surface) const;
 	FUIMarkerChanged& OnMarkerChanged() { return MarkerChanged; }
 
@@ -64,6 +65,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
 	TSubclassOf<UUIMarkerWidget> WidgetClass;
+
+	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
+	TSubclassOf<UUIMarkerWidget> WorldWidgetClass;
 
 private:
 	UFUNCTION()
@@ -88,4 +92,5 @@ private:
 	TObjectPtr<UTexture2D> Icon;
 
 	FUIMarkerChanged MarkerChanged;
+	TWeakObjectPtr<AActor> SourceActor;
 };

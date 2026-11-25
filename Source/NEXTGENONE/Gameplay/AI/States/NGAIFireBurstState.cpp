@@ -19,6 +19,25 @@ UNGAIFireBurstState::UNGAIFireBurstState()
 	ActionTimeout = 4.f;
 }
 
+bool UNGAIFireBurstState::HasClearShot(const APawn& Pawn, const AActor& Target, const FVector& TargetLocation, const FVector& ShotOrigin)
+{
+	const UWorld* World = Pawn.GetWorld();
+	if (!World)
+		return false;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(NGAIFire), false, &Pawn);
+	TArray<AActor*> Attached;
+	Pawn.GetAttachedActors(Attached);
+	Params.AddIgnoredActors(Attached);
+	const auto ClearToTarget = [&](const FVector& Start)
+	{
+		FHitResult Hit;
+		return !World->LineTraceSingleByChannel(Hit, Start, TargetLocation, ECC_Visibility, Params)
+			|| Hit.GetActor() == &Target;
+	};
+	return ClearToTarget(Pawn.GetPawnViewLocation()) && ClearToTarget(ShotOrigin);
+}
+
 void UNGAIFireBurstState::StartAction()
 {
 	ShotsFired = 0;
@@ -68,16 +87,7 @@ void UNGAIFireBurstState::UpdateFire()
 	const FVector Direction = (Target->LastSeenLocation - Eye).GetSafeNormal();
 	if (FVector::DotProduct(Direction, ActionController->GetControlRotation().Vector())
 		< FMath::Cos(FMath::DegreesToRadians(AimToleranceDegrees))) return;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(NGAIFire), false, ExpectedPawn.Get());
-	TArray<AActor*> Attached; ExpectedPawn->GetAttachedActors(Attached); Params.AddIgnoredActors(Attached);
-	FHitResult Hit;
-	const auto ClearToTarget = [&](const FVector& Start)
-	{
-		return !GetWorld()->LineTraceSingleByChannel(Hit, Start, Target->LastSeenLocation, ECC_Visibility, Params)
-			|| Hit.GetActor() == BurstTarget.Get();
-	};
-	const FVector Muzzle = WeaponActor->GetShotOrigin();
-	if (!ClearToTarget(Eye) || !ClearToTarget(Muzzle))
+	if (!UNGAIFireBurstState::HasClearShot(*ExpectedPawn.Get(), *BurstTarget.Get(), Target->LastSeenLocation, WeaponActor->GetShotOrigin()))
 	{ FinishAction(ENGAIActionResult::Failed, TEXT("Line of fire blocked")); return; }
 	// Use the equipment-granted Fire ability. No direct FireOnServer, damage or ammo writes.
 	FGameplayAbilitySpecHandle FireHandle;

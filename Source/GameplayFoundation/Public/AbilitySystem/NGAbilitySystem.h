@@ -51,7 +51,10 @@ UCLASS()
 class GAMEPLAYFOUNDATION_API UNGInitHealthEffect : public UGameplayEffect
 {
 	GENERATED_BODY()
-public: UNGInitHealthEffect();
+public:
+	UNGInitHealthEffect();
+	inline static const FName InitialHealthMagnitude{TEXT("InitialHealth")};
+	inline static const FName InitialShieldMagnitude{TEXT("InitialShield")};
 };
 
 UCLASS()

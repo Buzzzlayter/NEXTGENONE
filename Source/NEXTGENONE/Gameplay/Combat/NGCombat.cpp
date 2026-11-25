@@ -78,6 +78,22 @@ int32 UNGCombatComponent::GetReserveAmmo() const
 			Total += Inventory->GetTotalItemCountByDefinition(AmmoClass);
 	return static_cast<int32>(FMath::Min<int64>(Total, MAX_int32));
 }
+
+bool UNGCombatComponent::HasAvailableReserveAmmo(const UNGWeaponDefinition& Definition) const
+{
+	const auto* Inventory = BoundInventory.Get();
+	if (!Inventory)
+		return false;
+
+	TArray<FNGWeaponAmmoOption> AmmoOptions;
+	Definition.GetReloadAmmoOptions(AmmoOptions);
+	return AmmoOptions.ContainsByPredicate([Inventory](const FNGWeaponAmmoOption& Option)
+	{
+		auto* AmmoClass = Option.ItemClass.Get();
+		return AmmoClass && Inventory->GetTotalItemCountByDefinition(AmmoClass) > 0;
+	});
+}
+
 void UNGCombatComponent::BeginPlay()
 {
 	Super::BeginPlay();

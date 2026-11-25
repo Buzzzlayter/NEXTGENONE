@@ -2,11 +2,8 @@
 
 #include "AbilitySystem/NGAbilitySystem.h"
 #include "AbilitySystemGlobals.h"
-#include "Blueprint/WidgetTree.h"
 #include "Components/Image.h"
-#include "Components/SizeBox.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -23,35 +20,13 @@ namespace
 	}
 }
 
-TSharedRef<SWidget> UNGAbilitySetVitalsWidget::RebuildWidget()
-{
-	if (WidgetTree && !WidgetTree->RootWidget)
-	{
-		auto* Rows = WidgetTree->ConstructWidget<UVerticalBox>();
-		WidgetTree->RootWidget = Rows;
-		const auto AddBar = [&](UMaterialInterface* Material, float TopPadding)
-		{
-			auto* Bounds = WidgetTree->ConstructWidget<USizeBox>();
-			Bounds->SetWidthOverride(BarSize.X);
-			Bounds->SetHeightOverride(BarSize.Y);
-			auto* Bar = WidgetTree->ConstructWidget<UImage>();
-			if (Material) Bar->SetBrushFromMaterial(Material);
-			Bounds->AddChild(Bar);
-			Rows->AddChildToVerticalBox(Bounds)->SetPadding(FMargin(0.f, TopPadding, 0.f, 0.f));
-			return Bar;
-		};
-		HealthBar = AddBar(HealthMaterial, 0.f);
-		OuterShieldBar = AddBar(OuterShieldMaterial, BarSpacing);
-		InnerShieldBar = AddBar(InnerShieldMaterial, BarSpacing);
-	}
-	return Super::RebuildWidget();
-}
-
 void UNGAbilitySetVitalsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (auto* Controller = GetOwningPlayer())
+	if (bObserveExplicitPawn)
+		ObserveAbilitySystem(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ExplicitPawn.Get()));
+	else if (auto* Controller = GetOwningPlayer())
 	{
 		Controller->OnPossessedPawnChanged.AddUniqueDynamic(this, &ThisClass::PawnChanged);
 		PawnChanged(nullptr, Controller->GetPawn());
@@ -67,10 +42,28 @@ void UNGAbilitySetVitalsWidget::NativeDestruct()
 
 void UNGAbilitySetVitalsWidget::PawnChanged(APawn*, APawn* NewPawn)
 {
+	if (bObserveExplicitPawn) return;
 	auto* Controller = GetOwningPlayer();
-	auto* ASC = NewPawn && Controller
+	ObserveAbilitySystem(NewPawn && Controller
 		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Controller->GetPlayerState<APlayerState>())
-		: nullptr;
+		: nullptr);
+}
+
+void UNGAbilitySetVitalsWidget::ObservePawn(APawn* Pawn)
+{
+	if (!bObserveExplicitPawn)
+	{
+		bObserveExplicitPawn = true;
+		if (auto* Controller = GetOwningPlayer())
+			Controller->OnPossessedPawnChanged.RemoveDynamic(this, &ThisClass::PawnChanged);
+	}
+	ExplicitPawn = Pawn;
+	auto* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn);
+	if (ObservedASC.Get() != ASC) ObserveAbilitySystem(ASC);
+}
+
+void UNGAbilitySetVitalsWidget::ObserveAbilitySystem(UAbilitySystemComponent* ASC)
+{
 	if (ObservedASC.Get() != ASC)
 	{
 		UnbindAttributes();
@@ -101,11 +94,14 @@ void UNGAbilitySetVitalsWidget::RefreshBars()
 {
 	const auto* ASC = ObservedASC.Get();
 	const auto* HealthSet = ASC ? ASC->GetSet<UNGHealthSet>() : nullptr;
+	const float CurrentHealth = HealthSet ? HealthSet->Health.GetCurrentValue() : 0.f;
+	const float CurrentShield = HealthSet ? HealthSet->Shield.GetCurrentValue() : 0.f;
 	const float MaxHealth = HealthSet ? HealthSet->MaxHealth.GetCurrentValue() : 0.f;
 	const float MaxShield = HealthSet ? HealthSet->MaxShield.GetCurrentValue() : 0.f;
-	const float HealthFill = MaxHealth > 0.f ? HealthSet->Health.GetCurrentValue() / MaxHealth : 0.f;
-	const float ShieldFill = MaxShield > 0.f ? 2.f * HealthSet->Shield.GetCurrentValue() / MaxShield : 0.f;
+	const float HealthFill = MaxHealth > 0.f ? CurrentHealth / MaxHealth : 0.f;
+	const float ShieldFill = MaxShield > 0.f ? 2.f * CurrentShield / MaxShield : 0.f;
 	SetBarFill(HealthBar, HealthFill);
 	SetBarFill(OuterShieldBar, ShieldFill - 1.f);
 	SetBarFill(InnerShieldBar, ShieldFill);
+	OnVitalsUpdated(CurrentHealth, MaxHealth, CurrentShield, MaxShield);
 }

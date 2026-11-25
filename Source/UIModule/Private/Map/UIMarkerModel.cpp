@@ -5,13 +5,14 @@
 #include "Map/UIMarkerWidget.h"
 #include "Net/UnrealNetwork.h"
 
-UUIMarkerModel* UUIMarkerModel::CreateRuntimeModel(UObject* Outer, UUIMarkerModel* Template, const FVector& Position, FName RecipientGroup)
+UUIMarkerModel* UUIMarkerModel::CreateRuntimeModel(UObject* Outer, UUIMarkerModel* Template, const FVector& Position, FName RecipientGroup, AActor* Source)
 {
 	if (!IsValid(Outer) || !IsValid(Template)) return nullptr;
 	auto* Model = NewObject<UUIMarkerModel>(Outer, Template->GetClass(), NAME_None, RF_Transient, Template);
 	Model->MarkerId = FGuid::NewGuid();
 	Model->WorldPosition = FVector_NetQuantize10(Position);
 	Model->RecipientGroup = RecipientGroup;
+	Model->SourceActor = Source;
 	return Model;
 }
 
@@ -24,6 +25,7 @@ void UUIMarkerModel::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ThisClass, Label);
 	DOREPLIFETIME(ThisClass, Icon);
 	DOREPLIFETIME(ThisClass, WidgetClass);
+	DOREPLIFETIME(ThisClass, WorldWidgetClass);
 	DOREPLIFETIME(ThisClass, MapVisibility);
 	DOREPLIFETIME(ThisClass, WorldVisibility);
 }
@@ -70,8 +72,11 @@ const FUIMarkerVisibilityRules* UUIMarkerModel::GetVisibility(EUIMarkerSurface S
 	}
 }
 
-UClass* UUIMarkerModel::GetWidgetClass() const
+UClass* UUIMarkerModel::GetWidgetClass(EUIMarkerSurface Surface) const
 {
+	if (Surface == EUIMarkerSurface::World && WorldWidgetClass)
+		return WorldWidgetClass.Get();
+
 	auto* MarkerClass = WidgetClass.Get();
 	return MarkerClass ? MarkerClass : UUIMarkerWidget::StaticClass();
 }

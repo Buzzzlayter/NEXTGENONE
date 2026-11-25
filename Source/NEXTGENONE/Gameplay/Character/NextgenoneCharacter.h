@@ -14,6 +14,7 @@ class UNGAimComponent;
 class UNGHitReactionComponent;
 class UNGCharacterInputComponent;
 class UNGCharacterStateMachineComponent;
+class UNGCharacterVitalsDefinition;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
@@ -60,11 +61,15 @@ public:
 	UPROPERTY(BlueprintAssignable) FNGShieldChanged OnShieldChanged;
 	UPROPERTY(BlueprintAssignable) FNGDeathChanged OnDeathChanged;
 	virtual bool CanInitializeGameplay() const override;
+	virtual void InitializeLifeAttributes(UAbilitySystemComponent& ASC) const override;
 	virtual bool CanReleaseGameplay() const override;
 	virtual void TryInitializeGameplay() override;
 	virtual void ReleaseGameplayResources() override;
 	void UnbindGameplay();
 protected:
+	UPROPERTY(EditDefaultsOnly, Category="Gameplay|Vitals")
+	TObjectPtr<UNGCharacterVitalsDefinition> StartingVitals;
+
 	virtual bool CanAcceptClientLocomotion() const override;
 	virtual void OnOverlayStateChanged(EALSOverlayState PreviousState) override;
 	virtual void OnGaitChanged(EALSGait PreviousGait) override;

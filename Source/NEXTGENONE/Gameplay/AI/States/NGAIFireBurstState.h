@@ -14,6 +14,7 @@ class NEXTGENONE_API UNGAIFireBurstState : public UNGAIActionState
 	GENERATED_BODY()
 public:
 	UNGAIFireBurstState();
+	static bool HasClearShot(const APawn& Pawn, const AActor& Target, const FVector& TargetLocation, const FVector& ShotOrigin);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Fire", meta=(ExposeOnSpawn="true", ClampMin="0.1")) float BurstDuration = 1.5f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Fire", meta=(ExposeOnSpawn="true", ClampMin="0")) float AimSettleTime = .25f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Fire", meta=(ExposeOnSpawn="true", ClampMin="0", ClampMax="45")) float AimToleranceDegrees = 5.f;

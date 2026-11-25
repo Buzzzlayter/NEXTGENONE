@@ -12,9 +12,9 @@
 #include "Map/UIMarkerModel.h"
 #include "Styling/CoreStyle.h"
 
-UCanvasPanelSlot* UUIMarkerWidget::Mount(UCanvasPanel* Canvas, APlayerController* Player, UUIMarkerModel* Model)
+UCanvasPanelSlot* UUIMarkerWidget::Mount(UCanvasPanel* Canvas, APlayerController* Player, UUIMarkerModel* Model, EUIMarkerSurface Surface)
 {
-	auto* Widget = CreateWidget<UUIMarkerWidget>(Player, Model->GetWidgetClass());
+	auto* Widget = CreateWidget<UUIMarkerWidget>(Player, Model->GetWidgetClass(Surface));
 	if (!Widget) return nullptr;
 
 	Widget->SetMarkerModel(Model);

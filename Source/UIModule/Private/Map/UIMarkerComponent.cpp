@@ -7,7 +7,7 @@
 UUIMarkerModel* UUIMarkerComponent::CreateRuntimeMarker(UUIMarkerSubsystem* Subsystem, TSubclassOf<UUIMarkerModel> ModelClass) const
 {
 	if (!IsValid(MarkerModel) || (ModelClass && !MarkerModel->IsA(ModelClass.Get()))) return nullptr;
-	return UUIMarkerModel::CreateRuntimeModel(Subsystem, MarkerModel.Get(), GetComponentLocation());
+	return UUIMarkerModel::CreateRuntimeModel(Subsystem, MarkerModel.Get(), GetComponentLocation(), NAME_None, GetOwner());
 }
 
 void UUIMarkerComponent::BeginPlay()

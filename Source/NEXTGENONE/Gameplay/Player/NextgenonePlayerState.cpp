@@ -43,7 +43,7 @@ bool ANextgenonePlayerState::StartLife(APawn* Pawn)
 	InitializedPawn = Pawn;
 	AbilitySystem->InitAbilityActorInfo(this, Pawn);
 	if (bNewLife)
-		AbilitySystem->ApplyGameplayEffectToSelf(GetDefault<UNGInitHealthEffect>(), 1.f, AbilitySystem->MakeEffectContext());
+		Avatar->InitializeLifeAttributes(*AbilitySystem);
 	PendingLifePawn.Reset();
 	ForceNetUpdate();
 	return true;
