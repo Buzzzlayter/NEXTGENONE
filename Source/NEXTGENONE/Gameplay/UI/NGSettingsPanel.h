@@ -31,9 +31,6 @@ public:
 	void Exit(FName Event) override;
 
 private:
-	UFUNCTION()
-	void HandleBack();
-
 	TWeakObjectPtr<UPlayerInputSubsystem> AppliedInput;
 	FGuid PolicyHandle;
 };

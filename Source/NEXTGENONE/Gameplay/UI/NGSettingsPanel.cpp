@@ -1,8 +1,6 @@
 #include "Gameplay/UI/NGSettingsPanel.h"
 
-#include "Online/NGConnectionPanel.h"
 #include "GameFramework/PlayerController.h"
-#include "HFSMState.h"
 #include "Input/PlayerInputSubsystem.h"
 
 FReply UNGSettingsPanel::NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
@@ -41,8 +39,6 @@ void UNGSettingsScreenMounter::Enter()
 		Super::Exit(NAME_None);
 		return;
 	}
-	Panel->SetSupplementalContent(CreateWidget<UNGConnectionPanel>(Controller));
-
 	FPlayerInputPolicy Policy;
 	Policy.InputMode = EInputMode::UI;
 	Policy.bBlockGameplay = true;
@@ -51,17 +47,12 @@ void UNGSettingsScreenMounter::Enter()
 
 	AppliedInput = Input;
 	PolicyHandle = Input->AcquireInputPolicy(this, Policy);
-	Panel->OnBack.AddUniqueDynamic(this, &ThisClass::HandleBack);
 	Panel->SetUserFocus(Controller);
 	Input->SetWidgetToFocus(Panel);
 }
 
 void UNGSettingsScreenMounter::Exit(FName Event)
 {
-	if (auto* Panel = Cast<UNGGameSettingsScreen>(GetWidget()))
-	{
-		Panel->OnBack.RemoveDynamic(this, &ThisClass::HandleBack);
-	}
 	if (auto* Input = AppliedInput.Get())
 	{
 		Input->ReleaseInputPolicy(PolicyHandle);
@@ -69,12 +60,4 @@ void UNGSettingsScreenMounter::Exit(FName Event)
 	PolicyHandle.Invalidate();
 	AppliedInput.Reset();
 	Super::Exit(Event);
-}
-
-void UNGSettingsScreenMounter::HandleBack()
-{
-	if (auto* OwningState = GetState())
-	{
-		OwningState->TriggerTransitionEvent(TEXT("Back"));
-	}
 }

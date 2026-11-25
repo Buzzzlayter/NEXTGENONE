@@ -1,24 +1,18 @@
 #pragma once
 
-#include "Blueprint/UserWidget.h"
+#include "Components/UIStateWidget.h"
 #include "NGGameSettingsScreen.generated.h"
 
 class UNGGameSettingRegistry;
 class UGameSetting;
-class SBox;
 class SVerticalBox;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FNGSettingsBack);
-
 UCLASS(Blueprintable)
-class GAMESETTINGS_API UNGGameSettingsScreen : public UUserWidget
+class GAMESETTINGS_API UNGGameSettingsScreen : public UUIStateWidget
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(BlueprintAssignable, Category="Settings")
-	FNGSettingsBack OnBack;
-
 	UFUNCTION(BlueprintCallable, Category="Settings")
 	void Apply();
 
@@ -29,7 +23,6 @@ public:
 	void Defaults();
 
 	UNGGameSettingRegistry* GetRegistry() const { return Registry; }
-	void SetSupplementalContent(UWidget* Content);
 
 protected:
 	TSharedRef<SWidget> RebuildWidget() override;
@@ -45,9 +38,5 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UNGGameSettingRegistry> Registry;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UWidget> SupplementalWidget;
-
 	TSharedPtr<SVerticalBox> SettingsRows;
-	TSharedPtr<SBox> SupplementalContent;
 };

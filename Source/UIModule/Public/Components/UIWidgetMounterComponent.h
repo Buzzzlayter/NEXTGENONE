@@ -17,6 +17,7 @@ class UIMODULE_API UUIWidgetMounterComponent : public UHFSMStateComponent
 public:
 	virtual void Enter() override;
 	virtual void Exit(FName Event) override;
+	void SetMountTarget(TSubclassOf<UUserWidget> InWidgetClass, FGameplayTag InPlaceholderID, ELayoutLayer InLayer);
 
 	UFUNCTION(BlueprintPure)
 	UUserWidget* GetWidget() const;
