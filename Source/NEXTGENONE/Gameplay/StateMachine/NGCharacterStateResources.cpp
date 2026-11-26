@@ -2,9 +2,7 @@
 #include "NGCharacterStateMachineComponent.h"
 #include "Character/NGControlStateDefinition.h"
 #include "Input/NGGameplayInputComponent.h"
-#include "AbilitySystemGlobals.h"
 #include "GameFramework/Pawn.h"
-#include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 #include "Input/PlayerInputSubsystem.h"
@@ -14,23 +12,15 @@
 #include "Logging/MessageLog.h"
 #endif
 
-namespace
+UNGCharacterStateMachineComponent* UNGCharacterStateResources::GetMachine() const
 {
-	UAbilitySystemComponent* ResolvePawnASC(APawn* Pawn)
-	{
-		if (!Pawn) return nullptr;
-		if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>())
-			if (auto* ASC = Machine->GetReadyASC()) return ASC;
-		UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn);
-		return ASC ? ASC : UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn->GetPlayerState());
-	}
+	return CastChecked<UNGCharacterStateMachineComponent>(GetOuter());
 }
 
-void UNGCharacterStateResources::Enter()
+void UNGCharacterStateResources::Enter(APawn* StatePawn, UNGControlStateDefinition* StateDefinition)
 {
-	Pawn = Cast<APawn>(GetContextOwner());
-	if (Pawn.IsValid())
-		if (const auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>(); Machine && Machine->HasResourceFailure()) return;
+	Pawn = StatePawn;
+	Definition = StateDefinition;
 	FString Error;
 	if (!Pawn.IsValid() || !Definition || !Definition->ValidateResources(Error))
 	{ FailEntry(FString::Printf(TEXT("Invalid Pawn/Definition. %s"), *Error)); return; }
@@ -52,40 +42,32 @@ void UNGCharacterStateResources::Enter()
 	}
 	bEntered = true;
 	bEntryReady = false;
-	if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->RegisterResources(this);
 	if (Pawn->HasAuthority())
 	{
-		Pawn->FlushNetDormancy();
 		if (!AcquireGASResources()) { FailEntry(TEXT("Failed to acquire GAS resources; see preceding diagnostics.")); return; }
 	}
 	RefreshResources();
-	if (!bEntered) return;
-	Super::Enter();
 	if (!bEntered) return;
 	if (Pawn->HasAuthority() && !ActivateEntryAbilities())
 	{
 		FailEntry(TEXT("Failed to activate an entry ability."));
 		return;
 	}
+	if (!bEntered) return;
 	bEntryReady = true;
-	if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->NotifyResourcesReady(this);
+	GetMachine()->NotifyResourcesReady(this);
 }
 
 void UNGCharacterStateResources::FailEntry(const FString& Reason)
 {
-	auto* Machine = Pawn.IsValid() ? Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>() : nullptr;
-	const FGameplayTag StateTag = Definition ? Definition->StateTag : FGameplayTag();
-	UE_LOG(LogTemp, Error, TEXT("Character state resources %s (definition=%s): %s"), *GetPathName(), *GetNameSafe(Definition), *Reason);
-	Exit(NAME_None);
-	if (Machine) Machine->NotifyResourceFailure(StateTag, Reason);
+	GetMachine()->NotifyResourceFailure(Reason);
 }
 
 bool UNGCharacterStateResources::AcquireGASResources()
 {
-	if (bGASAcquired || !Pawn.IsValid() || !Pawn->HasAuthority()) return true;
-	if (Definition->Abilities.IsEmpty() && Definition->Effects.IsEmpty()) { bGASAcquired = true; return true; }
-	UAbilitySystemComponent* ASC = ResolvePawnASC(Pawn.Get());
-	if (!ASC || ASC->GetAvatarActor() != Pawn.Get())
+	if (Definition->Abilities.IsEmpty() && Definition->Effects.IsEmpty()) return true;
+	auto* ASC = GetMachine()->GetReadyASC();
+	if (!ASC)
 	{ UE_LOG(LogTemp, Error, TEXT("%s state needs its current ASC Avatar; corpse-only states must not depend on detached GAS."), *GetNameSafe(Pawn.Get())); return false; }
 	// Reject overlap with equipment or a parent state rather than silently duplicating specs.
 	for (const auto& Grant : Definition->Abilities)
@@ -98,7 +80,7 @@ bool UNGCharacterStateResources::AcquireGASResources()
 		const auto Handle = Grant.Give(ASC, Pawn.Get());
 		if (!Handle.IsValid())
 		{
-			UE_LOG(LogTemp, Error, TEXT("State %s failed to grant ability %s."), *GetNameSafe(Definition), *GetNameSafe(Grant.Ability.Get()));
+			UE_LOG(LogTemp, Error, TEXT("State %s failed to grant ability %s."), *GetNameSafe(Definition.Get()), *GetNameSafe(Grant.Ability.Get()));
 			ReleaseResources(); return false;
 		}
 		Handles.Abilities.Add(Handle);
@@ -108,35 +90,33 @@ bool UNGCharacterStateResources::AcquireGASResources()
 		const auto Handle = ASC->ApplyGameplayEffectToSelf(Effect.GetDefaultObject(), 1.f, ASC->MakeEffectContext());
 		if (!Handle.IsValid())
 		{
-			UE_LOG(LogTemp, Error, TEXT("State %s failed to apply effect %s."), *GetNameSafe(Definition), *GetNameSafe(Effect.Get()));
+			UE_LOG(LogTemp, Error, TEXT("State %s failed to apply effect %s."), *GetNameSafe(Definition.Get()), *GetNameSafe(Effect.Get()));
 			ReleaseResources(); return false;
 		}
 		Handles.Effects.Add(Handle);
 	}
-	bGASAcquired = true;
 	return true;
 }
 
 bool UNGCharacterStateResources::OwnsAbility(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const
 {
-	return bEntered && bGASAcquired && GrantedASC.Get() == ASC && Handles.Abilities.Contains(Handle);
+	return bEntered && GrantedASC.Get() == ASC && Handles.Abilities.Contains(Handle);
 }
 
 bool UNGCharacterStateResources::ActivateEntryAbilities()
 {
-	if (bEntryActivationAttempted || !bGASAcquired) return true;
-	bEntryActivationAttempted = true;
 	auto* ASC = GrantedASC.Get();
+	const auto* Machine = GetMachine();
 	TArray<FGameplayAbilitySpecHandle> ToActivate;
 	for (int32 Index = 0; Index < Definition->Abilities.Num(); ++Index)
 		if (Definition->Abilities[Index].bActivateOnEnter) ToActivate.Add(Handles.Abilities[Index]);
 	for (const auto Handle : ToActivate)
 	{
 		// Activation can finalize death and hand this ASC to the next Pawn synchronously.
-		if (!bGASAcquired || !ASC || ASC->GetAvatarActor() != Pawn.Get()) break;
+		if (!ASC || ASC->GetAvatarActor() != Pawn.Get() || !Machine->OwnsStateAbility(ASC, Handle)) break;
 		if (!ASC->TryActivateAbility(Handle))
 		{
-			UE_LOG(LogTemp, Error, TEXT("State %s failed to activate an entry ability."), *GetNameSafe(Definition));
+			UE_LOG(LogTemp, Error, TEXT("State %s failed to activate an entry ability."), *GetNameSafe(Definition.Get()));
 			return false;
 		}
 	}
@@ -145,47 +125,32 @@ bool UNGCharacterStateResources::ActivateEntryAbilities()
 
 void UNGCharacterStateResources::RefreshResources()
 {
-    if (!bEntered || !Pawn.IsValid()) return;
-    if (const auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>(); Machine && Machine->HasResourceFailure()) return;
-    bool bReacquired = false;
-    if (Pawn->HasAuthority() && !bGASAcquired)
-    {
-        // Detached bodies do not reacquire an ASC belonging to a different Avatar.
-        UAbilitySystemComponent* ASC = ResolvePawnASC(Pawn.Get());
-        if (Pawn->GetController() && ASC && ASC->GetAvatarActor() == Pawn.Get())
-        {
-            if (!AcquireGASResources() || !ActivateEntryAbilities())
-            { FailEntry(TEXT("Failed to reacquire GAS resources or activate an entry ability.")); return; }
-            bReacquired = true;
-        }
-    }
-    APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
-    UPlayerInputSubsystem* Input = PC && PC->GetPawn() == Pawn.Get() && PC->IsLocalController() && PC->GetLocalPlayer()
-        ? PC->GetLocalPlayer()->GetSubsystem<UPlayerInputSubsystem>() : nullptr;
-    if (LocalInput.Get() != Input)
-    {
-        ReleaseLocalResources();
-        if (Input)
-        {
-            LocalInput = Input;
-            for (const auto& Entry : Definition->MappingContexts)
-            {
-                const FGuid Handle = Input->AcquireMappingContext(this, Entry.MappingContext, Entry.Priority, true);
-                if (!Handle.IsValid())
-                { FailEntry(FString::Printf(TEXT("Failed to acquire mapping context %s."), *GetNameSafe(Entry.MappingContext.Get()))); return; }
-                ContextHandles.Add(Handle);
-            }
-            FPlayerInputPolicy Policy; Policy.bSetInputMode = false; Policy.bBlockGameplay = Definition->bBlockGameplayInput;
-            PolicyHandle = Input->AcquireInputPolicy(this, Policy);
-            if (!PolicyHandle.IsValid()) { FailEntry(TEXT("Failed to acquire input policy.")); return; }
-        }
-        // No LocalPlayer on proxies/dedicated server or before possession is normal.
-    }
-    if (bReacquired && bEntered)
-    {
-        bEntryReady = true;
-        if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->NotifyResourcesReady(this);
-    }
+	if (!bEntered || !Pawn.IsValid()) return;
+	auto* Controller = Cast<APlayerController>(Pawn->GetController());
+	auto* LocalPlayer = Controller && Controller->IsLocalController() && Controller->GetPawn() == Pawn.Get()
+		? Controller->GetLocalPlayer() : nullptr;
+	auto* Input = LocalPlayer ? LocalPlayer->GetSubsystem<UPlayerInputSubsystem>() : nullptr;
+	if (LocalInput.Get() == Input) return;
+
+	ReleaseLocalResources();
+	if (!Input) return;
+	LocalInput = Input;
+	for (const auto& Entry : Definition->MappingContexts)
+	{
+		const FGuid Handle = Input->AcquireMappingContext(this, Entry.MappingContext, Entry.Priority, true);
+		if (!Handle.IsValid())
+		{
+			FailEntry(FString::Printf(TEXT("Failed to acquire mapping context %s."), *GetNameSafe(Entry.MappingContext.Get())));
+			return;
+		}
+		ContextHandles.Add(Handle);
+	}
+
+	FPlayerInputPolicy Policy;
+	Policy.bSetInputMode = false;
+	Policy.bBlockGameplay = Definition->bBlockGameplayInput;
+	PolicyHandle = Input->AcquireInputPolicy(this, Policy);
+	if (!PolicyHandle.IsValid()) FailEntry(TEXT("Failed to acquire input policy."));
 }
 
 void UNGCharacterStateResources::ReleaseLocalResources()
@@ -208,12 +173,12 @@ void UNGCharacterStateResources::ReleaseResources()
 		else { UE_LOG(LogTemp, Warning, TEXT("Late state cleanup skipped after Avatar replacement; lifecycle must release before swapping ASC.")); Handles.Abilities.Reset(); Handles.Effects.Reset(); }
 	}
 	Handles.Abilities.Reset(); Handles.Effects.Reset();
-	GrantedASC.Reset(); bGASAcquired = false; bEntryActivationAttempted = false;
+	GrantedASC.Reset();
 }
 
-void UNGCharacterStateResources::Exit(FName Event)
+void UNGCharacterStateResources::Exit()
 {
 	bEntered = false;
-	if (Pawn.IsValid()) if (auto* Machine = Pawn->FindComponentByClass<UNGCharacterStateMachineComponent>()) Machine->UnregisterResources(this);
-	ReleaseResources(); Pawn.Reset(); Super::Exit(Event);
+	ReleaseResources();
+	Pawn.Reset();
 }
