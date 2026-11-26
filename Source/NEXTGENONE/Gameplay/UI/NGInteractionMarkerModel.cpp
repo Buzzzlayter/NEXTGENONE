@@ -1,18 +1,18 @@
 #include "Gameplay/UI/NGInteractionMarkerModel.h"
-#include "Gameplay/UI/NGInteractionWidget.h"
-
 #include "Engine/LocalPlayer.h"
 #include "Components/SceneComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "InputAction.h"
-#include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTags/NGGameplayTags.h"
+#include "Input/NGGameplayInputComponent.h"
+#include "Input/NGGameplayInputConfig.h"
 #include "Input/PlayerInputSubsystem.h"
+#include "InputAction.h"
 
 UNGInteractionMarkerModel::UNGInteractionMarkerModel()
 {
 	WorldVisibility.bAlwaysVisible = true;
-	WidgetClass = UNGInteractionWidget::StaticClass();
 }
 
 void UNGInteractionMarkerModel::SetAnchor(USceneComponent* Component)
@@ -33,17 +33,12 @@ void UNGInteractionMarkerModel::SetViewer(ULocalPlayer* Player)
 	if (auto* Enhanced = Player->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>()) Enhanced->ControlMappingsRebuiltDelegate.AddUniqueDynamic(this, &ThisClass::RefreshPrompt);
 }
 
-void UNGInteractionMarkerModel::SetFocus(AActor* Target, const UInputAction* Action, const FText& Prompt, bool bAvailable)
+void UNGInteractionMarkerModel::SetFocus(const APawn* Interactor, const FText& Prompt, bool bAvailable)
 {
-	if (!IsValid(Target)) return;
-	if (FocusTarget.Get() != Target)
-	{
-		FVector BoundsOrigin = FVector::ZeroVector;
-		FVector BoundsExtent = FVector::ZeroVector;
-		Target->GetActorBounds(false, BoundsOrigin, BoundsExtent);
-		LocalAnchor = Target->GetActorTransform().InverseTransformPosition(BoundsOrigin + FVector(0., 0., BoundsExtent.Z + 10.));
-		FocusTarget = Target;
-	}
+	const auto* GameplayInput = Interactor->FindComponentByClass<UNGGameplayInputComponent>();
+	const auto* InputConfig = GameplayInput ? GameplayInput->InputConfig.Get() : nullptr;
+	const auto* Action = InputConfig ? InputConfig->FindAbilityInputAction(TAG_NGInputInteract) : nullptr;
+	if (!Action && InputConfig) Action = InputConfig->FindNativeInputAction(TAG_NGInputInteract);
 	InputAction = Action;
 	FocusPrompt = Prompt;
 	bFocusAvailable = bAvailable;
@@ -57,10 +52,8 @@ void UNGInteractionMarkerModel::InputTypeChanged(EInputType)
 
 void UNGInteractionMarkerModel::RefreshPrompt()
 {
-	FText NewLabel = FocusPrompt;
-	if (!bFocusAvailable)
-		NewLabel = FText::Format(NSLOCTEXT("NEXTGENONE", "InteractionPromptUnavailable", "{0} (unavailable)"), FocusPrompt);
-	else if (auto* Player = LocalViewer.Get(); Player && InputAction.IsValid())
+	FKey MappedKey;
+	if (auto* Player = LocalViewer.Get(); Player && bFocusAvailable && InputAction.IsValid())
 	{
 		const auto* Enhanced = Player->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
 		const auto* Input = Player->GetSubsystem<UPlayerInputSubsystem>();
@@ -69,24 +62,33 @@ void UNGInteractionMarkerModel::RefreshPrompt()
 		{
 			const auto Keys = Enhanced->QueryKeysMappedToAction(InputAction.Get());
 			if (const auto* Key = Keys.FindByPredicate([bGamepad](const FKey& Candidate) { return Candidate.IsGamepadKey() == bGamepad; }))
-				NewLabel = FText::Format(NSLOCTEXT("NEXTGENONE", "InteractionMarkerKeyPrompt", "[{0}] {1}"), Key->GetDisplayName(false), FocusPrompt);
+				MappedKey = *Key;
 		}
 	}
+	FText NewLabel = FormatPrompt(FocusPrompt, bFocusAvailable, MappedKey);
 	if (PromptLabel.EqualTo(NewLabel)) return;
 	PromptLabel = MoveTemp(NewLabel);
 	NotifyMarkerChanged();
 }
 
+FText UNGInteractionMarkerModel::FormatPrompt_Implementation(const FText& Prompt, bool bAvailable, const FKey& MappedKey) const
+{
+	if (!bAvailable)
+		return FText::Format(NSLOCTEXT("NEXTGENONE", "InteractionPromptUnavailable", "{0} (unavailable)"), Prompt);
+	if (MappedKey.IsValid())
+		return FText::Format(NSLOCTEXT("NEXTGENONE", "InteractionMarkerKeyPrompt", "[{0}] {1}"), MappedKey.GetDisplayName(false), Prompt);
+	return Prompt;
+}
+
 bool UNGInteractionMarkerModel::IsVisibleTo(const APlayerController& Viewer) const
 {
-	return FocusTarget.IsValid() && LocalViewer.IsValid() && Viewer.GetLocalPlayer() == LocalViewer.Get();
+	return AnchorComponent.IsValid() && LocalViewer.IsValid() && Viewer.GetLocalPlayer() == LocalViewer.Get();
 }
 
 FVector UNGInteractionMarkerModel::GetPosition() const
 {
 	if (const auto* Component = AnchorComponent.Get()) return Component->GetComponentLocation();
-	const auto* Target = FocusTarget.Get();
-	return Target ? Target->GetActorTransform().TransformPosition(LocalAnchor) : Super::GetPosition();
+	return Super::GetPosition();
 }
 
 const FUIMarkerVisibilityRules* UNGInteractionMarkerModel::GetVisibility(EUIMarkerSurface Surface) const

@@ -47,7 +47,9 @@ public:
 	void SetPosition(const FVector& Position);
 	virtual const FText& GetLabel() const { return Label; }
 	virtual UTexture2D* GetIcon() const;
+	UClass* GetWidgetClass() const;
 	virtual UClass* GetWidgetClass(EUIMarkerSurface Surface) const;
+	virtual bool UsesWorldWidgetComponent() const { return false; }
 	virtual const FUIMarkerVisibilityRules* GetVisibility(EUIMarkerSurface Surface) const;
 	FUIMarkerChanged& OnMarkerChanged() { return MarkerChanged; }
 
@@ -66,10 +68,10 @@ protected:
 	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
 	TSubclassOf<UUIMarkerWidget> WidgetClass;
 
-	UPROPERTY(EditAnywhere, ReplicatedUsing = NotifyMarkerChanged, Category = "Marker")
+private:
+	UPROPERTY(ReplicatedUsing = NotifyMarkerChanged)
 	TSubclassOf<UUIMarkerWidget> WorldWidgetClass;
 
-private:
 	UFUNCTION()
 	void OnRep_WorldPosition();
 

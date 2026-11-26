@@ -121,7 +121,7 @@ void UUIWorldMarkersCanvas::NativeTick(const FGeometry& MyGeometry, float InDelt
 
 void UUIWorldMarkersCanvas::TrackMarker(UUIMarkerModel* Model, EUIMarkerSurface Surface, bool bPresentationChanged)
 {
-	if (Surface != EUIMarkerSurface::World || !IsValid(Model)) return;
+	if (Surface != EUIMarkerSurface::World || !IsValid(Model) || Model->UsesWorldWidgetComponent()) return;
 	auto& Marker = TrackedMarkers.FindOrAdd(Model->GetMarkerId());
 	Marker.Model = Model;
 	if (!bPresentationChanged) return;

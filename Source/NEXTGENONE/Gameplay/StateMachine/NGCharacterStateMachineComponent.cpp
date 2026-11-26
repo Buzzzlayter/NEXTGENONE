@@ -1,47 +1,43 @@
 #include "NGCharacterStateMachineComponent.h"
 #include "NGCharacterStateResources.h"
 #include "AbilitySystem/NGAbilitySystem.h"
-#include "AbilitySystemComponent.h"
-#include "GCFSMUtilities.h"
-#include "GCFSM.h"
-#include "GameFramework/Pawn.h"
+#include "AbilitySystemGlobals.h"
 #include "Character/NGControlStateDefinition.h"
+#include "GameFramework/Pawn.h"
+#include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "GameplayCueManager.h"
 #include "GameplayTags/NGGameplayTags.h"
-#include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
-#include "AbilitySystemGlobals.h"
 #include "Net/UnrealNetwork.h"
 
-bool UNGCharacterStateMachineComponent::StartIfReady()
+UNGCharacterStateMachineComponent::UNGCharacterStateMachineComponent()
 {
-	APawn* Pawn = Cast<APawn>(GetOwner());
-	if (bEnding || bResourcesFailed || MachineName.IsNone() || !Pawn || !Pawn->HasAuthority() || !Pawn->HasActorBegunPlay() || !ReadyASC.IsValid() || ReadyASC->GetAvatarActor() != Pawn) return false;
-	if (!UGCFSMUtilities::IsFSMRunning(Pawn, MachineName))
-	{
-		TArray<UGCFSMReplicationComponent*> ReplicationComponents;
-		Pawn->GetComponents(ReplicationComponents);
-		if (ReplicationComponents.Num() != 1)
-		{ UE_LOG(LogTemp, Error, TEXT("%s must have exactly one GCFSM replication component (CharacterStateMachine)."), *Pawn->GetName()); return false; }
-		Pawn->FlushNetDormancy();
-		UGCFSMUtilities::LaunchFSM(Pawn, MachineName, EGCFSMReplicationOptions::Replicated);
-	}
-	return UGCFSMUtilities::IsFSMRunning(Pawn, MachineName);
+	SetIsReplicatedByDefault(true);
 }
 
 void UNGCharacterStateMachineComponent::NotifyGameplayReady(UAbilitySystemComponent* ASC)
 {
-	if (bEnding) return;
-	if (ReadyASC.Get() != ASC)
+	if (bEnding || !ASC || ASC->GetAvatarActor() != GetOwner()) return;
+	const bool bNewASC = ReadyASC.Get() != ASC;
+	if (bNewASC)
 	{
-		UnbindAbilitySpecNotifications();
+		if (ReadyASC.IsValid()) SuspendResources();
 		ReadyASC = ASC;
 	}
+	if (HasResourceFailure())
+	{
+		if (bNewASC)
+		{
+			if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
+			ASC->CancelAllAbilities();
+			OnResourcesReady.Broadcast(GetOwner());
+		}
+		return;
+	}
+
 	if (!AbilitySpecsReplicatedHandle.IsValid())
 		if (auto* PlayerASC = Cast<UNGPlayerAbilitySystemComponent>(ASC))
 			AbilitySpecsReplicatedHandle = PlayerASC->OnAbilitySpecsReplicated.AddUObject(this, &ThisClass::NotifyAbilitySpecsReplicated);
-	if (bResourcesFailed) { OnRep_ResourceFailure(); return; }
-	StartIfReady(); RefreshResources();
-	if (RequestedStateEvent.IsValid()) QueueServerEvent(RequestedStateEvent);
+	RefreshResources();
 }
 
 void UNGCharacterStateMachineComponent::UnbindAbilitySpecNotifications()
@@ -52,122 +48,107 @@ void UNGCharacterStateMachineComponent::UnbindAbilitySpecNotifications()
 
 void UNGCharacterStateMachineComponent::NotifyAbilitySpecsReplicated(const UAbilitySystemComponent* ASC)
 {
-	if (bEnding || bResourcesFailed || !ASC || GetReadyASC() != ASC) return;
-	OnResourcesReady.Broadcast(GetOwner());
+	if (!bEnding && !HasResourceFailure() && GetReadyASC() == ASC) OnResourcesReady.Broadcast(GetOwner());
 }
 
-bool UNGCharacterStateMachineComponent::QueueServerEvent(FGameplayTag Event)
+void UNGCharacterStateMachineComponent::BeginPlay()
 {
-	if (bEnding || bResourcesFailed || !GetOwner()->HasAuthority() || !Event.IsValid() || MachineName.IsNone() || !UGCFSMUtilities::IsFSMRunning(GetOwner(), MachineName)) return false;
-	GetOwner()->FlushNetDormancy();
-	UGCFSMUtilities::TriggerEvent(GetOwner(), Event.GetTagName(), EGCFSMTriggerEventTargetPolicy::ContextObject, true, false, EGCFSMTriggerEventQueuePolicy::QueueUnlessAlreadyInQueue);
-	GetOwner()->ForceNetUpdate();
-	return true;
+	Super::BeginPlay();
+	OnRep_ControlState();
 }
 
 void UNGCharacterStateMachineComponent::NotifyDeath()
 {
-	if (bEnding || !GetOwner()->HasAuthority()) return;
-	if (!bResourcesFailed) { RequestStateTransition(TAG_NGDead, DeathEvent); return; }
-	FailedStateTag = TAG_NGDead;
-	GetOwner()->FlushNetDormancy(); GetOwner()->ForceNetUpdate();
-	NotifyStateChanged();
+	if (!bEnding && GetOwner()->HasAuthority()) SetStateTag(TAG_NGDead);
 }
 
-void UNGCharacterStateMachineComponent::RequestStateTransition(FGameplayTag StateTag, FGameplayTag Event)
+void UNGCharacterStateMachineComponent::RequestStateTransition(FGameplayTag StateTag)
 {
-	if (bEnding || bResourcesFailed || !GetOwner()->HasAuthority() || !StateTag.IsValid() || !Event.IsValid() || HasStateTag(StateTag)) return;
-	RequestedStateTag = StateTag;
-	RequestedStateEvent = Event;
-	NotifyStateChanged();
-	StartIfReady();
-	if (RequestedStateEvent.IsValid()) QueueServerEvent(RequestedStateEvent);
-}
-void UNGCharacterStateMachineComponent::BeginPlay()
-{
-	Super::BeginPlay();
-	if (!GetOwner()->HasAuthority()) FinalizeProxyInitialization();
-	StartIfReady(); RefreshResources();
+	if (bEnding || HasResourceFailure() || !GetOwner()->HasAuthority() || !StateTag.IsValid() || HasStateTag(TAG_NGDead)) return;
+	SetStateTag(StateTag);
 }
 
-void UNGCharacterStateMachineComponent::RegisterResources(UNGCharacterStateResources* Resources) { ActiveResources.AddUnique(Resources); NotifyStateChanged(); }
-void UNGCharacterStateMachineComponent::UnregisterResources(UNGCharacterStateResources* Resources) { ActiveResources.Remove(Resources); NotifyStateChanged(); }
-
-FGameplayTag UNGCharacterStateMachineComponent::GetCurrentStateTag() const
+void UNGCharacterStateMachineComponent::SetStateTag(FGameplayTag StateTag)
 {
-	if (RequestedStateTag.IsValid()) return RequestedStateTag;
-	if (bResourcesFailed) return FailedStateTag;
-	for (int32 Index = ActiveResources.Num() - 1; Index >= 0; --Index)
-		if (ActiveResources[Index].IsValid() && ActiveResources[Index]->Definition) return ActiveResources[Index]->Definition->StateTag;
-	return {};
+	if (ControlState.Tag == StateTag) return;
+	GetOwner()->FlushNetDormancy();
+	ControlState.Tag = StateTag;
+	GetOwner()->ForceNetUpdate();
+	OnRep_ControlState();
+}
+
+void UNGCharacterStateMachineComponent::OnRep_ControlState()
+{
+	if (bEnding || !HasBegunPlay()) return;
+	if (HasResourceFailure())
+	{
+		HandleResourceFailure();
+		NotifyStateChanged();
+		return;
+	}
+	RefreshResources();
 }
 
 bool UNGCharacterStateMachineComponent::HasStateTag(FGameplayTag StateTag) const
 {
-	if (!StateTag.IsValid()) return false;
-	if (bResourcesFailed) return FailedStateTag.MatchesTag(StateTag);
-	if (RequestedStateTag.MatchesTag(StateTag)) return true;
-	for (const auto& Resource : ActiveResources)
-		if (Resource.IsValid() && Resource->Definition && Resource->Definition->StateTag.MatchesTag(StateTag)) return true;
-	return false;
+	return StateTag.IsValid() && ControlState.Tag.MatchesTag(StateTag);
 }
 
 void UNGCharacterStateMachineComponent::NotifyStateChanged()
 {
-	const FGameplayTag Current = GetCurrentStateTag();
-	if (Current == LastNotifiedStateTag) return;
+	if (ControlState.Tag == LastNotifiedStateTag) return;
 	const FGameplayTag Previous = LastNotifiedStateTag;
-	LastNotifiedStateTag = Current;
-	OnStateChanged.Broadcast(Previous, Current);
+	LastNotifiedStateTag = ControlState.Tag;
+	OnStateChanged.Broadcast(Previous, LastNotifiedStateTag);
+}
+
+UNGControlStateDefinition* UNGCharacterStateMachineComponent::FindDefinition(FGameplayTag StateTag) const
+{
+	UNGControlStateDefinition* Match = nullptr;
+	for (UNGControlStateDefinition* Definition : StateDefinitions)
+	{
+		if (!Definition || Definition->StateTag != StateTag) continue;
+		if (Match) return nullptr;
+		Match = Definition;
+	}
+	return Match;
 }
 
 bool UNGCharacterStateMachineComponent::CanReleaseAvatar() const
 {
-	if (bEnding || bResourcesFailed || !GetReadyASC()) return true;
-	if (RequestedStateTag.IsValid()) return false;
-	for (const auto& Resource : ActiveResources)
-		if (Resource.IsValid() && !Resource->IsEntryReady()) return false;
-	return true;
+	if (bEnding || HasResourceFailure() || !GetReadyASC() || !ControlState.Tag.IsValid()) return true;
+	return ActiveResources && ActiveResources->GetDefinition()->StateTag == ControlState.Tag && ActiveResources->IsEntryReady();
 }
 
 void UNGCharacterStateMachineComponent::NotifyResourcesReady(UNGCharacterStateResources* Resources)
 {
-	if (bEnding || bResourcesFailed || !Resources || !Resources->IsEntryReady() || !ActiveResources.Contains(Resources)) return;
-	if (Resources->Definition && Resources->Definition->StateTag == RequestedStateTag)
-	{
-		RequestedStateTag = FGameplayTag(); RequestedStateEvent = FGameplayTag();
-	}
-	NotifyStateChanged();
+	if (bEnding || HasResourceFailure() || !Resources || Resources != ActiveResources.Get() || !Resources->IsEntryReady()
+		|| Resources->GetDefinition()->StateTag != ControlState.Tag) return;
 	RestorePresentation();
-	if (CanReleaseAvatar()) OnResourcesReady.Broadcast(GetOwner());
+	OnResourcesReady.Broadcast(GetOwner());
 }
 
-void UNGCharacterStateMachineComponent::NotifyResourceFailure(FGameplayTag StateTag, const FString& Reason)
+void UNGCharacterStateMachineComponent::NotifyResourceFailure(const FString& Reason)
 {
-	if (bEnding || bResourcesFailed) return;
-	bResourcesFailed = true;
-	FailedStateTag = RequestedStateTag.IsValid() ? RequestedStateTag : StateTag;
-	RequestedStateTag = FGameplayTag();
-	RequestedStateEvent = FGameplayTag();
-	UE_LOG(LogTemp, Error, TEXT("Character FSM resource failure: pawn=%s machine=%s state=%s: %s. Resources released; Avatar handoff allowed."),
-		*GetNameSafe(GetOwner()), *MachineName.ToString(), *FailedStateTag.ToString(), *Reason);
-	GetOwner()->FlushNetDormancy(); GetOwner()->ForceNetUpdate();
-	OnRep_ResourceFailure();
+	if (bEnding || HasResourceFailure()) return;
+	UE_LOG(LogTemp, Error, TEXT("Character state resource failure: pawn=%s state=%s: %s"),
+		*GetNameSafe(GetOwner()), *ControlState.Tag.ToString(), *Reason);
+	if (GetOwner()->HasAuthority())
+	{
+		GetOwner()->FlushNetDormancy();
+		ControlState.bResourceFailure = true;
+		GetOwner()->ForceNetUpdate();
+	}
+	HandleResourceFailure();
 }
 
-void UNGCharacterStateMachineComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+void UNGCharacterStateMachineComponent::HandleResourceFailure()
 {
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ThisClass, bResourcesFailed);
-	DOREPLIFETIME(ThisClass, FailedStateTag);
-}
-
-void UNGCharacterStateMachineComponent::OnRep_ResourceFailure()
-{
-	if (!bResourcesFailed || bEnding) return;
-	RequestedStateTag = {}; RequestedStateEvent = {};
+	if (bResourceFailureHandled) return;
+	bResourceFailureHandled = true;
+	const TWeakObjectPtr<UAbilitySystemComponent> FailedASC(GetReadyASC());
 	SuspendResources();
-	if (auto* ASC = GetReadyASC())
+	if (auto* ASC = FailedASC.Get(); ASC && ASC->GetAvatarActor() == GetOwner())
 	{
 		if (auto* GameplayASC = Cast<UNGAbilitySystemComponent>(ASC)) GameplayASC->ClearAbilityInput();
 		ASC->CancelAllAbilities();
@@ -179,20 +160,17 @@ void UNGCharacterStateMachineComponent::OnRep_ResourceFailure()
 
 void UNGCharacterStateMachineComponent::RestorePresentation() const
 {
-	if (bResourcesFailed || GetOwner()->HasAuthority() || !GetOwner()->HasActorBegunPlay()) return;
-	for (const auto& Resource : ActiveResources)
-		if (Resource.IsValid() && Resource->Definition)
-		{
-			const FGameplayTag Cue = Resource->Definition->GetPresentationCueTag();
-			if (Cue.IsValid()) UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), Cue, EGameplayCueEvent::Executed, FGameplayCueParameters());
-		}
+	if (HasResourceFailure() || GetOwner()->HasAuthority() || !GetOwner()->HasActorBegunPlay()
+		|| !ActiveResources || !ActiveResources->IsEntryReady()) return;
+	const auto* Definition = ActiveResources->GetDefinition();
+	if (Definition->StateTag != ControlState.Tag) return;
+	const FGameplayTag Cue = Definition->GetPresentationCueTag();
+	if (Cue.IsValid()) UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), Cue, EGameplayCueEvent::Executed, FGameplayCueParameters());
 }
 
 const UNGControlStateDefinition* UNGCharacterStateMachineComponent::GetAbilityStateDefinition(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const
 {
-	for (const auto& Resource : ActiveResources)
-		if (Resource.IsValid() && Resource->OwnsAbility(ASC, Handle)) return Resource->Definition;
-	return nullptr;
+	return OwnsStateAbility(ASC, Handle) ? ActiveResources->GetDefinition() : nullptr;
 }
 
 UAbilitySystemComponent* UNGCharacterStateMachineComponent::GetReadyASC() const
@@ -203,51 +181,80 @@ UAbilitySystemComponent* UNGCharacterStateMachineComponent::GetReadyASC() const
 
 bool UNGCharacterStateMachineComponent::OwnsStateAbility(const UAbilitySystemComponent* ASC, const FGameplayAbilitySpecHandle& Handle) const
 {
-	for (const auto& Resource : ActiveResources)
-		if (Resource.IsValid() && Resource->OwnsAbility(ASC, Handle)) return true;
-	return false;
+	return ActiveResources && ActiveResources->GetDefinition()->StateTag == ControlState.Tag && ActiveResources->OwnsAbility(ASC, Handle);
 }
 
 bool UNGCharacterStateMachineComponent::IsGameplayReady(FGameplayTag RequiredState) const
 {
 	const auto* ASC = GetReadyASC();
-	if (bEnding || bResourcesFailed || RequestedStateTag.IsValid() || !ASC || ActiveResources.IsEmpty()) return false;
-	bool bHasRequiredState = !RequiredState.IsValid();
-	for (const auto& Resource : ActiveResources)
+	if (bEnding || HasResourceFailure() || !ASC || !ActiveResources || !ActiveResources->IsEntryReady()
+		|| (RequiredState.IsValid() && !HasStateTag(RequiredState))) return false;
+	const auto* Definition = ActiveResources->GetDefinition();
+	if (Definition->StateTag != ControlState.Tag) return false;
+
+	for (const auto& Grant : Definition->Abilities)
 	{
-		if (!Resource.IsValid() || !Resource->Definition || !Resource->IsEntryReady()) return false;
-		for (const auto& Grant : Resource->Definition->Abilities)
-		{
-			bool bFound = false;
-			for (const auto& Spec : ASC->GetActivatableAbilities())
-				if (Spec.Ability && Spec.Ability->GetClass() == Grant.Ability.Get()) { bFound = true; break; }
-			if (!bFound) return false;
-		}
-		bHasRequiredState |= Resource->Definition->StateTag.MatchesTag(RequiredState);
+		bool bFound = false;
+		for (const auto& Spec : ASC->GetActivatableAbilities())
+			if (Spec.Ability && Spec.Ability->GetClass() == Grant.Ability.Get()) { bFound = true; break; }
+		if (!bFound) return false;
 	}
-	return bHasRequiredState;
+	return true;
 }
 
 void UNGCharacterStateMachineComponent::RefreshResources()
 {
-	if (bEnding || bResourcesFailed) return;
-	for (const auto& Resource : TArray<TWeakObjectPtr<UNGCharacterStateResources>>(ActiveResources))
-		if (Resource.IsValid()) Resource->RefreshResources();
-	ActiveResources.RemoveAll([](const auto& Entry) { return !Entry.IsValid(); });
+	if (bEnding || HasResourceFailure() || bApplyingState || !HasBegunPlay()) return;
+	auto* Pawn = Cast<APawn>(GetOwner());
+	if (!Pawn) return;
+
+	TGuardValue<bool> ApplyingState(bApplyingState, true);
+	const bool bAuthority = Pawn->HasAuthority();
+	if (bAuthority && !ControlState.Tag.IsValid() && Pawn->HasActorBegunPlay() && GetReadyASC()) SetStateTag(TAG_NGAlive);
+
+	FGameplayTag ApplyingTag;
+	do
+	{
+		ApplyingTag = ControlState.Tag;
+		if (ActiveResources && ActiveResources->GetDefinition()->StateTag != ApplyingTag) ReleaseActiveResources();
+		NotifyStateChanged();
+		if (ApplyingTag != ControlState.Tag) continue;
+		if (bEnding || HasResourceFailure() || !ApplyingTag.IsValid()) return;
+		if (bAuthority && (!Pawn->HasActorBegunPlay() || !GetReadyASC())) return;
+
+		if (ActiveResources) ActiveResources->RefreshResources();
+		else if (auto* Definition = FindDefinition(ApplyingTag))
+		{
+			ActiveResources = NewObject<UNGCharacterStateResources>(this, NAME_None, RF_Transient);
+			ActiveResources->Enter(Pawn, Definition);
+		}
+		else NotifyResourceFailure(TEXT("Assign exactly one matching asset in State Definitions."));
+	} while (!bEnding && !HasResourceFailure() && ApplyingTag != ControlState.Tag);
+}
+
+void UNGCharacterStateMachineComponent::ReleaseActiveResources()
+{
+	auto* Previous = ActiveResources.Get();
+	ActiveResources = nullptr;
+	if (Previous) Previous->Exit();
 }
 
 void UNGCharacterStateMachineComponent::SuspendResources()
 {
 	UnbindAbilitySpecNotifications();
-	for (const auto& Resource : TArray<TWeakObjectPtr<UNGCharacterStateResources>>(ActiveResources))
-		if (Resource.IsValid()) Resource->ReleaseResources();
+	ReadyASC.Reset();
+	ReleaseActiveResources();
+}
+
+void UNGCharacterStateMachineComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ThisClass, ControlState);
 }
 
 void UNGCharacterStateMachineComponent::EndPlay(EEndPlayReason::Type Reason)
 {
 	bEnding = true;
-	SuspendResources(); ActiveResources.Reset(); ReadyASC.Reset();
-	// Stop() asserts if a GCFSM state is active. Pause the dying owner's ticker instead.
-	if (UGCFSMUtilities::GetRootStateFromContext(GetOwner(), false)) UGCFSMUtilities::PauseFSMs(GetOwner(), true);
+	SuspendResources();
 	Super::EndPlay(Reason);
 }

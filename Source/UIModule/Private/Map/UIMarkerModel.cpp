@@ -72,11 +72,13 @@ const FUIMarkerVisibilityRules* UUIMarkerModel::GetVisibility(EUIMarkerSurface S
 	}
 }
 
-UClass* UUIMarkerModel::GetWidgetClass(EUIMarkerSurface Surface) const
+UClass* UUIMarkerModel::GetWidgetClass() const
 {
-	if (Surface == EUIMarkerSurface::World && WorldWidgetClass)
-		return WorldWidgetClass.Get();
-
 	auto* MarkerClass = WidgetClass.Get();
 	return MarkerClass ? MarkerClass : UUIMarkerWidget::StaticClass();
+}
+
+UClass* UUIMarkerModel::GetWidgetClass(EUIMarkerSurface Surface) const
+{
+	return Surface == EUIMarkerSurface::World && WorldWidgetClass ? WorldWidgetClass.Get() : GetWidgetClass();
 }
