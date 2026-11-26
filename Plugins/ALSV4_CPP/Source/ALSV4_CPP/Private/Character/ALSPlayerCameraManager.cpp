@@ -9,6 +9,7 @@
 #include "Character/ALSPlayerController.h"
 #include "Character/Animation/ALSPlayerCameraBehavior.h"
 #include "Components/ALSDebugComponent.h"
+#include "Curves/CurveVector.h"
 
 #include "Kismet/KismetMathLibrary.h"
 
@@ -39,6 +40,7 @@ void AALSPlayerCameraManager::OnPossess(AALSBaseCharacter* NewCharacter)
 {
 	// Set "Controlled Pawn" when Player Controller Possesses new character. (called from Player Controller)
 	check(NewCharacter);
+	if (ControlledCharacter != NewCharacter) AimZoomProgress = 0.f;
 	ControlledCharacter = NewCharacter;
 
 	// Update references in the Camera Behavior AnimBP.
@@ -98,6 +100,7 @@ void AALSPlayerCameraManager::UpdateViewTargetInternal(FTViewTarget& OutVT, floa
 		}
 		else
 		{
+			AimZoomProgress = 0.f;
 			OutVT.Target->CalcCamera(DeltaTime, OutVT.POV);
 		}
 	}
@@ -134,6 +137,13 @@ bool AALSPlayerCameraManager::CustomCameraBehavior(float DeltaTime, FVector& Loc
 	float FPFOV = 90.0f;
 	bool bRightShoulder = false;
 	ControlledCharacter->GetCameraParameters(TPFOV, FPFOV, bRightShoulder);
+	const bool bAimZoom = ControlledCharacter->IsAimCameraActive();
+	const float ZoomDuration = bAimZoom ? AimZoomInDuration : AimZoomOutDuration;
+	AimZoomProgress = FMath::FInterpConstantTo(AimZoomProgress, bAimZoom ? 1.f : 0.f, DeltaTime, 1.f / FMath::Max(ZoomDuration, 0.01f));
+	FVector AimZoomOffset = AimZoomOffsetCurve
+		? AimZoomOffsetCurve->GetVectorValue(AimZoomProgress) - AimZoomOffsetCurve->GetVectorValue(0.f)
+		: FVector(AimZoomDistance * FMath::SmoothStep(0.f, 1.f, AimZoomProgress), 0.f, 0.f);
+	if (!bRightShoulder) AimZoomOffset.Y = -AimZoomOffset.Y;
 
 	// Step 2: Calculate Target Camera Rotation. Use the Control Rotation and interpolate for smooth camera rotation.
 	const FRotator& InterpResult = FMath::RInterpTo(GetCameraRotation(),
@@ -171,6 +181,7 @@ bool AALSPlayerCameraManager::CustomCameraBehavior(float DeltaTime, FVector& Loc
 	// Step 5: Calculate Target Camera Location. Get the Pivot location and apply camera relative offsets.
 	TargetCameraLocation = UKismetMathLibrary::VLerp(
 		PivotLocation +
+		TargetCameraRotation.RotateVector(AimZoomOffset) +
 		UKismetMathLibrary::GetForwardVector(TargetCameraRotation) * GetCameraBehaviorParam(
 			NAME_CameraOffset_X) +
 		UKismetMathLibrary::GetRightVector(TargetCameraRotation) * GetCameraBehaviorParam(NAME_CameraOffset_Y)

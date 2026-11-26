@@ -1,11 +1,19 @@
 #include "Components/UIWidgetMounterComponent.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Components/UIStateWidget.h"
 #include "HFSMState.h"
 #include "GameFramework/PlayerController.h"
 #include "LayoutTemplate/LayoutTemplatesSorter.h"
 #include "LayoutTemplate/UILayoutTemplate.h"
 #include "LayoutTemplate/WidgetPlaceholder.h"
+
+void UUIWidgetMounterComponent::SetMountTarget(TSubclassOf<UUserWidget> InWidgetClass, FGameplayTag InPlaceholderID, ELayoutLayer InLayer)
+{
+	WidgetClass = InWidgetClass;
+	PlaceholderID = InPlaceholderID;
+	Layer = InLayer;
+}
 
 void UUIWidgetMounterComponent::Enter()
 {
@@ -21,6 +29,10 @@ void UUIWidgetMounterComponent::Enter()
 	
 	Widget = CreateWidget<UUserWidget>(PlayerController, WidgetClass);
 	if (!ensureMsgf(Widget, TEXT("Widget Mounter could not create its widget."))) return;
+	if (auto* StateWidget = Cast<UUIStateWidget>(Widget))
+	{
+		StateWidget->SetMountedState(GetState());
+	}
 	
 	if (!MountWidget())
 	{
@@ -84,7 +96,11 @@ bool UUIWidgetMounterComponent::MountWidget()
 void UUIWidgetMounterComponent::DemountWidget(bool bImmediate)
 {
 	if (!Widget) { MountedLayout = nullptr; MountedPlaceholderID = {}; return; }
-	Widget->SetIsEnabled(false); // Deferred fade must not keep an exited state's controls interactive.
+	if (auto* StateWidget = Cast<UUIStateWidget>(Widget))
+	{
+		StateWidget->SetMountedState(nullptr);
+	}
+	Widget->SetIsEnabled(false);
 	
 	if (MountedLayout && MountedPlaceholderID.IsValid())
 	{

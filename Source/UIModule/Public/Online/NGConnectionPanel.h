@@ -1,6 +1,6 @@
 #pragma once
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Components/UIStateWidget.h"
 #include "NGConnectionPanel.generated.h"
 class UEditableTextBox;
 class UTextBlock;
@@ -8,7 +8,7 @@ class UButton;
 class UVerticalBox;
 class UNGConnectionSubsystem;
 UCLASS(Blueprintable)
-class UIMODULE_API UNGConnectionPanel : public UUserWidget
+class UIMODULE_API UNGConnectionPanel : public UUIStateWidget
 {
 	GENERATED_BODY()
 protected:
