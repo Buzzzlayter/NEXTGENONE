@@ -10,7 +10,6 @@
 
 class APawn;
 class ANGItemPickup;
-class UNGInteractionMarkerModel;
 inline constexpr ECollisionChannel NGInteractionChannel=ECC_GameTraceChannel1;
 
 UINTERFACE(BlueprintType)
@@ -33,6 +32,9 @@ class NEXTGENONE_API ANGInteractableActor : public AActor, public INGInteractabl
 {
 	GENERATED_BODY()
 public:
+	DECLARE_MULTICAST_DELEGATE_FourParams(FInteractionFocus, APawn*, bool, const FText&, bool);
+	FInteractionFocus OnInteractionFocus;
+
 	bool ExecuteInteraction(APawn* Pawn, TFunctionRef<bool()> Prepare, TFunctionRef<bool()> Execute);
 	bool IsExecutingInteraction(const APawn* Pawn) const;
 private:
@@ -87,7 +89,5 @@ private:
 	TWeakObjectPtr<AActor> FocusedActor;
 	FText FocusedPrompt;
 	bool bFocusedAvailable=false;
-	TWeakObjectPtr<UNGInteractionMarkerModel> FocusMarker;
 	void UpdateFocus(AActor* Target);
-	void UpdateFocusMarker(APawn* Pawn, AActor* Target, bool bTargetChanged);
 };

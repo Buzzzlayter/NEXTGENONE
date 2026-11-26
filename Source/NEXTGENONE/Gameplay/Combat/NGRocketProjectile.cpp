@@ -1,6 +1,7 @@
 #include "Gameplay/Combat/NGRocketProjectile.h"
 
 #include "Components/AudioComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/OverlapResult.h"
@@ -8,6 +9,7 @@
 #include "Field/FieldSystemObjects.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Gameplay/AbilitySystem/NGPlayerAbilitySystem.h"
 #include "Gameplay/Character/NGHitReactionComponent.h"
@@ -25,6 +27,7 @@
 namespace
 {
 	constexpr float RocketParticleScale = 0.1f;
+	constexpr float IdleTrailThrust = 0.5f;
 	const FName RocketParticleScaleParameter(TEXT("User.RocketParticleScale"));
 }
 
@@ -65,8 +68,10 @@ ANGRocketProjectile::ANGRocketProjectile()
 	Collision->SetCollisionResponseToChannel(ECC_Destructible, ECR_Block);
 	Collision->SetGenerateOverlapEvents(false);
 
+	FlightVisualRoot = CreateDefaultSubobject<USceneComponent>(TEXT("FlightVisualRoot"));
+	FlightVisualRoot->SetupAttachment(Collision);
 	RocketMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RocketMesh"));
-	RocketMesh->SetupAttachment(Collision);
+	RocketMesh->SetupAttachment(FlightVisualRoot);
 	RocketMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Trail = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Trail"));
 	Trail->SetupAttachment(RocketMesh);
@@ -103,6 +108,7 @@ bool ANGRocketProjectile::ValidateSettings(FString& Error) const
 		return FMath::IsFinite(Value) && Value >= Min && Value <= Max;
 	};
 	if (!InRange(LaunchSpeed, 100.f, 40000.f)
+		|| !InRange(InitialSpeedFraction, 0.1f, 1.f) || !InRange(BoostTime, 0.f, 20.f)
 		|| !InRange(FlightTime, 0.1f, 20.f) || !InRange(BlastRadius, 1.f, 10000.f)
 		|| !InRange(EdgeDamageFraction, 0.f, 1.f) || !InRange(CharacterPushSpeed, 0.f, 5000.f)
 		|| !InRange(PhysicsImpulse, 0.f, 10000000.f) || !InRange(DestructionStrain, 0.f, 100000000.f))
@@ -128,7 +134,8 @@ bool ANGRocketProjectile::Initialize(APawn* Shooter, const FVector& Direction, f
 	BaseDamage = Damage;
 	RemainingRange = Range;
 	LaunchSound = InLaunchSound;
-	Movement->Velocity = Direction * LaunchSpeed;
+	LaunchServerTime = GetWorld()->GetTimeSeconds();
+	Movement->Velocity = Direction * (BoostTime > 0.f ? LaunchSpeed * InitialSpeedFraction : LaunchSpeed);
 	Movement->MaxSpeed = LaunchSpeed;
 	Collision->IgnoreActorWhenMoving(Shooter, true);
 	TArray<AActor*> Attached;
@@ -141,26 +148,27 @@ bool ANGRocketProjectile::Initialize(APawn* Shooter, const FVector& Direction, f
 void ANGRocketProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+	AddTickPrerequisiteComponent(Movement);
 	if (HasAuthority())
 	{
 		LastFlightPosition = GetActorLocation();
-		AddTickPrerequisiteComponent(Movement);
 		SetLifeSpan(FlightTime);
 	}
 	else
 	{
-		SetActorTickEnabled(false);
 		Collision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Movement->bSimulationEnabled = false;
-		Movement->SetInterpolatedComponent(RocketMesh);
+		Movement->SetInterpolatedComponent(FlightVisualRoot);
 	}
 	if (Detonation.bOccurred) OnRep_Detonation();
 	else if (GetNetMode() != NM_DedicatedServer)
 	{
+		InitialMeshRotation = RocketMesh->GetRelativeRotation().Quaternion();
+		BaseTrailScale = Trail->GetRelativeScale3D();
+		bBoostVisualsStarted = BoostTime <= 0.f || InitialSpeedFraction >= 1.f;
 		if (Trail->GetAsset())
 		{
-			Trail->SetRelativeScale3D(Trail->GetRelativeScale3D() * RocketParticleScale);
-			Trail->SetVariableFloat(RocketParticleScaleParameter, RocketParticleScale);
+			SetTrailThrust(bBoostVisualsStarted ? 1.f : IdleTrailThrust);
 			Trail->Activate();
 		}
 		OnRep_LaunchSound();
@@ -170,12 +178,57 @@ void ANGRocketProjectile::BeginPlay()
 void ANGRocketProjectile::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (!HasAuthority() || Detonation.bOccurred) return;
+	if (Detonation.bOccurred) return;
 
-	const FVector Position = GetActorLocation();
-	RemainingRange -= FVector::Dist(LastFlightPosition, Position);
-	LastFlightPosition = Position;
-	if (RemainingRange <= 0.f) LifeSpanExpired();
+	const bool bAuthoritative = HasAuthority();
+	const UWorld* RocketWorld = GetWorld();
+	const AGameStateBase* MatchState = bAuthoritative ? nullptr : RocketWorld->GetGameState();
+	const double CurrentTime = MatchState ? MatchState->GetServerWorldTimeSeconds() : RocketWorld->GetTimeSeconds();
+	const float Elapsed = static_cast<float>(FMath::Max(CurrentTime - LaunchServerTime, 0.0));
+	if (bAuthoritative)
+	{
+		const FVector Position = GetActorLocation();
+		RemainingRange -= FVector::Dist(LastFlightPosition, Position);
+		LastFlightPosition = Position;
+		if (RemainingRange <= 0.f)
+		{
+			LifeSpanExpired();
+			return;
+		}
+
+		if (BoostTime > 0.f && InitialSpeedFraction < 1.f && Elapsed - DeltaSeconds < BoostTime)
+		{
+			const float BoostAlpha = FMath::SmoothStep(0.f, BoostTime, Elapsed);
+			const float CurrentSpeed = LaunchSpeed * FMath::Lerp(InitialSpeedFraction, 1.f, BoostAlpha);
+			Movement->Velocity = Movement->Velocity.GetSafeNormal() * CurrentSpeed;
+			Movement->UpdateComponentVelocity();
+		}
+	}
+
+	if (GetNetMode() != NM_DedicatedServer)
+		UpdateFlightPresentation(bAuthoritative || MatchState ? Elapsed : GetGameTimeSinceCreation());
+}
+
+void ANGRocketProjectile::UpdateFlightPresentation(float FlightAge)
+{
+	const FQuat BodyRoll(FVector::ForwardVector, FMath::DegreesToRadians(RollSpeed * FlightAge));
+	RocketMesh->SetRelativeRotation(BodyRoll * InitialMeshRotation);
+	if (bBoostVisualsStarted || FlightAge < BoostTime) return;
+
+	bBoostVisualsStarted = true;
+	if (Trail->GetAsset()) SetTrailThrust(1.f);
+	if (BoostFlashFX && FlightAge < BoostTime + 0.15f)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, BoostFlashFX, Trail->GetComponentLocation(),
+			FlightVisualRoot->GetComponentRotation());
+	}
+}
+
+void ANGRocketProjectile::SetTrailThrust(float Thrust)
+{
+	const float ParticleScale = RocketParticleScale * Thrust;
+	Trail->SetRelativeScale3D(BaseTrailScale * ParticleScale);
+	Trail->SetVariableFloat(RocketParticleScaleParameter, ParticleScale);
 }
 
 void ANGRocketProjectile::LifeSpanExpired()
@@ -202,6 +255,7 @@ void ANGRocketProjectile::PostNetReceiveLocationAndRotation()
 void ANGRocketProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(ANGRocketProjectile, LaunchServerTime, COND_InitialOnly);
 	DOREPLIFETIME_CONDITION(ANGRocketProjectile, LaunchSound, COND_InitialOnly);
 	DOREPLIFETIME(ANGRocketProjectile, Detonation);
 }
