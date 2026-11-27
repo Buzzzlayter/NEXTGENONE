@@ -63,11 +63,8 @@ void UUIInventorySlotWidget::UpdateItemVisibility()
 	const bool bHasItem = ContainsItem();
 	const bool bShowItem = bHasItem && !bItemDragHidden;
 	if (img_item) img_item->SetVisibility(bShowItem && !Data.Icon.IsNull() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
-	for (UTextBlock* Label : {txt_name.Get(), txt_count.Get()})
-	{
-		if (!Label) continue;
-		Label->SetVisibility(bShowItem ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
-	}
+	if (txt_name) txt_name->SetVisibility(bShowItem ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+	if (txt_count) txt_count->SetVisibility(bShowItem && Data.Count > 1 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 }
 
 void UUIInventorySlotWidget::UpdateItemIcon()
@@ -112,6 +109,7 @@ void UUIInventorySlotWidget::NativeConstruct()
 		btn_Root->OnPressed.AddUniqueDynamic(this, &ThisClass::OnActionPressed);
 		btn_Root->OnReleased.AddUniqueDynamic(this, &ThisClass::OnActionReleased);
 		btn_Root->OnHovered.AddUniqueDynamic(this, &ThisClass::OnActionHover);
+		btn_Root->OnUnhovered.AddUniqueDynamic(this, &ThisClass::OnActionUnhover);
 	}
 }
 
@@ -126,6 +124,7 @@ void UUIInventorySlotWidget::NativeDestruct()
 		btn_Root->OnPressed.RemoveDynamic(this, &ThisClass::OnActionPressed);
 		btn_Root->OnReleased.RemoveDynamic(this, &ThisClass::OnActionReleased);
 		btn_Root->OnHovered.RemoveDynamic(this, &ThisClass::OnActionHover);
+		btn_Root->OnUnhovered.RemoveDynamic(this, &ThisClass::OnActionUnhover);
 	}
 	Super::NativeDestruct();
 }

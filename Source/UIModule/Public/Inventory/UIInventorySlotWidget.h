@@ -35,6 +35,8 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category="Inventory") void OnActionPressed();
 	UFUNCTION(BlueprintImplementableEvent, Category="Inventory") void OnActionReleased();
 	UFUNCTION(BlueprintImplementableEvent, Category="Inventory") void OnActionHover();
+	UFUNCTION(BlueprintImplementableEvent, Category="Inventory") void OnActionUnhover();
+
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
