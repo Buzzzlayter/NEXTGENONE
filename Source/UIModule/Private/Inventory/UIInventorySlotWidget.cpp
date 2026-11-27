@@ -55,7 +55,7 @@ void UUIInventorySlotWidget::UpdateItemText()
 {
 	const bool bHasItem = ContainsItem();
 	if (txt_name) txt_name->SetText(bHasItem ? Data.Name : FText::GetEmpty());
-	if (txt_count) txt_count->SetText(bHasItem ? FText::AsNumber(Data.Count) : FText::GetEmpty());
+	if (txt_count) txt_count->SetText(bHasItem && Data.Count > 1 ? FText::AsNumber(Data.Count) : FText::GetEmpty());
 }
 
 void UUIInventorySlotWidget::UpdateItemVisibility()
