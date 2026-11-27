@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "NEXTGENONE: Build or Live Coding",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/.agents/skills/ue-build/Trigger-LiveCoding.ps1",
+        "-ProjectFile",
+        "${workspaceFolder}/NEXTGENONE.uproject",
+        "-BuildIfEditorClosed"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    },
+    {
+      "label": "NEXTGENONE: Live Coding",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/.agents/skills/ue-build/Trigger-LiveCoding.ps1",
+        "-ProjectFile",
+        "${workspaceFolder}/NEXTGENONE.uproject"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

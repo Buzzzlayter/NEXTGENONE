@@ -24,18 +24,39 @@
 [CmdletBinding()]
 param(
     [switch]$Diagnose,                 # only report the target window, send nothing
-    [int]$ActivateDelayMs = 450        # wait after activating before sending keys
+    [int]$ActivateDelayMs = 450,
+    [string]$ProjectFile,
+    [switch]$BuildIfEditorClosed
 )
 
 $ErrorActionPreference = 'Stop'
 
-$proc = Get-Process UnrealEditor -ErrorAction SilentlyContinue |
-        Where-Object { $_.MainWindowHandle -ne 0 } |
-        Select-Object -First 1
+if ($BuildIfEditorClosed -and -not $ProjectFile) {
+    throw 'BuildIfEditorClosed requires ProjectFile.'
+}
+
+$editors = Get-Process UnrealEditor -ErrorAction SilentlyContinue |
+           Where-Object { $_.MainWindowHandle -ne 0 }
+
+if ($ProjectFile) {
+    $projectPath = (Resolve-Path -LiteralPath $ProjectFile).ProviderPath
+    $projectPattern = '(?:^|[\s"])' + [regex]::Escape($projectPath) + '(?=$|[\s"])'
+    $matchingEditors = Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe'" |
+                       Where-Object { $_.CommandLine -and ($_.CommandLine.Replace('/', '\') -match $projectPattern) }
+    $editorIds = @($matchingEditors | Select-Object -ExpandProperty ProcessId)
+    $editors = $editors | Where-Object { $_.Id -in $editorIds }
+
+    if ($BuildIfEditorClosed -and $editorIds.Count -eq 0 -and -not $Diagnose) {
+        & (Join-Path (Split-Path -Parent $projectPath) 'StartEditorFast.cmd')
+        exit $LASTEXITCODE
+    }
+}
+
+$proc = $editors | Select-Object -First 1
 
 if (-not $proc) {
     Write-Output "[Trigger-LiveCoding] ERROR: no UnrealEditor window found (editor not running?)."
-    Write-Output "Launch it with RunEditor.bat, then retry."
+    Write-Output "If the project is still opening, wait for its editor window and retry."
     exit 2
 }
 
@@ -56,15 +77,15 @@ try {
 
 $activated = $false
 try { $activated = [Microsoft.VisualBasic.Interaction]::AppActivate($proc.Id) } catch {}
+if (-not $activated) {
+    Write-Output "[Trigger-LiveCoding] ERROR: could not focus the editor. Press Ctrl+Alt+F11 in Unreal."
+    exit 2
+}
 Start-Sleep -Milliseconds $ActivateDelayMs
 
 # Ctrl+Alt+F11  ->  ^ = Ctrl, % = Alt, {F11} = F11
 [System.Windows.Forms.SendKeys]::SendWait("^%{F11}")
 
-if (-not $activated) {
-    Write-Output "[Trigger-LiveCoding] WARNING: AppActivate did not confirm focus; the keystroke"
-    Write-Output "may have missed the editor. If nothing compiled, press Ctrl+Alt+F11 manually."
-}
 Write-Output "[Trigger-LiveCoding] Sent Ctrl+Alt+F11. Live Coding compiles asynchronously - wait a"
 Write-Output "few seconds, then read LogLiveCoding via MCP to see the result (success / errors)."
 exit 0
