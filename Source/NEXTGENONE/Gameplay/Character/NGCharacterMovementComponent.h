@@ -41,6 +41,7 @@ public:
 	FNGJetpackMoveState CaptureJetpackMove() const;
 	void RestoreJetpackMove(const FNGJetpackMoveState& State);
 	bool CanStartJetpack() const;
+	bool IsJetpackThrustActive() const;
 	void SetFlightControl(UObject* FlightOwner, float RequestedAirControl, float RequestedThrustScale);
 	void ClearFlightControl(const UObject* FlightOwner);
 	void SetJetpackRequested(bool bRequested)
@@ -73,6 +74,5 @@ private:
 	float FlightAirControlOverride = 0.f;
 	float FlightThrustScale = 1.f;
 	UAbilitySystemComponent* GetJetpackASC() const;
-	bool IsJetpackThrustActive() const;
 	float GetJetpackThrustAcceleration() const;
 };

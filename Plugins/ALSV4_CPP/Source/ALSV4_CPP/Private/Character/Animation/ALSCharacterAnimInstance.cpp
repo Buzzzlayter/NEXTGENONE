@@ -87,6 +87,8 @@ void UALSCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	LayerBlendingValues.OverlayOverrideState = Character->GetOverlayOverrideState();
 	MovementState = Character->GetMovementState();
 	MovementAction = Character->GetMovementAction();
+	bPoweredFlight = MovementState.InAir() && Character->GetMovementAction() == EALSMovementAction::None
+		&& Character->IsPoweredFlightActive();
 	Stance = Character->GetStance();
 	RotationMode = Character->GetRotationMode();
 	Gait = Character->GetGait();
@@ -313,6 +315,15 @@ void UALSCharacterAnimInstance::UpdateLayerValues()
 
 void UALSCharacterAnimInstance::UpdateFootIK(float DeltaSeconds)
 {
+	if (bPoweredFlight)
+	{
+		FootIKValues.FootLock_L_Alpha = FootIKValues.FootLock_R_Alpha = 0.f;
+		FootIKValues.UseFootLockCurve_L = FootIKValues.UseFootLockCurve_R = false;
+		SetPelvisIKOffset(DeltaSeconds, FVector::ZeroVector, FVector::ZeroVector);
+		ResetIKOffsets(DeltaSeconds);
+		return;
+	}
+
 	FVector FootOffsetLTarget = FVector::ZeroVector;
 	FVector FootOffsetRTarget = FVector::ZeroVector;
 
@@ -666,7 +677,7 @@ void UALSCharacterAnimInstance::UpdateInAirValues(float DeltaSeconds)
 	InAir.FallSpeed = CharacterInformation.Velocity.Z;
 
 	// Set the Land Prediction weight.
-	InAir.LandPrediction = CalculateLandPrediction();
+	InAir.LandPrediction = bPoweredFlight ? 0.f : CalculateLandPrediction();
 
 	// Interp and set the In Air Lean Amount
 	const FALSLeanAmount& InAirLeanAmount = CalculateAirLeanAmount();

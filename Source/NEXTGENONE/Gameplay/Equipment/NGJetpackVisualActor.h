@@ -13,6 +13,7 @@ class NEXTGENONE_API ANGJetpackVisualActor : public ANGEquipmentVisualActor
 public:
 	ANGJetpackVisualActor();
 protected:
+	virtual void Tick(float DeltaSeconds) override;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Jetpack") TObjectPtr<UStaticMeshComponent> LeftThruster;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Jetpack") TObjectPtr<UStaticMeshComponent> RightThruster;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Jetpack") TObjectPtr<UNiagaraComponent> LeftExhaust;
@@ -20,5 +21,20 @@ protected:
 	virtual void AbilitySystemReady() override;
 	virtual void GameplayTagChanged(FGameplayTag Tag, int32 Count) override;
 private:
+	struct FExhaustSpawnRates
+	{
+		TOptional<float> Thrusters;
+		TOptional<float> EnergyCore;
+
+		void Capture(const UNiagaraComponent& Exhaust);
+		void Apply(UNiagaraComponent& Exhaust, float RateScale) const;
+	};
+
+	void UpdateExhaustSpawnRates();
 	void UpdateExhaust();
+	FExhaustSpawnRates LeftSpawnRates;
+	FExhaustSpawnRates RightSpawnRates;
+	float PreviousOwnerYaw = 0.f;
+	float SmoothedTurn = 0.f;
+	bool bExhaustActive = false;
 };

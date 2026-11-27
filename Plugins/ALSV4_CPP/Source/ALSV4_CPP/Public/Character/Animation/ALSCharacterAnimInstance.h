@@ -175,6 +175,9 @@ public:
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Read Only Data|Character Information")
 	FALSMovementAction MovementAction = EALSMovementAction::None;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Read Only Data|Character Information")
+	bool bPoweredFlight = false;
+
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Read Only Data|Character Information")
 	FALSRotationMode RotationMode = EALSRotationMode::VelocityDirection;
 
