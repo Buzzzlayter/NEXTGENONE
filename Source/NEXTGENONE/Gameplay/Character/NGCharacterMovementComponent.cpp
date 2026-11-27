@@ -195,6 +195,22 @@ float UNGCharacterMovementComponent::GetJetpackThrustAcceleration() const
 	return MoveSettings.Acceleration * JetpackMoveThrustAlpha * (FlightControlSource.IsValid() ? FlightThrustScale : 1.f);
 }
 
+bool UNGCharacterMovementComponent::ShouldStayAirborneUnderThrust() const
+{
+	return IsFalling() && GetGravitySpaceZ(Velocity) >= 0.0
+		&& GetJetpackThrustAcceleration() > FMath::Abs(GetGravityZ()) && IsJetpackThrustActive();
+}
+
+bool UNGCharacterMovementComponent::IsValidLandingSpot(const FVector& CapsuleLocation, const FHitResult& Hit) const
+{
+	return !ShouldStayAirborneUnderThrust() && Super::IsValidLandingSpot(CapsuleLocation, Hit);
+}
+
+void UNGCharacterMovementComponent::ProcessLanded(const FHitResult& Hit, float RemainingTime, int32 Iterations)
+{
+	if (!ShouldStayAirborneUnderThrust()) Super::ProcessLanded(Hit, RemainingTime, Iterations);
+}
+
 FVector UNGCharacterMovementComponent::NewFallVelocity(const FVector& InitialVelocity, const FVector& Gravity, float DeltaTime) const
 {
 	FVector Result = Super::NewFallVelocity(InitialVelocity, Gravity, DeltaTime);

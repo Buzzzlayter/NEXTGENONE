@@ -104,7 +104,7 @@ private:
 
 	void UpdateRotationValues();
 
-	void UpdateInAirValues(float DeltaSeconds);
+	void UpdateInAirValues(float DeltaSeconds, const FVector& PreviousVelocity, bool bWasPoweredFlight);
 
 	void UpdateRagdollValues();
 

@@ -1007,7 +1007,9 @@ void AALSBaseCharacter::SetEssentialValues(float DeltaTime)
 	// The Movement Input Amount is equal to the current acceleration divided by the max acceleration so that
 	// it has a range of 0-1, 1 being the maximum possible amount of input, and 0 being none.
 	// If the character has movement input, update the Last Movement Input Rotation.
-	MovementInputAmount = ReplicatedCurrentAcceleration.Size() / EasedMaxAcceleration;
+	MovementInputAmount = EasedMaxAcceleration > UE_SMALL_NUMBER
+		? FMath::Clamp(ReplicatedCurrentAcceleration.Size() / EasedMaxAcceleration, 0.0, 1.0)
+		: 0.0;
 	bHasMovementInput = MovementInputAmount > 0.0f;
 	if (bHasMovementInput)
 	{
@@ -1016,7 +1018,9 @@ void AALSBaseCharacter::SetEssentialValues(float DeltaTime)
 
 	// Set the Aim Yaw rate by comparing the current and previous Aim Yaw value, divided by Delta Seconds.
 	// This represents the speed the camera is rotating left to right.
-	AimYawRate = FMath::Abs((AimingRotation.Yaw - PreviousAimYaw) / DeltaTime);
+	AimYawRate = DeltaTime > UE_SMALL_NUMBER
+		? FMath::Abs(FMath::FindDeltaAngleDegrees(PreviousAimYaw, AimingRotation.Yaw)) / DeltaTime
+		: 0.0;
 }
 
 void AALSBaseCharacter::UpdateCharacterMovement()

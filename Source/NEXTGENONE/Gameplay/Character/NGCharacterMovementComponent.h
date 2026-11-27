@@ -59,7 +59,13 @@ public:
 	virtual float GetMaxAcceleration() const override;
 	virtual float GetMaxBrakingDeceleration() const override;
 	virtual void CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration) override;
+
+protected:
+	virtual bool IsValidLandingSpot(const FVector& CapsuleLocation, const FHitResult& Hit) const override;
+	virtual void ProcessLanded(const FHitResult& Hit, float RemainingTime, int32 Iterations) override;
+
 private:
+	bool ShouldStayAirborneUnderThrust() const;
 	FNGJetpackMoveDataContainer MoveDataContainer;
 	FNGJetpackMovementSettings MoveSettings;
 	FNGJetpackMovementSettings ContextSettings;
