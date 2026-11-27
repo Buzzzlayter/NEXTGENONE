@@ -78,6 +78,7 @@ void UALSCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	CharacterInformation.Acceleration = Character->GetAcceleration();
 	CharacterInformation.AimYawRate = Character->GetAimYawRate();
 	CharacterInformation.Speed = Character->GetSpeed();
+	const FVector PreviousVelocity = CharacterInformation.Velocity;
 	CharacterInformation.Velocity = Character->GetCharacterMovement()->Velocity;
 	CharacterInformation.MovementInput = Character->GetMovementInput();
 	CharacterInformation.AimingRotation = Character->GetAimingRotation();
@@ -87,6 +88,7 @@ void UALSCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	LayerBlendingValues.OverlayOverrideState = Character->GetOverlayOverrideState();
 	MovementState = Character->GetMovementState();
 	MovementAction = Character->GetMovementAction();
+	const bool bWasPoweredFlight = bPoweredFlight;
 	bPoweredFlight = MovementState.InAir() && Character->GetMovementAction() == EALSMovementAction::None
 		&& Character->IsPoweredFlightActive();
 	Stance = Character->GetStance();
@@ -148,7 +150,7 @@ void UALSCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	else if (MovementState.InAir())
 	{
 		// Do While InAir
-		UpdateInAirValues(DeltaSeconds);
+		UpdateInAirValues(DeltaSeconds, PreviousVelocity, bWasPoweredFlight);
 	}
 	else if (MovementState.Ragdoll())
 	{
@@ -670,7 +672,7 @@ void UALSCharacterAnimInstance::UpdateRotationValues()
 	Grounded.RYaw = LROffset.Y;
 }
 
-void UALSCharacterAnimInstance::UpdateInAirValues(float DeltaSeconds)
+void UALSCharacterAnimInstance::UpdateInAirValues(float DeltaSeconds, const FVector& PreviousVelocity, bool bWasPoweredFlight)
 {
 	// Update the fall speed. Setting this value only while in the air allows you to use it within the AnimGraph for the landing strength.
 	// If not, the Z velocity would return to 0 on landing.
@@ -680,7 +682,24 @@ void UALSCharacterAnimInstance::UpdateInAirValues(float DeltaSeconds)
 	InAir.LandPrediction = bPoweredFlight ? 0.f : CalculateLandPrediction();
 
 	// Interp and set the In Air Lean Amount
-	const FALSLeanAmount& InAirLeanAmount = CalculateAirLeanAmount();
+	FALSLeanAmount InAirLeanAmount;
+	if (bPoweredFlight)
+	{
+		const FVector FlightAcceleration = bWasPoweredFlight
+			? (CharacterInformation.Velocity - PreviousVelocity) / DeltaSeconds
+			: CharacterInformation.Acceleration;
+		const FVector HorizontalAcceleration(FlightAcceleration.X, FlightAcceleration.Y, 0.0);
+		const FRotator Facing(0.0, CharacterInformation.CharacterActorRotation.Yaw, 0.0);
+		const float AccelerationScale = FMath::Max(Character->GetCharacterMovement()->GetMaxAcceleration(), 1.0f);
+		const FVector LocalAcceleration = Facing.UnrotateVector(HorizontalAcceleration / AccelerationScale);
+		const FVector ClampedAcceleration = LocalAcceleration.GetClampedToMaxSize(1.0);
+		InAirLeanAmount.LR = ClampedAcceleration.Y;
+		InAirLeanAmount.FB = ClampedAcceleration.X;
+	}
+	else
+	{
+		InAirLeanAmount = CalculateAirLeanAmount();
+	}
 	LeanAmount.LR = FMath::FInterpTo(LeanAmount.LR, InAirLeanAmount.LR, DeltaSeconds, Config.GroundedLeanInterpSpeed);
 	LeanAmount.FB = FMath::FInterpTo(LeanAmount.FB, InAirLeanAmount.FB, DeltaSeconds, Config.GroundedLeanInterpSpeed);
 }
