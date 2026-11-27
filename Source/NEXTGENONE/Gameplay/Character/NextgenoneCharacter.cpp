@@ -21,6 +21,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Map/UIMarkerComponent.h"
 
 
 ANextgenoneCharacter::ANextgenoneCharacter(const FObjectInitializer& Init) : Super(Init.SetDefaultSubobjectClass<UNGCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -239,6 +240,12 @@ bool ANextgenoneCharacter::IsAimCameraActive() const
 	return IsLocallyControlled() && !IsDead() && ASC && ASC->HasMatchingGameplayTag(TAG_NGWeaponAiming);
 }
 
+bool ANextgenoneCharacter::IsPoweredFlightActive() const
+{
+	const auto* Movement = Cast<UNGCharacterMovementComponent>(GetCharacterMovement());
+	return Movement && Movement->IsFalling() && Movement->IsJetpackThrustActive();
+}
+
 void ANextgenoneCharacter::ApplyCombatPresentation()
 {
 	const auto WeaponState = Combat->GetEquipment();
@@ -382,6 +389,10 @@ void ANextgenoneCharacter::StateChanged(FGameplayTag Previous, FGameplayTag Curr
 	RefreshEquipment();
 	if (bNowDead)
 	{
+		TInlineComponentArray<UUIMarkerComponent*> CharacterMarkers(this);
+		for (UUIMarkerComponent* Marker : CharacterMarkers)
+			Marker->DestroyComponent();
+
 		// Death collision is gameplay state, independent of the cosmetic ragdoll cue.
 		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		GameplayInput->ShutdownInput();

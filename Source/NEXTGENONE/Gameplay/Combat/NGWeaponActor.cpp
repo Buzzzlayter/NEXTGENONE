@@ -29,6 +29,7 @@ void ANGWeaponActor::BeginPlay()
 		LaserSight = NewObject<UNGLaserSightComponent>(this, LaserSightClass, TEXT("LaserSight"), RF_Transient);
 		LaserSight->SetupAttachment(WeaponMesh, LaserSightSocket);
 		LaserSight->SetRelativeTransform(LaserSightOffset);
+		LaserSight->SetAffectTranslucentLighting(false);
 		LaserSight->RegisterComponent();
 	}
 	Super::BeginPlay();

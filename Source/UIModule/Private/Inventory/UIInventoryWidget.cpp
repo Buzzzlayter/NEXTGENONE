@@ -109,7 +109,7 @@ void UUIInventoryWidget::CreateDrag(const FGeometry& Geometry, const FPointerEve
 	Bounds->AddChild(Image);
 	Drag->DefaultDragVisual = Bounds;
 	Drag->OnDrop.AddDynamic(this, &ThisClass::DragFinished);
-	Drag->OnDragCancelled.AddDynamic(this, &ThisClass::DragCancelled);
+	Drag->OnDragCancelled.AddDynamic(this, &ThisClass::DragFinished);
 	DragSourceSlot = Source;
 	Source->SetItemDragHidden(true);
 	Operation = Drag;
@@ -136,14 +136,10 @@ bool UUIInventoryWidget::NativeOnDrop(const FGeometry& Geometry, const FDragDrop
 void UUIInventoryWidget::DragFinished(UDragDropOperation* Operation)
 {
 	Operation->OnDrop.RemoveDynamic(this, &ThisClass::DragFinished);
-	Operation->OnDragCancelled.RemoveDynamic(this, &ThisClass::DragCancelled);
-	DragSourceSlot.Reset(); // Accepted Drop keeps the icon hidden until the next changed snapshot.
-}
-
-void UUIInventoryWidget::DragCancelled(UDragDropOperation* Operation)
-{
-	if (auto* Source = DragSourceSlot.Get()) Source->SetItemDragHidden(false);
-	DragFinished(Operation);
+	Operation->OnDragCancelled.RemoveDynamic(this, &ThisClass::DragFinished);
+	auto* Source = DragSourceSlot.Get();
+	DragSourceSlot.Reset();
+	if (Source) Source->SetItemDragHidden(false);
 }
 
 UUIInventoryDragDropOperation* UUIInventoryWidget::GetOwnedDrag() const

@@ -38,5 +38,4 @@ private:
 	void CancelOwnedDrag();
 	UUIInventoryDragDropOperation* GetOwnedDrag() const;
 	UFUNCTION() void DragFinished(UDragDropOperation* Operation);
-	UFUNCTION() void DragCancelled(UDragDropOperation* Operation);
 };

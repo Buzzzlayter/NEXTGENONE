@@ -1118,6 +1118,17 @@ void AALSBaseCharacter::UpdateGroundedRotation(float DeltaTime)
 
 void AALSBaseCharacter::UpdateInAirRotation(float DeltaTime)
 {
+	if (MovementAction == EALSMovementAction::None && IsPoweredFlightActive() && !HasAnyRootMotion())
+	{
+		if (Speed > 0.0f)
+		{
+			const float FlightYaw = GetVelocity().ToOrientationRotator().Yaw;
+			SmoothCharacterRotation({0.0f, FlightYaw, 0.0f}, 0.0f, 5.0f, DeltaTime);
+		}
+		InAirRotation = GetActorRotation();
+		return;
+	}
+
 	if (RotationMode == EALSRotationMode::VelocityDirection)
 	{
 		SmoothCharacterRotation({0.0f, LastVelocityRotation.Yaw, 0.0f}, 0.0f, 5.0f, DeltaTime);

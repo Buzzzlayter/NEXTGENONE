@@ -38,6 +38,7 @@ public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	virtual bool IsAimCameraActive() const override;
+	virtual bool IsPoweredFlightActive() const override;
 	virtual void PossessedBy(AController* Controller) override;
 	virtual void UnPossessed() override;
 	virtual void OnRep_PlayerState() override;
