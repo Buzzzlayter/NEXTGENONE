@@ -21,7 +21,8 @@ Plugins/**/Intermediate/
 
 # Visual Studio / Rider / IDE
 .vs/
-.vscode/
+/.vscode/*
+!/.vscode/tasks.json
 .idea/
 *.VC.db
 *.VC.opendb
